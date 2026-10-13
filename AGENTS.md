@@ -21,12 +21,13 @@ From 0.1.0 on, almost every task is "fix issue #N" from the board (https://githu
 ### 0.3 Testing: build only, Denis tests in game
 - You cannot run the game. Do not try to launch, automate or screenshot it, and do not write test harnesses, mocks, test projects or simulations for a fix.
 - Your whole verification is: the project compiles with **zero errors** (section 7: `dotnet build WildWasteland.csproj` on Windows, or `sh build.sh` with mono). If you changed config entries, also run `tools/config-harness`. Then stop; do not loop on further checks.
-- Hand over to Denis in your final message: (1) the cause, (2) what you changed (files, about how many lines), (3) exact in-game test steps with the expected result, (4) log lines that confirm it if any. Denis tests and reports back.
+- After a successful build, **deploy the DLL to the game** (0.4) so Denis can test right away.
+- Hand over to Denis in your final message: (1) the cause, (2) what you changed (files, about how many lines), (3) whether the DLL is deployed (md5) or why not, (4) exact in-game test steps with the expected result, (5) log lines that confirm it if any. Denis tests and reports back.
 - Do not close issues and do not move them to Verified; Denis does that. Leave the status as Testing.
 
 ### 0.4 Git and deploy
 - Commit only when Denis asks; the message starts with the issue (`Fix #N: ...`) and ends with your attribution lines. Never push, tag or release unless asked.
-- Deploy only when asked, with the game closed (section 8). A locked `WildWasteland.dll` means the game is running: tell Denis, do not retry.
+- **Deploy every successful fix build** without being asked: copy the built `WildWasteland.dll` to `E:\SteamLibrary\steamapps\common\Apocalypter\BepInEx\plugins\WildWasteland\WildWasteland.dll` (or `<GameDir>\BepInEx\plugins\WildWasteland\`), overwrite only that one file (never assets, configs or other plugins), and report the md5 of the copied file. With the csproj: `dotnet build WildWasteland.csproj -c Release -p:Deploy=true` does the copy. If the copy fails because the DLL is locked, the game is running: tell Denis to close it, do not retry or kill the game.
 
 ## 1. What this repo is
 
