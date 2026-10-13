@@ -50,7 +50,7 @@ namespace WildWasteland.Modules.PlayerBody
             if (n.Contains("machete") || n.Contains("knife") || n.Contains("shiv")) return Kind.Blade;
             if (n.Contains("pistol") || n.Contains("revolver") || n.Contains("folk_17") || n.Contains("folk17") || n.Contains("smg") || n.Contains("borz")) return Kind.Sidearm;
             if (n.Contains("rifle") || n.Contains("shotgun") || n.Contains("akm") || n.Contains("m16") || n.Contains("redmark")
-                || n.Contains("rochester") || n.Contains("slamberg") || n.Contains("slamfire")) return Kind.LongGun;
+                || n.Contains("rochester") || n.Contains("slamberg") || n.Contains("slamfire") || n.Contains("blastlance")) return Kind.LongGun;
             return Kind.None;
         }
 
