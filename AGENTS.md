@@ -167,7 +167,7 @@ MANAGED=... BEPCORE=... sh tools/config-harness/run.sh /path/outdir [BepInEx/con
 ## 9. Releases (only when Denis asks)
 
 - Zip unpacks into `BepInEx\plugins` (`WildWasteland\WildWasteland.dll` + `theme\` + `<Id>\` assets + README). Tag `v<version>` == `[BepInPlugin]` version. Zips go to `V:\Repos\Apocalypter\_releases\`.
-- uploads.github.com is blocked from both shells: create the release, Denis attaches the zip (or uses Mod Publisher). Then register/update the entry in Apocasetter-Index (`mods/com.denis.apocalypter.wildwasteland.json`, `pluginFolder: "WildWasteland"`, `replaces` listing the absorbed standalone GUIDs, `optional` the host mods); later mark the absorbed mods `deprecated` with `replacedBy`.
+- uploads.github.com is blocked from both shells: create the release, Denis attaches the zip (or uses Mod Publisher). Only when Denis declares a build verified (not for 0.1.0, see docs/decisions.md), register/update the entry in Apocasetter-Index (`mods/com.denis.apocalypter.wildwasteland.json`, `pluginFolder: "WildWasteland"`, `replaces` listing the absorbed standalone GUIDs, `optional` the host mods); later mark the absorbed mods `deprecated` with `replacedBy`.
 - README states which standalone mods it replaces and must be removed.
 - Wiki: update the feature pages' Status, run `tools/wiki-index.py`, push the wiki repo (section 11).
 

@@ -48,3 +48,9 @@ The user/developer wiki lives in the separate repo `V:\Repos\Apocalypter\WildWas
 - csproj deploy is opt-in (`-p:Deploy=true`) because the game locks loaded DLLs.
 - No `ModDev\WildWasteland` working copy: this repo is the only source. (Confirm with Denis.)
 - Performance budget: see docs/perf-log.md.
+
+## 2026-10-13 - Not listed in Apocasetter-Index yet
+Wild Wasteland 0.1.0 is experimental (GitHub pre-release, not verified in game). Denis asked to keep it OUT of Apocasetter-Index for now:
+the entry was added and immediately reverted (Apocasetter-Index commits 041d0fa / 59c4656). Do not add `mods/com.denis.apocalypter.wildwasteland.json`
+and do not deprecate the absorbed standalone mods in the index until Denis says the build is verified. Until then the absorbed
+mods are removed from a game by hand (Denis's install: `BepInEx\disabled-by-WildWasteland\`).
