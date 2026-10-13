@@ -45,11 +45,26 @@ namespace WildWasteland.Core
             }
         }
 
+        static int _inPlayFrame = -1; static bool _inPlay;
+        /// <summary>Like InGame but ignores timeScale (true while the game is paused by an editor / the ESC menu). For tools and editors.</summary>
+        public static bool InPlay
+        {
+            get
+            {
+                if (_inPlayFrame == Time.frameCount) return _inPlay;
+                _inPlayFrame = Time.frameCount;
+                Refresh();
+                _inPlay = _menu != null && _menu.Fsm.Initialized && _menu.ActiveStateName == "play"
+                          && (_saveLoad == null || !_saveLoad.Fsm.Initialized || _saveLoad.ActiveStateName == "isPlay");
+                return _inPlay;
+            }
+        }
+
         public static string SaveLoadState { get { var f = SaveLoadGame; return f != null ? f.ActiveStateName : null; } }
 
         static void Refresh()
         {
-            if (_player != null && _gm != null && _menu != null && _saveLoad != null && _camera != null && _arrays != null) return;
+            if (_player != null && _gm != null && _menu != null && _saveLoad != null && _camera != null && _arrays != null && _itemId != null) return;
             if (Time.unscaledTime < _next) return;
             _next = Time.unscaledTime + 1f;
             if (_player == null) _player = GameObject.Find("Player");
@@ -64,7 +79,7 @@ namespace WildWasteland.Core
 
         internal static void OnSceneLoaded(Scene s, LoadSceneMode m)
         {
-            _player = _camera = _gm = _slg = _arrays = _itemId = null; _menu = _saveLoad = null; _next = 0; _inGameFrame = -1; _cam = null;
+            _player = _camera = _gm = _slg = _arrays = _itemId = null; _menu = _saveLoad = null; _next = 0; _inGameFrame = -1; _inPlayFrame = -1; _cam = null;
         }
     }
 

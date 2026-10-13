@@ -26,7 +26,9 @@ namespace WildWasteland.Core
         public sealed class Hook<T> where T : class
         {
             public readonly string Target;
-            readonly List<IModule> _po = new List<IModule>(), _pre = new List<IModule>(), _fo = new List<IModule>();
+            // owners are kept in arrays parallel to the handler arrays and swapped together, so a dispatch that is running while a
+            // handler's module gets removed (Fail -> Stop -> RemoveAll from inside the catch) still reports to the right owner
+            IModule[] _po = new IModule[0], _pre = new IModule[0], _fo = new IModule[0];
             PrefixHandler<T>[] _prefix = new PrefixHandler<T>[0];
             PostfixHandler<T>[] _postfix = new PostfixHandler<T>[0];
             FinalizerHandler<T>[] _final = new FinalizerHandler<T>[0];
@@ -44,55 +46,61 @@ namespace WildWasteland.Core
 
             public void Prefix(IModule owner, PrefixHandler<T> h)
             {
-                var a = new PrefixHandler<T>[_prefix.Length + 1]; _prefix.CopyTo(a, 0); a[a.Length - 1] = h; _prefix = a; _pre.Add(owner);
+                var a = new PrefixHandler<T>[_prefix.Length + 1]; _prefix.CopyTo(a, 0); a[a.Length - 1] = h;
+                var o = Owners.Append(_pre, owner); _pre = o; _prefix = a;
             }
             public void Postfix(IModule owner, PostfixHandler<T> h)
             {
-                var a = new PostfixHandler<T>[_postfix.Length + 1]; _postfix.CopyTo(a, 0); a[a.Length - 1] = h; _postfix = a; _po.Add(owner);
+                var a = new PostfixHandler<T>[_postfix.Length + 1]; _postfix.CopyTo(a, 0); a[a.Length - 1] = h;
+                var o = Owners.Append(_po, owner); _po = o; _postfix = a;
             }
             public void Finalizer(IModule owner, FinalizerHandler<T> h)
             {
-                var a = new FinalizerHandler<T>[_final.Length + 1]; _final.CopyTo(a, 0); a[a.Length - 1] = h; _final = a; _fo.Add(owner);
+                var a = new FinalizerHandler<T>[_final.Length + 1]; _final.CopyTo(a, 0); a[a.Length - 1] = h;
+                var o = Owners.Append(_fo, owner); _fo = o; _final = a;
             }
             internal void Remove(IModule owner)
             {
-                _prefix = Filter(_prefix, _pre, owner); _postfix = Filter(_postfix, _po, owner); _final = Filter(_final, _fo, owner);
+                IModule[] o;
+                _prefix = Filter(_prefix, _pre, owner, out o); _pre = o;
+                _postfix = Filter(_postfix, _po, owner, out o); _po = o;
+                _final = Filter(_final, _fo, owner, out o); _fo = o;
             }
-            static H[] Filter<H>(H[] arr, List<IModule> owners, IModule owner)
+            static H[] Filter<H>(H[] arr, IModule[] owners, IModule owner, out IModule[] keptOwners)
             {
-                var keep = new List<H>();
-                for (int i = 0; i < arr.Length; i++) if (owners[i] != owner) keep.Add(arr[i]);
-                for (int i = owners.Count - 1; i >= 0; i--) if (owners[i] == owner) owners.RemoveAt(i);
+                var keep = new List<H>(); var ko = new List<IModule>();
+                for (int i = 0; i < arr.Length; i++) if (owners[i] != owner) { keep.Add(arr[i]); ko.Add(owners[i]); }
+                keptOwners = ko.ToArray();
                 return keep.ToArray();
             }
 
             public bool RunPrefix(T a)
             {
                 Calls++;
-                var hs = _prefix; bool run = true;
+                var hs = _prefix; var os = _pre; bool run = true;
                 for (int i = 0; i < hs.Length; i++)
                 {
                     try { if (!hs[i](a)) run = false; }
-                    catch (Exception e) { ModuleHost.ReportHookException(_pre[i], Target, e); }
+                    catch (Exception e) { ModuleHost.ReportHookException(i < os.Length ? os[i] : null, Target, e); }
                 }
                 return run;
             }
             public void RunPostfix(T a)
             {
-                var hs = _postfix;
+                var hs = _postfix; var os = _po;
                 for (int i = 0; i < hs.Length; i++)
                 {
                     try { hs[i](a); }
-                    catch (Exception e) { ModuleHost.ReportHookException(_po[i], Target, e); }
+                    catch (Exception e) { ModuleHost.ReportHookException(i < os.Length ? os[i] : null, Target, e); }
                 }
             }
             public Exception RunFinalizer(T a, Exception ex)
             {
-                var hs = _final;
+                var hs = _final; var os = _fo;
                 for (int i = 0; i < hs.Length; i++)
                 {
                     try { ex = hs[i](a, ex); }
-                    catch (Exception e) { ModuleHost.ReportHookException(_fo[i], Target, e); }
+                    catch (Exception e) { ModuleHost.ReportHookException(i < os.Length ? os[i] : null, Target, e); }
                 }
                 return ex;
             }
@@ -133,21 +141,21 @@ namespace WildWasteland.Core
         public delegate bool FsmEventPrefix(Fsm fsm, FsmEvent ev, FsmEventData data);
         public sealed class FsmEventHook
         {
-            readonly List<IModule> _o = new List<IModule>();
+            IModule[] _o = new IModule[0];
             FsmEventPrefix[] _h = new FsmEventPrefix[0];
             public long Calls; public bool Applied { get; internal set; }
             public int PrefixCount { get { return _h.Length; } }
-            public void Prefix(IModule owner, FsmEventPrefix h) { var a = new FsmEventPrefix[_h.Length + 1]; _h.CopyTo(a, 0); a[a.Length - 1] = h; _h = a; _o.Add(owner); }
+            public void Prefix(IModule owner, FsmEventPrefix h) { var a = new FsmEventPrefix[_h.Length + 1]; _h.CopyTo(a, 0); a[a.Length - 1] = h; _o = Owners.Append(_o, owner); _h = a; }
             internal void Remove(IModule owner)
             {
-                var keep = new List<FsmEventPrefix>(); for (int i = 0; i < _h.Length; i++) if (_o[i] != owner) keep.Add(_h[i]);
-                for (int i = _o.Count - 1; i >= 0; i--) if (_o[i] == owner) _o.RemoveAt(i);
-                _h = keep.ToArray();
+                var keep = new List<FsmEventPrefix>(); var ko = new List<IModule>();
+                for (int i = 0; i < _h.Length; i++) if (_o[i] != owner) { keep.Add(_h[i]); ko.Add(_o[i]); }
+                _o = ko.ToArray(); _h = keep.ToArray();
             }
             public bool Run(Fsm fsm, FsmEvent ev, FsmEventData data)
             {
-                Calls++; var hs = _h; bool run = true;
-                for (int i = 0; i < hs.Length; i++) { try { if (!hs[i](fsm, ev, data)) run = false; } catch (Exception e) { ModuleHost.ReportHookException(_o[i], "Fsm.ProcessEvent", e); } }
+                Calls++; var hs = _h; var os = _o; bool run = true;
+                for (int i = 0; i < hs.Length; i++) { try { if (!hs[i](fsm, ev, data)) run = false; } catch (Exception e) { ModuleHost.ReportHookException(i < os.Length ? os[i] : null, "Fsm.ProcessEvent", e); } }
                 return run;
             }
         }
@@ -156,57 +164,66 @@ namespace WildWasteland.Core
         public delegate void FsmStatePostfix(Fsm fsm, FsmState state);
         public sealed class FsmStateHook
         {
-            readonly List<IModule> _po = new List<IModule>(), _pre = new List<IModule>();
+            IModule[] _po = new IModule[0], _pre = new IModule[0];
             FsmStatePrefix[] _p = new FsmStatePrefix[0]; FsmStatePostfix[] _q = new FsmStatePostfix[0];
             public long Calls; public bool Applied { get; internal set; }
             public int PrefixCount { get { return _p.Length; } }
             public int PostfixCount { get { return _q.Length; } }
-            public void Prefix(IModule owner, FsmStatePrefix h) { var a = new FsmStatePrefix[_p.Length + 1]; _p.CopyTo(a, 0); a[a.Length - 1] = h; _p = a; _pre.Add(owner); }
-            public void Postfix(IModule owner, FsmStatePostfix h) { var a = new FsmStatePostfix[_q.Length + 1]; _q.CopyTo(a, 0); a[a.Length - 1] = h; _q = a; _po.Add(owner); }
+            public void Prefix(IModule owner, FsmStatePrefix h) { var a = new FsmStatePrefix[_p.Length + 1]; _p.CopyTo(a, 0); a[a.Length - 1] = h; _pre = Owners.Append(_pre, owner); _p = a; }
+            public void Postfix(IModule owner, FsmStatePostfix h) { var a = new FsmStatePostfix[_q.Length + 1]; _q.CopyTo(a, 0); a[a.Length - 1] = h; _po = Owners.Append(_po, owner); _q = a; }
             internal void Remove(IModule owner)
             {
-                var kp = new List<FsmStatePrefix>(); for (int i = 0; i < _p.Length; i++) if (_pre[i] != owner) kp.Add(_p[i]);
-                var kq = new List<FsmStatePostfix>(); for (int i = 0; i < _q.Length; i++) if (_po[i] != owner) kq.Add(_q[i]);
-                for (int i = _pre.Count - 1; i >= 0; i--) if (_pre[i] == owner) _pre.RemoveAt(i);
-                for (int i = _po.Count - 1; i >= 0; i--) if (_po[i] == owner) _po.RemoveAt(i);
+                var kp = new List<FsmStatePrefix>(); var kpo = new List<IModule>();
+                for (int i = 0; i < _p.Length; i++) if (_pre[i] != owner) { kp.Add(_p[i]); kpo.Add(_pre[i]); }
+                var kq = new List<FsmStatePostfix>(); var kqo = new List<IModule>();
+                for (int i = 0; i < _q.Length; i++) if (_po[i] != owner) { kq.Add(_q[i]); kqo.Add(_po[i]); }
+                _pre = kpo.ToArray(); _po = kqo.ToArray();
                 _p = kp.ToArray(); _q = kq.ToArray();
             }
             public bool RunPrefix(Fsm fsm, FsmState st)
             {
-                Calls++; var hs = _p; bool run = true;
-                for (int i = 0; i < hs.Length; i++) { try { if (!hs[i](fsm, st)) run = false; } catch (Exception e) { ModuleHost.ReportHookException(_pre[i], "Fsm.EnterState", e); } }
+                Calls++; var hs = _p; var os = _pre; bool run = true;
+                for (int i = 0; i < hs.Length; i++) { try { if (!hs[i](fsm, st)) run = false; } catch (Exception e) { ModuleHost.ReportHookException(i < os.Length ? os[i] : null, "Fsm.EnterState", e); } }
                 return run;
             }
             public void RunPostfix(Fsm fsm, FsmState st)
             {
-                var hs = _q;
-                for (int i = 0; i < hs.Length; i++) { try { hs[i](fsm, st); } catch (Exception e) { ModuleHost.ReportHookException(_po[i], "Fsm.EnterState", e); } }
+                var hs = _q; var os = _po;
+                for (int i = 0; i < hs.Length; i++) { try { hs[i](fsm, st); } catch (Exception e) { ModuleHost.ReportHookException(i < os.Length ? os[i] : null, "Fsm.EnterState", e); } }
             }
         }
 
         public delegate ES3Internal.ES3Prefab PrefabResolver(long id);
         public sealed class PrefabHook
         {
-            readonly List<IModule> _o = new List<IModule>();
+            IModule[] _o = new IModule[0];
             PrefabResolver[] _h = new PrefabResolver[0];
             public long Calls; public bool Applied { get; internal set; }
             public int PrefixCount { get { return _h.Length; } }
-            public void Resolver(IModule owner, PrefabResolver h) { var a = new PrefabResolver[_h.Length + 1]; _h.CopyTo(a, 0); a[a.Length - 1] = h; _h = a; _o.Add(owner); }
+            public void Resolver(IModule owner, PrefabResolver h) { var a = new PrefabResolver[_h.Length + 1]; _h.CopyTo(a, 0); a[a.Length - 1] = h; _o = Owners.Append(_o, owner); _h = a; }
             internal void Remove(IModule owner)
             {
-                var keep = new List<PrefabResolver>(); for (int i = 0; i < _h.Length; i++) if (_o[i] != owner) keep.Add(_h[i]);
-                for (int i = _o.Count - 1; i >= 0; i--) if (_o[i] == owner) _o.RemoveAt(i);
-                _h = keep.ToArray();
+                var keep = new List<PrefabResolver>(); var ko = new List<IModule>();
+                for (int i = 0; i < _h.Length; i++) if (_o[i] != owner) { keep.Add(_h[i]); ko.Add(_o[i]); }
+                _o = ko.ToArray(); _h = keep.ToArray();
             }
             public ES3Internal.ES3Prefab Run(long id)
             {
-                Calls++; var hs = _h;
+                Calls++; var hs = _h; var os = _o;
                 for (int i = 0; i < hs.Length; i++)
                 {
                     try { var p = hs[i](id); if (p != null) return p; }
-                    catch (Exception e) { ModuleHost.ReportHookException(_o[i], "ES3ReferenceMgrBase.GetPrefab", e); }
+                    catch (Exception e) { ModuleHost.ReportHookException(i < os.Length ? os[i] : null, "ES3ReferenceMgrBase.GetPrefab", e); }
                 }
                 return null;
+            }
+        }
+
+        static class Owners
+        {
+            internal static IModule[] Append(IModule[] owners, IModule owner)
+            {
+                var o = new IModule[owners.Length + 1]; owners.CopyTo(o, 0); o[o.Length - 1] = owner; return o;
             }
         }
 

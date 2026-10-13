@@ -61,7 +61,7 @@ namespace WildWasteland.Core.UI
             foreach (var kv in _sum) l.Value(kv.Key, F(kv.Value[0] / frames) + "   worst " + F(kv.Value[1]));
             l.Heading("Jobs (avg ms/frame, last, worst, calls, errors)");
             foreach (var j in Scheduler.AllJobs())
-                l.Value(j.ToString(), F(j.TotalMs / frames) + "  " + F(j.LastMs) + "  " + F(j.MaxMs) + "  " + j.Calls + (j.Exceptions > 0 ? "  ERR " + j.Exceptions : ""));
+                l.Value(j.ToString(), F(j.TotalMs / frames) + "  " + F(j.LastMs) + "  " + F(j.MaxMs) + "  " + j.Calls + (j.Exceptions > 0 ? "  ERR " + j.Exceptions : "") + (j.Enabled ? "" : "  (off)"));
         }
 
         static void Harmony(ToolLayout l)

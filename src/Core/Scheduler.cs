@@ -41,6 +41,7 @@ namespace WildWasteland.Core
         public long Calls;
         public double TotalMs, LastMs, MaxMs;
         public int Exceptions;
+        internal float ErrorWindowStart; internal int WindowErrors;
 
         internal Job(IModule owner, string name, Phase phase) { Owner = owner; Name = name; Phase = phase; }
         public void Remove() { Removed = true; }
@@ -63,6 +64,7 @@ namespace WildWasteland.Core
         /// <summary>Total WW managed time of the current frame (ms), reset in EarlyUpdate. Sliced jobs stop when it exceeds <see cref="FrameBudgetMs"/>.</summary>
         public static double FrameMs;
         public static double FrameBudgetMs = 2.0;
+        const int JobErrorLimit = 20;   // errors per 10 s that switch one job off
         public static double MaxFrameMs;
         public static long Frames;
         public static double AvgFrameMs { get { return Frames > 0 ? _sumFrameMs / Frames : 0; } }
@@ -179,6 +181,14 @@ namespace WildWasteland.Core
                 {
                     j.Exceptions++;
                     ModuleHost.ReportJobException(j, e);
+                    // failure isolation per job: a loop that throws every frame is switched off (the rest of its module keeps running);
+                    // Init after a module off -> on registers fresh jobs
+                    if (unscaled - j.ErrorWindowStart > 10.0) { j.ErrorWindowStart = (float)unscaled; j.WindowErrors = 0; }
+                    if (++j.WindowErrors >= JobErrorLimit && j.Enabled)
+                    {
+                        j.Enabled = false;
+                        Log.Error("[" + (j.Owner != null ? j.Owner.Id : "Core") + "] job '" + j.Name + "' threw " + j.WindowErrors + " times in 10 s - job DISABLED for this session (last: " + e.Message + "). Switch the module off and on (F6 / F7 Modules) to retry.");
+                    }
                 }
                 double ms = (_sw.ElapsedTicks - t0) * TicksToMs;
                 j.Calls++; j.LastMs = ms; j.TotalMs += ms; if (ms > j.MaxMs) j.MaxMs = ms;

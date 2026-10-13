@@ -110,7 +110,10 @@ namespace WildWasteland.Core
             catch (Exception ex)
             {
                 e.State = ModuleState.InitFailed; e.LastError = ex.Message;
-                Log.Error("[" + m.Id + "] Init failed - module stays off", ex);
+                Log.Error("[" + m.Id + "] Init failed - module stays off (switch it off and on in F6 / the F7 Modules page to retry)", ex);
+                // a half-run Init may have set its service field / Running flag / created objects: Shutdown undoes that (modules keep
+                // Shutdown safe to call after a partial Init), then Core removes patches, jobs, hooks and hotkeys
+                try { m.Shutdown(); } catch (Exception sx) { Log.Error("[" + m.Id + "] Shutdown after the failed Init", sx); }
                 Cleanup(m);
             }
         }
@@ -142,7 +145,7 @@ namespace WildWasteland.Core
         {
             if (_quitting) return;
             bool want = e.Config.Enabled.Value;
-            if (want && (e.State == ModuleState.OffByConfig || e.State == ModuleState.DisabledAfterErrors))
+            if (want && (e.State == ModuleState.OffByConfig || e.State == ModuleState.DisabledAfterErrors || e.State == ModuleState.InitFailed))
             {
                 Start(e);
                 Hooks.ApplyUsed();
@@ -196,19 +199,25 @@ namespace WildWasteland.Core
         static void Safe(Entry e, string what, Action a)
         {
             try { a(); }
-            catch (Exception ex) { Fail(e, what, ex); }
+            catch (Exception ex) { Fail(e, what, ex, true); }
         }
 
         // ---------------------------------------------------------------- failure isolation
 
-        internal static void ReportJobException(Job j, Exception ex) { Fail(Of(j.Owner), "job " + j.Name, ex); }
-        internal static void ReportHookException(IModule m, string target, Exception ex) { Fail(Of(m), target, ex); }
+        /// <summary>
+        /// A scheduler job that throws is isolated by the Scheduler itself (the job is switched off after repeated errors, the module keeps
+        /// running - the source mods' runners also swallowed a subsystem's exception per frame and went on). Job errors are counted and
+        /// logged per module but do not disable the module; only hook / lifecycle failures do.
+        /// </summary>
+        internal static void ReportJobException(Job j, Exception ex) { Fail(Of(j.Owner), "job " + j.Name, ex, false); }
+        internal static void ReportHookException(IModule m, string target, Exception ex) { Fail(Of(m), target, ex, true); }
 
-        static void Fail(Entry e, string where, Exception ex)
+        static void Fail(Entry e, string where, Exception ex, bool countsTowardsDisable)
         {
             if (e == null) { Log.Error("[Core] " + where, ex); return; }
             e.Errors++; e.LastError = where + ": " + ex.Message;
             if (e.Logged < 5) { e.Logged++; Log.Error("[" + e.Module.Id + "] " + where, ex); }
+            if (!countsTowardsDisable) return;
             float now = Time.unscaledTime;
             if (now - e.WindowStart > 10f) { e.WindowStart = now; e.WindowErrors = 0; }
             if (++e.WindowErrors >= ErrorWindowLimit && e.State == ModuleState.Running)

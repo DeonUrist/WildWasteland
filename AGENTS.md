@@ -61,6 +61,7 @@ Each module implements a Core interface with at least:
 - `Init()` (once, after config), `OnSceneLoaded()`, `OnWorldReady()` (SaveLoadGame reached `isPlay`), `OnSaveBegin()/OnSaveEnd()`, `OnOriginShift(Vector3 delta)`, `Shutdown()`.
 - Work registered with the scheduler (5.4), not done in raw Update.
 ModuleHost calls every hook inside its own try/catch, counts exceptions per module, logs the first few with stack, and **disables a module after repeated failures** (and says so in the log) instead of throwing every frame.
+Scheduler jobs are isolated per job: a job that throws 20 times in 10 s is switched off (logged, "(off)" on the F7 Performance page) while the rest of the module keeps running; only hook / lifecycle failures count towards the module-level disable (40 in 10 s). A failed Init runs the module's Shutdown (keep it safe to call after a partial Init) and can be retried from the Enabled toggle.
 
 ### 5.4 Scheduler and frame budget
 - All periodic work is a scheduled job: `EveryFrame` (only for things that are visibly wrong otherwise, e.g. camera, held-item pose), `Interval(seconds)` with a random phase so jobs don't all fire on the same frame, or `Sliced` (a work queue processed for at most N microseconds per frame).
@@ -130,6 +131,7 @@ MANAGED=/path/Managed BEPCORE=/path/core sh build.sh /path/outdir
 - `build.sh` compiles every `.cs` under `src/` (same set as the csproj glob). Old mcs: C# 7, no local functions, `lock` is a keyword, avoid type names `Path`, `Cursor`, methods named `System`. Compile only against the game's DLLs.
 - Windows alternative: `dotnet build WildWasteland.csproj` (deploy is opt-in: `-p:Deploy=true`, game closed).
 - If a reference DLL is missing in Managed\, remove it from both build.sh and the csproj.
+- Config check without the game: `MANAGED=... BEPCORE=... sh tools/config-harness/run.sh <outdir> [BepInEx/config with the old cfg files]` binds every module's config on plain mono (needs `mono-runtime`): catches AcceptableValue type mismatches, duplicate / colliding (section,key) pairs, foreign sections, BindConfig exceptions and migration errors before the first in-game run.
 
 ## 8. Deploy and verify (every build)
 
