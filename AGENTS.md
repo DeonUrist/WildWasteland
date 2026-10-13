@@ -20,7 +20,8 @@ From 0.1.0 on, almost every task is "fix issue #N" from the board (https://githu
 
 ### 0.3 Testing: build only, Denis tests in game
 - You cannot run the game. Do not try to launch, automate or screenshot it, and do not write test harnesses, mocks, test projects or simulations for a fix.
-- Your whole verification is: the project compiles with **zero errors** (section 7: `dotnet build WildWasteland.csproj` on Windows, or `sh build.sh` with mono). If you changed config entries, also run `tools/config-harness`. Then stop; do not loop on further checks.
+- Your whole verification is: `dotnet build WildWasteland.csproj -c Release -p:Deploy=true` in a **Windows** shell (PowerShell / cmd) compiles with **zero errors** (section 7.1). Then stop; do not loop on further checks. If you changed config entries, say so in the handover (the mono config harness is run by Claude cloud sessions, not by you).
+- **On Denis's PC never use WSL, mono, `mcs`, `build.sh`, `tools/build-module.sh` or `tools/config-harness`, and never install compilers or SDKs.** Those are for Claude cloud sessions only (section 7.2). If `dotnet` is missing or the build cannot find the game DLLs, stop and tell Denis.
 - After a successful build, **deploy the DLL to the game** (0.4) so Denis can test right away.
 - Hand over to Denis in your final message: (1) the cause, (2) what you changed (files, about how many lines), (3) whether the DLL is deployed (md5) or why not, (4) exact in-game test steps with the expected result, (5) log lines that confirm it if any. Denis tests and reports back.
 - Do not close issues and do not move them to Verified; Denis does that. Leave the status as Testing.
@@ -168,7 +169,20 @@ Required:
 
 ## 7. Build
 
-No compiler on the device VM. Build in the cloud (mono mcs 6.8):
+### 7.1 Denis's PC (Codex, Visual Studio, any local agent): dotnet in Windows only
+
+```
+dotnet build WildWasteland.csproj -c Release -p:Deploy=true                 # build + copy the DLL into the game (game closed)
+dotnet build WildWasteland.csproj -c Release -p:GameDir="D:\other\Apocalypter"   # if the game is elsewhere
+```
+- Run it from PowerShell or cmd in the repo folder (`V:\Repos\Apocalypter\WildWasteland`). **Not from WSL**: WSL has neither the Windows .NET SDK nor the game path, and must not be used for this repo.
+- Needs the .NET SDK 6 or newer on Windows; nothing else (it compiles against the game's own `mscorlib`/`System` from `Apocalypter_Data\Managed` via `NoStdLib` + `FrameworkPathOverride`, so no .NET Framework targeting pack and no NuGet). Same sources, references and embedded-resource names as build.sh (verified identical, 33 resources). Output `bin\Release\WildWasteland.dll`; `-p:Deploy=true` copies it to `<GameDir>\BepInEx\plugins\WildWasteland\`.
+- If the build fails on a reference, the game folder is wrong: fix `GameDir`, never the code or the csproj.
+- `LangVersion 7.3`: the C# limits listed in 7.2 apply.
+
+### 7.2 Claude cloud sessions only: mono mcs 6.8 (never on Denis's PC)
+
+Used by Claude in its Linux cloud container (game DLLs staged there):
 ```
 apt-get update && apt-get install -y mono-mcs mono-runtime
 # stage <game>\Apocalypter_Data\Managed\*.dll and <game>\BepInEx\core\*.dll, then:
@@ -179,7 +193,6 @@ MANAGED=... BEPCORE=... sh tools/config-harness/run.sh /path/outdir [BepInEx/con
 - `build.sh` compiles every `.cs` under `src/` (same set as the csproj glob) against the game's DLLs (the reference list is in build.sh; if a DLL is missing in Managed\, remove it from both build.sh and the csproj) and embeds every file under `src/Modules/<Id>/Embedded/` as resource `<Id>.<path with / -> .>` (e.g. `Patrols.DefaultTemplates.Bike.json`, `HUD.Textures.crosshair_dot.png`). `-langversion:latest` = C# 7.x: no local functions, no `out var` / pattern variables inside iterator methods, no locals shadowing a lambda parameter, no tuples / `default` literal / `in` params; `?.`, `=>`, `nameof`, interpolation are fine; `lock` is a keyword; avoid type names `Path`, `Cursor`, methods named `System`. Must build with zero errors (2 known warnings: NPC `Nav.cs` CS0675).
 - `tools/build-module.sh <Id>` copies Core + one module into a temp tree with empty `ModuleBase` stubs for the others - the way to check a port in isolation.
 - `tools/config-harness/run.sh` compiles `Harness.cs` against the built DLL and runs `BindConfig` of every module (alone and through `ModuleHost.BindAll`) on plain mono: catches AcceptableValue type mismatches, duplicate / colliding (section,key) pairs, statics of one module that share one entry (BepInEx returns the existing entry on a duplicate Bind of the same type), foreign sections, BindConfig exceptions and migration errors against Denis's real old cfg files. Color entries log "could not be parsed" there (native ColorUtility): ignore.
-- Windows alternative: `dotnet build WildWasteland.csproj` (`LangVersion 7.3`; deploy is opt-in: `-p:Deploy=true`, game closed).
 
 ## 8. Deploy and verify (every build)
 

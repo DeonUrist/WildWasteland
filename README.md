@@ -58,14 +58,20 @@ Nothing about saves changed: per-gun magazines stay under `Apocaunloader.Magazin
 
 ## Build
 
-No compiler is needed on the game machine. In the cloud (Linux, mono mcs 6.8):
+On Windows (PowerShell or cmd, .NET SDK 6+, nothing else needed):
+```
+dotnet build WildWasteland.csproj -c Release -p:Deploy=true    # builds and copies the DLL into the game (game closed)
+```
+Add `-p:GameDir="<path to Apocalypter>"` if the game is not in `E:\SteamLibrary\steamapps\common\Apocalypter`. Do not use WSL for this repo.
+
+Claude cloud sessions build with mono instead (Linux container only, not for the game PC):
 ```
 apt-get update && apt-get install -y mono-mcs
 MANAGED=<game>/Apocalypter_Data/Managed BEPCORE=<game>/BepInEx/core sh build.sh <outdir>   # -> <outdir>/WildWasteland.dll
 MANAGED=... BEPCORE=... sh tools/build-module.sh Patrols                                   # Core + one module, others stubbed
 MANAGED=... BEPCORE=... sh tools/config-harness/run.sh <outdir> <BepInEx/config with old cfgs>   # binds every config without the game
 ```
-On Windows: `dotnet build WildWasteland.csproj` (`-p:Deploy=true` copies the DLL into the game, game closed). `AGENTS.md` has the rules for contributors and AI sessions; `docs/` has the module, patch, decision and performance records.
+`AGENTS.md` has the rules for contributors and AI sessions; `docs/` has the module, patch, decision and performance records.
 
 ## Links
 

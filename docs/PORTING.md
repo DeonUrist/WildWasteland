@@ -106,4 +106,4 @@ When done, write:
 
 ## 9. Build
 
-`MANAGED=/home/claude/ww/game/Apocalypter_Data/Managed BEPCORE=/home/claude/ww/game/BepInEx/core sh tools/build-module.sh <Id>` compiles Core + your module (others stubbed). mono mcs 6.8, `-langversion:latest` (= C# 7.x): no `out var`/pattern variables inside iterator methods, no local functions, no locals shadowing a lambda parameter, no tuples/`default` literal/`in` params; `?.`, `=>`, `nameof`, string interpolation, `out var` outside iterators are fine. Must build with zero errors.
+(Claude cloud sessions; on Denis's PC use `dotnet build`, AGENTS.md 7.1.) `MANAGED=/home/claude/ww/game/Apocalypter_Data/Managed BEPCORE=/home/claude/ww/game/BepInEx/core sh tools/build-module.sh <Id>` compiles Core + your module (others stubbed). mono mcs 6.8, `-langversion:latest` (= C# 7.x): no `out var`/pattern variables inside iterator methods, no local functions, no locals shadowing a lambda parameter, no tuples/`default` literal/`in` params; `?.`, `=>`, `nameof`, string interpolation, `out var` outside iterators are fine. Must build with zero errors.
