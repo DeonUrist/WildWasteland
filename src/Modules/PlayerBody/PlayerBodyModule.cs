@@ -60,7 +60,6 @@ namespace WildWasteland.Modules.PlayerBody
         internal static ConfigEntry<float> RunLegsIn, RunLegsTurn;
         internal static ConfigEntry<float> OrbitSpeed, HipsDrift, ClipWalkSpeed, ClipRunSpeed, ClipCrouchSpeed, ThighSwing, KneeBend, ArmSwing, HipBob, CrouchDrop;
         internal static ConfigEntry<float> ClimbMinHeight, ClimbMaxHeight, ClimbReach, ClimbWaistLimit, ClimbSpeed;
-        internal static ConfigEntry<Key> HeadlightsKey;
 
         // the driver's-seat view offset Denis set in game (1.5.3: X -0.03, Y 0.02, Z 0.02) is the built-in base; the F7 values add to it
         internal static readonly Vector3 CarViewBase = new Vector3(-0.03f, 0.02f, 0.02f);
@@ -76,7 +75,6 @@ namespace WildWasteland.Modules.PlayerBody
         internal static KeyCode CassetteKeyCode { get { return KeyMap.Code(CassetteKey.Value); } }
         internal static KeyCode VolumeDownKeyCode { get { return KeyMap.Code(VolumeDownKey.Value); } }
         internal static KeyCode VolumeUpKeyCode { get { return KeyMap.Code(VolumeUpKey.Value); } }
-        internal static KeyCode HeadlightsKeyCode { get { return KeyMap.Code(HeadlightsKey.Value); } }
 
         // ------------------------------------------------------------------ logging (old Plugin.Log / Verbose / Warn)
         internal static void Info(string s) { if (Core.Log.Verbose) Core.Log.Info("[PlayerBody] " + s); }
@@ -132,7 +130,7 @@ namespace WildWasteland.Modules.PlayerBody
             Mig(VehicleStatusHint, "VEHICLE", "VehicleStatusHint");
             VehicleHotkeyHint = cfg.Player("Vehicles", "VehicleHotkeyHint", true, "Show the vehicle hotkeys on the left while driving. Hiding the hints keeps the keys working.");
             Mig(VehicleHotkeyHint, "VEHICLE", "VehicleHotkeyHint");
-            IgnitionControlOn = cfg.Player("Vehicles", "IgnitionKey", true, "Adds an \"Ignition\" row to the game's Controls screen (default E): one press turns the key and starts the engine, another stops it.");
+            IgnitionControlOn = cfg.Player("Vehicles", "IgnitionKey", true, "Adds an \"Ignition\" row to the game's Controls screen (default E): each press performs one ignition/start panel click (ignition on, crank, then stop on standard cars).");
             RustlinerDoorways = cfg.Player("Vehicles", "RustlinerDoorways", true, "Walk through the Rustliner bus doorways without catching on the door frames (only the player's capsule ignores the frames while in a doorway).");
             LanceIgnoresOwnCar = cfg.Player("Vehicles", "LanceIgnoresOwnCar", true, "A blast lance thrown from the driver's seat flies out of your own car instead of blowing up on it.");
 
@@ -150,7 +148,7 @@ namespace WildWasteland.Modules.PlayerBody
 
             // ---- F7 (tools.cfg)
             const string Ed = "Editors", Cam = "Camera", Fp = "First person", Cull = "Camera culling", Seat = "Car seat", Clm = "Climbing",
-                Anim = "Animation", Leg = "Animation (fallback clips)", Mdl = "Model", Veh = "Vehicles", Api = "ModAPI";
+                Anim = "Animation", Leg = "Animation (fallback clips)", Mdl = "Model", Api = "ModAPI";
             WeaponAdjust = cfg.Tool(Ed, "WeaponAdjustment", false, "Weapon pose editor (third person, weapon drawn): numpad 8/2 6/4 7/1 move the weapon in the hand, 5 move/rotate, 9/3 pick the animation, - / * delete/copy/paste. Aiming: Page Up/Down lift the hands, Home/End tilt the head, Insert/Delete push the hands forward. Saved to config/WildWasteland/PlayerBody/weapon-poses.txt and aim-lift.txt. These keys do nothing while this is off.");
             cfg.Migrate(WeaponAdjust, OldCfg, "Debug", "WeaponAdjustment");
 
@@ -227,8 +225,6 @@ namespace WildWasteland.Modules.PlayerBody
             ArmsTextureFile = cfg.Tool(Mdl, "ArmsTexture", "Models/Player2_female_arms.png", "Female replacement for the game's Player2 texture atlas, used only on the first-person arms and kick leg.");
             AnimBundleFile = cfg.Tool(Mdl, "AnimationBundle", "Models/apocaplayer_anims.bundle", "AssetBundle with the humanoid (Mixamo) clips; loaded once per game start.");
 
-            HeadlightsKey = cfg.Tool(Veh, "HeadlightsKey", Key.X, "Driving: headlights on/off - only used when the game's Controls have no \"Headlight\" action (they do; the game's binding is used).");
-            MigKeyTool(HeadlightsKey, "VEHICLE", "HeadlightsKey");
 
             VerboseModApi = cfg.Tool(Api, "VerboseModApi", false, "Log every decision of every ModAPI character (very chatty; needs [Debug] VerboseLog).");
 
@@ -300,6 +296,7 @@ namespace WildWasteland.Modules.PlayerBody
             Hooks.SmoothLookAtDo.Prefix(this, FirstPersonSway.BeforeSmoothLookAt);
             Core.Patches.Patch(this, Core.Patches.Method(typeof(HutongGames.PlayMaker.Actions.MouseLook), "OnUpdate"),
                 prefix: Core.Patches.Method(typeof(ThirdPerson), "BeforeMouseLook"));
+            Car.Patch(this);
             PickAssist.Patch(this);
             AimTransition.Patch(this);
             FemalePain.Patch(this);

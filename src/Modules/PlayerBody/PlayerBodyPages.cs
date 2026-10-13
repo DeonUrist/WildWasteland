@@ -36,8 +36,8 @@ namespace WildWasteland.Modules.PlayerBody
                 { Intro = "First-person body placement under the camera (BodyFirstPerson / FirstPersonArms) and the jump knee correction." },
                 new ConfigPage(m, G, "Animation tuning", tools, "PlayerBody / Animation", "PlayerBody / Animation (fallback clips)")
                 { Intro = "Locomotion tuning of the player's body (and every ModAPI character, which reads the same values when it is attached). The fallback clips are only used without the animation bundle." },
-                new ConfigPage(m, G, "Vehicles & ModAPI", tools, "PlayerBody / Vehicles", "PlayerBody / ModAPI")
-                { Intro = "Vehicle hotkeys are in F6 [Keys]; the ignition key is a row in the game's own Controls screen (Ignition)." },
+                new ConfigPage(m, G, "Vehicles & ModAPI", tools, "PlayerBody / ModAPI")
+                { Intro = "Vehicle hints read the game's Headlight and Handbrake Controls bindings. Cassette shortcuts are in F6 [Keys]; ignition is in the game's Controls screen (Ignition)." },
             };
         }
 

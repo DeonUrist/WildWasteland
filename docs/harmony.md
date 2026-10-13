@@ -58,6 +58,7 @@ Not Harmony but worth knowing: `Core.SaveBus` polls `SaveLoadGame.ActiveStateNam
 | `HutongGames.PlayMaker.Actions.iTweenMoveTo.OnEnter` | prefix | `AimTransition.BeforeMoveTo` | `Fsm.Name == "AimDownSights"` | per ADS press / release |
 | `HutongGames.PlayMaker.Actions.PlayRandomSound.OnEnter` | prefix + finalizer | `FemalePain.Before` / `Finally` | `FemalePainSounds` + Female (static), FSM name, owner == Player | per damage sound |
 | `HutongGames.PlayMaker.Actions.SetAudioClip.OnEnter` | prefix + finalizer | `FemalePain.BeforeDeath` / `FinallyDeath` | `FemalePainSounds` + Female (static), Health/playerDeath, owner == Player | per death sound |
+| `HutongGames.PlayMaker.Actions.MousePickEvent.DoMousePickEvent` | prefix (skip during ignition hotkey only) | `Car.BeforeMousePick` | `!_ignitionPress`, then exact ignition FSM reference | every panel pick; a key press follows the configured hover/check/click events without the physical mouse check cancelling hover on state entry |
 
 Dropped from Apocaplayer: `BepInEx.Configuration.ConfigFile.Save` postfix (SettingsLayout). Non-Harmony hook: `Camera.onPreCull += ThirdPerson.PreCull` (only while third person is on).
 

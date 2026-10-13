@@ -7,18 +7,14 @@ using UnityEngine.UI;
 
 namespace WildWasteland.Modules.PlayerBody
 {
-    // Ignition hotkey. The car's START [Start] FSM is driven by clicks on the key: off -(mouse over)-> checkEngine (engine attached?) -> over
-    // -(click)-> Ignition (key turned) -> off2 -(click)-> over2 -> Start (cranks: fuel / rpm checks) -> wait -> off3/over3 = running
-    // -(click / stall)-> Stop (the key-off + engine-stop sounds) -> wait2 -> off.
-    // One press when the engine is off does both clicks: SetState("Ignition") from off, then SetState("Start") from off2.
-    // One press while it runs: SetState("Stop") - the game's own stop, with its sounds.
+    // Ignition hotkey: one press sends the panel's MousePickEvent click event through the FSM.
+    // The input action also handles the key while entering hover states, without a physical mouse-over check.
     // Running = the engine says so (NWH VehicleController.powertrain.engine.IsRunning, by reflection) or the FSM is in a running state.
     internal static class Car
     {
+        private static bool _ignitionPress;
         private static PlayMakerFSM _start;
         private static Transform _startCar;
-        private static int _phase;           // 0 idle, 1 turning the key, 2 cranking
-        private static float _phaseUntil;
         private static string _hint = "";
         private static Text _gameText;       // the game's own hint text (what the START FSM writes "Start" into): its font
         private static Font _font;
@@ -30,12 +26,11 @@ namespace WildWasteland.Modules.PlayerBody
         private static bool _running, _lightsOn, _brakeOn, _musicPlaying;
 
         private static readonly string[] RunningStates = { "Start", "wait", "off3", "over3" };
-        private static readonly string[] Stopping = { "Stop", "wait2" };
 
         public static void Tick()
         {
             _hint = "";
-            if (!PlayerBodyModule.Running || !Game.Ready || !Game.InCar || Game.Dead) { _phase = 0; return; }
+            if (!PlayerBodyModule.Running || !Game.Ready || !Game.InCar || Game.Dead) return;
             var car = Game.CarRoot;
             if (car == null) return;
             // (2.2.6) searched once per car (again every 5 s while nothing was found - parts can arrive late), not on every frame
@@ -43,7 +38,7 @@ namespace WildWasteland.Modules.PlayerBody
             {
                 bool newCar = _startCar != car;
                 _startCar = car; _startRetry = Time.unscaledTime + 5f; _start = null; _engine = null; _isRunning = null;
-                _phase = 0; _nextControls = 0f;
+                _nextControls = 0f;
                 _lightOn = _lightOff = _handbrake = _radioOnOff = _play = _stop = _volume = null;
                 _radioAudio = null;
                 foreach (var f in car.GetComponentsInChildren<PlayMakerFSM>(true))
@@ -53,7 +48,7 @@ namespace WildWasteland.Modules.PlayerBody
                 if (_start != null) PlayerBodyModule.Verbose("Ignition: " + Game.PathOf(_start.transform) + (_engine != null ? ", engine state from " + _engine.GetType().Name : ", engine state from the FSM only"));
                 if (newCar) PlayerBodyModule.Info("Car: " + car.name + " - ignition " + (_start != null ? "found" : "not found (hotkey off)") + ", engine state " + (_engine != null ? "from the vehicle" : "from the FSM"));
             }
-            if (PressedAction("Headlight", PlayerBodyModule.HeadlightsKeyCode) || Pressed(PlayerBodyModule.CassetteKeyCode) || Pressed(PlayerBodyModule.VolumeDownKeyCode) || Pressed(PlayerBodyModule.VolumeUpKeyCode))
+            if (PressedAction("Headlight", KeyCode.None) || Pressed(PlayerBodyModule.CassetteKeyCode) || Pressed(PlayerBodyModule.VolumeDownKeyCode) || Pressed(PlayerBodyModule.VolumeUpKeyCode))
                 _nextControls = 0f;                           // a hotkey acts on the controls as they are now
             if (Time.unscaledTime >= _nextControls)
             {
@@ -61,8 +56,6 @@ namespace WildWasteland.Modules.PlayerBody
                 FindControls(car);
             }
             if (Game.Paused) return;
-            if (PressedAction("Headlight", PlayerBodyModule.HeadlightsKeyCode))
-                SendUse(Active(_lightOn) ? _lightOn : _lightOff);
             if (Pressed(PlayerBodyModule.CassetteKeyCode) && _radioAudio != null && _radioAudio.clip != null)
             {
                 bool playing = _radioOnOff != null && _radioOnOff.ActiveStateName == "on";
@@ -78,41 +71,43 @@ namespace WildWasteland.Modules.PlayerBody
             }
             if (Pressed(PlayerBodyModule.VolumeDownKeyCode)) SetVolume(RadioVolume - 0.1f);
             if (Pressed(PlayerBodyModule.VolumeUpKeyCode)) SetVolume(RadioVolume + 0.1f);
+            TickIgnition();
             UpdateHints();
-            TickIgnition(car);
         }
 
-        private static void TickIgnition(Transform car)
+        internal static void Patch(PlayerBodyModule m)
         {
-            if (_start == null || !PlayerBodyModule.IgnitionControlOn.Value) { _phase = 0; return; }
-            if (!_start.enabled || _start.Fsm == null || !_start.Fsm.Initialized) return;
-            string s = _start.ActiveStateName ?? "";
-            bool running = EngineRunning(s);
-            bool stopping = Array.IndexOf(Stopping, s) >= 0;
-            if (_phase == 0 && PressedAction(GameBindings.IgnitionAction, PlayerBodyModule.IgnitionKeyCode))
-            {
-                if (running)
-                {
-                    if (s == "Start") return;   // still cranking
-                    try { _start.Fsm.SetState("Stop"); PlayerBodyModule.Verbose("Ignition: engine off (from " + s + ")"); } catch (Exception e) { PlayerBodyModule.Warn("Ignition: " + e.Message); }
-                    return;
-                }
-                if (stopping) return;
-                if (!HasEngine(car)) { PlayerBodyModule.Verbose("Ignition: no engine in this car"); return; }
-                _phase = 1; _phaseUntil = Time.unscaledTime + 1.5f;
-            }
-            if (_phase == 0) return;
-            if (Time.unscaledTime > _phaseUntil) { PlayerBodyModule.Verbose("Ignition: gave up in state " + s); _phase = 0; return; }
+            Core.Patches.Patch(m, Core.Patches.Method(typeof(HutongGames.PlayMaker.Actions.MousePickEvent), "DoMousePickEvent"),
+                prefix: Core.Patches.Method(typeof(Car), "BeforeMousePick"));
+        }
+
+        private static void TickIgnition()
+        {
+            if (_start == null || !PlayerBodyModule.IgnitionControlOn.Value || !Active(_start) || Core.ApocasetterBridge.InputBlocked) return;
+            if (!PressedAction(GameBindings.IgnitionAction, PlayerBodyModule.IgnitionKeyCode)) return;
             try
             {
-                if (_phase == 1)
-                {
-                    if (s == "off" || s == "checkEngine" || s == "over" || s == "back" || s == "start") _start.Fsm.SetState("Ignition");   // key turned (click 1)
-                    else if (s == "off2" || s == "over2") { _start.Fsm.SetState("Start"); _phase = 2; PlayerBodyModule.Verbose("Ignition: starting"); }   // crank (click 2)
-                }
-                else if (_phase == 2 && s != "Ignition") _phase = 0;
+                PlayerBodyModule.Verbose("Ignition: key press in " + _start.ActiveStateName);
+                _ignitionPress = true;
+                foreach (var action in _start.Fsm.ActiveState.Actions)
+                    if (action.Enabled && action is HutongGames.PlayMaker.Actions.MousePickEvent) { ((HutongGames.PlayMaker.Actions.MousePickEvent)action).OnUpdate(); break; }
             }
-            catch (Exception e) { PlayerBodyModule.Warn("Ignition: " + e.Message); _phase = 0; }
+            catch (Exception e) { PlayerBodyModule.Warn("Ignition: " + e.Message); }
+            finally { _ignitionPress = false; }
+        }
+
+        private static bool BeforeMousePick(HutongGames.PlayMaker.Actions.MousePickEvent __instance)
+        {
+            if (!_ignitionPress || _start == null || __instance.Fsm != _start.Fsm) return true;
+            var ev = __instance.mouseDown;
+            if (FsmEvent.IsNullOrEmpty(ev)) ev = __instance.mouseOver;
+            else _ignitionPress = false;      // one click, even if entering another pick state
+            if (!FsmEvent.IsNullOrEmpty(ev))
+            {
+                PlayerBodyModule.Verbose("Ignition: panel event " + ev.Name + " from " + __instance.Fsm.ActiveStateName);
+                __instance.Fsm.Event(ev);
+            }
+            return false;
         }
 
         private static bool Active(PlayMakerFSM f) { return f != null && f.isActiveAndEnabled && f.Fsm != null && f.Fsm.Initialized; }
@@ -127,7 +122,6 @@ namespace WildWasteland.Modules.PlayerBody
         }
         private static bool PressedAction(string action, KeyCode fallback)
         { return GameBindings.Find(action) != null ? GameBindings.Down(action, KeyCode.None) : Pressed(fallback); }
-        private static void SendUse(PlayMakerFSM f) { if (Active(f)) f.SendEvent("useDoor"); }
 
         private static void FindControls(Transform car)
         {
@@ -202,7 +196,9 @@ namespace WildWasteland.Modules.PlayerBody
         }
         private static void UpdateHints()
         {
-            _running = _start != null && EngineRunning(_start.ActiveStateName ?? "");
+            string ignitionState = _start != null ? _start.ActiveStateName ?? "" : "";
+            _running = _start != null && EngineRunning(ignitionState);
+            int ignitionStep = ignitionState == "off" || ignitionState == "over" ? 1 : ignitionState == "off2" || ignitionState == "over2" ? 2 : ignitionState == "off3" || ignitionState == "over3" ? 3 : 0;
             // LightOn is the action enabled when lights are ON (its useDoor switches them off).
             _lightsOn = Active(_lightOn);
             string brake = _handbrake != null ? _handbrake.ActiveStateName : "";
@@ -213,17 +209,17 @@ namespace WildWasteland.Modules.PlayerBody
             bool playing = _radioAudio != null && _radioOnOff != null && _radioOnOff.ActiveStateName == "on";
             string ignitionAction = ignition ? GameBindings.IgnitionAction : null;
             _sigNow[0] = (ignition ? 1 : 0) | (_running ? 2 : 0) | (_lightOn != null || _lightOff != null ? 4 : 0) | (_lightsOn ? 8 : 0)
-                       | (_handbrake != null ? 16 : 0) | (_brakeOn ? 32 : 0) | (_radioAudio != null ? 64 : 0) | (playing ? 128 : 0);
+                       | (_handbrake != null ? 16 : 0) | (_brakeOn ? 32 : 0) | (_radioAudio != null ? 64 : 0) | (playing ? 128 : 0) | (ignitionStep << 8);
             if (ignition) BindingSig(1, ignitionAction, PlayerBodyModule.IgnitionKeyCode); else _sigNow[1] = _sigNow[2] = 0;
-            BindingSig(3, "Headlight", PlayerBodyModule.HeadlightsKeyCode);
+            BindingSig(3, "Headlight", KeyCode.None);
             BindingSig(5, "Handbrake", KeyCode.None);
             _sigNow[7] = (int)PlayerBodyModule.CassetteKeyCode; _sigNow[8] = (int)PlayerBodyModule.VolumeDownKeyCode; _sigNow[9] = (int)PlayerBodyModule.VolumeUpKeyCode;
             bool same = _sigValid;
             for (int i = 0; same && i < _sigNow.Length; i++) same = _sigNow[i] == _sigLast[i];
             if (same) { _hint = _hintText; return; }
             var hints = new StringBuilder();
-            if (ignition) AddActionHint(hints, ignitionAction, PlayerBodyModule.IgnitionKeyCode, _running ? "Ignition Stop" : "Ignition");
-            if (_lightOn != null || _lightOff != null) AddActionHint(hints, "Headlight", PlayerBodyModule.HeadlightsKeyCode, _lightsOn ? "Headlights Off" : "Headlights On");
+            if (ignition) AddActionHint(hints, ignitionAction, PlayerBodyModule.IgnitionKeyCode, ignitionStep == 1 ? "Ignition On" : ignitionStep == 2 ? "Start Engine" : ignitionStep == 3 ? "Stop Engine" : "Ignition (wait)");
+            if (_lightOn != null || _lightOff != null) AddActionHint(hints, "Headlight", KeyCode.None, _lightsOn ? "Headlights Off" : "Headlights On");
             if (_handbrake != null) AddActionHint(hints, "Handbrake", KeyCode.None, _brakeOn ? "Handbrake Release" : "Handbrake Apply");
             if (_radioAudio != null)
             {
@@ -309,12 +305,6 @@ namespace WildWasteland.Modules.PlayerBody
             return n.StartsWith("Alpha") ? n.Substring(5) : n;
         }
 
-        private static bool HasEngine(Transform car)
-        {
-            var h = Game.FindDeep(car, "hinge_engine");
-            return h == null || h.childCount > 0;
-        }
-
         private static GUIStyle _hintStyle;
         public static void OnGUI()
         {
@@ -335,7 +325,7 @@ namespace WildWasteland.Modules.PlayerBody
 
         public static void Reset()
         {
-            _start = null; _startCar = null; _phase = 0; _hint = ""; _gameText = null; _font = null; _engine = null; _isRunning = null;
+            _ignitionPress = false; _start = null; _startCar = null; _hint = ""; _gameText = null; _font = null; _engine = null; _isRunning = null;
             _lightOn = _lightOff = _handbrake = _radioOnOff = _play = _stop = _volume = null;
             _radioAudio = null; _nextControls = 0f;
             _running = _lightsOn = _brakeOn = _musicPlaying = false;

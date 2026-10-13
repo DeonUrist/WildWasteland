@@ -33,12 +33,12 @@ Order on the page: `[General]` (Apocasetter), `[Keys]` (all hotkeys of all modul
 
 The full entry lists with meanings are in the wiki (`Guides/F6-Settings.md`) and in each module's wiki page.
 
-### 1.2 F7 pages (tools.cfg: `BepInEx\config\WildWasteland\tools.cfg`, 544 entries)
+### 1.2 F7 pages (tools.cfg: `BepInEx\config\WildWasteland\tools.cfg`, 543 entries)
 
 | Module | Group | Pages | tools.cfg sections |
 |---|---|---|---|
 | Core | Wild Wasteland; Debug & performance | Modules; Performance, Harmony patches, Core settings | `[Core]` (Frame budget (ms)) |
-| PlayerBody | Player body & animation | Animation framework, Body & model, Camera, Climbing, Weapon pose editor, Car seat poses, First person, Animation tuning, Vehicles & ModAPI | `PlayerBody / Editors`, `/ Camera`, `/ First person`, `/ Car seat`, `/ Camera culling`, `/ Climbing`, `/ Animation`, `/ Animation (fallback clips)`, `/ Model`, `/ Vehicles`, `/ ModAPI` (69) |
+| PlayerBody | Player body & animation | Animation framework, Body & model, Camera, Climbing, Weapon pose editor, Car seat poses, First person, Animation tuning, Vehicles & ModAPI | `PlayerBody / Editors`, `/ Camera`, `/ First person`, `/ Car seat`, `/ Camera culling`, `/ Climbing`, `/ Animation`, `/ Animation (fallback clips)`, `/ Model`, `/ ModAPI` (68) |
 | NPC | NPC AI & navigation | AI overview, Detection, Navigation & baking, Brain & combat, Idle & movement, Animals, Hazards (nests, webs, storms), Debug | `NPC / Detection`, `/ Senses`, `/ Nav`, `/ Brain`, `/ NpcAim`, `/ Idle`, `/ Movement`, `/ Behaviour`, `/ Burrow`, `/ Hunt`, `/ Ambush`, `/ Pounce`, `/ Dogs`, `/ Nests`, `/ Webs`, `/ Debug` (179) |
 | Guns | Weapons & HUD | Tracers & projectiles, NPC aim, Ammo & magazines, Armor & overflow, Bosses & orbs | `Guns / Tracers`, `/ Ballistics`, `/ NPC aim`, `/ Melee`, `/ Ammo` (28) |
 | HUD | Weapons & HUD | HUD | `HUD / Hit feedback`, `/ Crosshair`, `/ Headshot sound` (11) |
