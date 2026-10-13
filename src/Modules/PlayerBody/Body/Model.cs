@@ -303,20 +303,20 @@ namespace WildWasteland.Modules.PlayerBody
 
         public static Texture2D Body()
         {
-            if (!_texTried) { _texTried = true; BodyTex = Load(PlayerBodyModule.BodyTextureFile, PlayerBodyModule.Female ? "Apocaplayer" : PlayerBodyModule.IsMax ? "Apocaplayer_max" : "Apocaplayer_male"); }
+            if (!_texTried) { _texTried = true; BodyTex = Load(PlayerBodyModule.BodyTextureFile, PlayerBodyModule.Female ? "Apocaplayer" : "Apocaplayer_male"); }
             return BodyTex;
         }
 
         public static Texture2D Arms()
         {
-            if (!_armsTried) { _armsTried = true; ArmsTex = Load(PlayerBodyModule.IsMax ? "Models/Player2_max_arms.png" : PlayerBodyModule.ArmsTextureFile.Value, PlayerBodyModule.IsMax ? "Apocaplayer_max_arms" : "Apocaplayer_arms"); }
+            if (!_armsTried) { _armsTried = true; ArmsTex = Load(PlayerBodyModule.ArmsTextureFile.Value, "Apocaplayer_arms"); }
             return ArmsTex;
         }
 
         // Max only: his left arm (armoured sleeve) differs from the right; null = both arms use Arms()
         public static Texture2D ArmsLeft()
         {
-            if (!_armsLeftTried) { _armsLeftTried = true; ArmsLeftTex = PlayerBodyModule.IsMax ? Load("Models/Player2_max_arms_left.png", "Apocaplayer_max_arms_left") : null; }
+            if (!_armsLeftTried) { _armsLeftTried = true; ArmsLeftTex = null; }
             return ArmsLeftTex;
         }
 

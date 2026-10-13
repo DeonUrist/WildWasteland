@@ -19,7 +19,7 @@ namespace WildWasteland.Modules.PlayerBody
     {
         private const string GameTexture = "player_character_2_UI";
         // her picture, or Max's; the game man (Male) keeps the game's own
-        private static string PictureFile { get { return PlayerBodyModule.IsMax ? "Models/player_character_2_UI_max.png" : "Models/player_character_2_UI.png"; } }
+        private static string PictureFile { get { return "Models/player_character_2_UI.png"; } }
         private static Texture2D _game, _backup, _mine;
         private static readonly System.Collections.Generic.List<RawImage> _switched = new System.Collections.Generic.List<RawImage>();   // last-resort path: the UI elements we pointed at our picture
         private static bool _applied, _loadFailed;
@@ -30,7 +30,7 @@ namespace WildWasteland.Modules.PlayerBody
         public static void LateTick()
         {
             // (WW) module on/off is handled by PlayerBodyModule (Init resets, Shutdown calls Off; ReplaceDriver changes call Off / Reset)
-            if (_applied || !PlayerBodyModule.Running || !PlayerBodyModule.ReplaceDriver.Value || (!PlayerBodyModule.Female && !PlayerBodyModule.IsMax) || _loadFailed) return;
+            if (_applied || !PlayerBodyModule.Running || !PlayerBodyModule.ReplaceDriver.Value || !PlayerBodyModule.Female || _loadFailed) return;
             if (Time.unscaledTime < _nextTry || _tries >= 15) return;   // the texture may load a moment after the scene: retry for ~30 s
             _nextTry = Time.unscaledTime + 2f; _tries++;
             Apply();

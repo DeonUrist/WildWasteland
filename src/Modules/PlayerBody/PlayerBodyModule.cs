@@ -35,7 +35,7 @@ namespace WildWasteland.Modules.PlayerBody
         internal static bool VerboseOn { get { return Core.Log.Verbose; } }
 
         // ------------------------------------------------------------------ F6 (main cfg): feature toggles + player options
-        internal enum Gender { Female, Male, Max }
+        internal enum Gender { Female, Male }
         internal static ConfigEntry<Gender> Character;
         internal static ConfigEntry<bool> ThirdPersonOnFoot, ToggleMiddleMouse, DynamicCrosshair, BodyFirstPerson, EmptyHandArms, FemaleArms, ReplaceDriver,
             EquipmentOnBody, PainSounds, FirstPersonSwayOn, FirstPersonJumpFix, SmoothAimDownSights, PickAssistOn;
@@ -67,10 +67,9 @@ namespace WildWasteland.Modules.PlayerBody
         // mirror of the game's Controls "Ignition" key (IgnitionControl), for the moment before the row exists (was a never-saved entry)
         internal static KeyCode IgnitionKeyCode = KeyCode.E;
 
-        internal static bool Female { get { return Character == null || Character.Value == Gender.Female; } }
-        internal static bool IsMax { get { return Character != null && Character.Value == Gender.Max; } }
-        internal static string BodyModelFile { get { return Female ? ModelFile.Value : IsMax ? "Models/Player_max.glb" : "Models/Player_male.glb"; } }
-        internal static string BodyTextureFile { get { return Female ? TextureFile.Value : IsMax ? "Models/Player_max.png" : "Models/Player_male.png"; } }
+        internal static bool Female { get { return Character != null && Character.Value == Gender.Female; } }
+        internal static string BodyModelFile { get { return Female ? ModelFile.Value : "Models/Player_male.glb"; } }
+        internal static string BodyTextureFile { get { return Female ? TextureFile.Value : "Models/Player_male.png"; } }
 
         internal static KeyCode ObserveKeyCode { get { return KeyMap.Code(ObserveKey.Value); } }
         internal static KeyCode ClimbKeyCode { get { return KeyMap.Code(ClimbKey.Value); } }
@@ -97,7 +96,7 @@ namespace WildWasteland.Modules.PlayerBody
         {
             Instance = this;
             // ---- F6: one toggle per feature (feature order), then the player options
-            Character = cfg.Player("", "Character", Gender.Female, "Your character's body: Female, Male (the game's man) or Max. Also the first-person arm skin, the driver's seat and the TAB picture.");
+            Character = cfg.Player("", "Character", Gender.Male, "Your character's body: Female or Male (the game's man). Also the first-person arm skin, the driver's seat and the TAB picture.");
             Mig(Character, "General", "Character");
             ThirdPersonOnFoot = cfg.Player("", "ThirdPerson", true, "The game's Change Camera key switches to a camera behind your character, on foot and in cars (replaces the game's own car camera).");
             ToggleMiddleMouse = cfg.Player("", "ToggleObserving", false, "Third person, observing key ([Keys] Observe). Off: hold the key to orbit the camera around the character; it returns behind the character when you let go. On: a press starts observing and the camera stays where you left it until the next press.");
@@ -108,7 +107,7 @@ namespace WildWasteland.Modules.PlayerBody
             Mig(BodyFirstPerson, "General", "BodyFirstPerson");
             EmptyHandArms = cfg.Player("", "FirstPersonArms", false, "First person with nothing in hand: show the body's own arms (idle/walk swing, hands on the wheel in a car). Off = no body arms in first person; the game's weapon and item arms always show.");
             Mig(EmptyHandArms, "General", "FirstPersonArms");
-            FemaleArms = cfg.Player("", "FirstPersonArmSkin", true, "The game's first-person arms and kick leg wear your character's skin (Female / Max; Male keeps the game's own).");
+            FemaleArms = cfg.Player("", "FirstPersonArmSkin", true, "The game's first-person arms and kick leg wear your character's skin (Female; Male keeps the game's own).");
             ReplaceDriver = cfg.Player("", "ReplaceDriver", true, "Your character replaces the game's man in the driver's seat (posed from the seat, guns and throws from the seat) and on the TAB screen picture.");
             EquipmentOnBody = cfg.Player("", "EquipmentOnBody", true, "Show the carried equipment on the body: backpack, long guns on the back, sidearms, blades, binoculars, flashlight (with its glow).");
             PainSounds = cfg.Player("", "FemalePainSounds", true, "Female character: female voice for the player's hurt sounds.");
