@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using HutongGames.PlayMaker;
+using HutongGames.PlayMaker.Actions;
 using UnityEngine;
 
 namespace WildWasteland.Modules.Patrols
@@ -38,6 +39,30 @@ namespace WildWasteland.Modules.Patrols
         private float _nextFireCheck; private bool _canFire;
 
         internal static bool IsRangedHuman(GameObject who) { return IsRanged(who); }
+
+        // #63: the Attack FSM stays on for shooting, but in its chase states ("trigger" / "run") it sends Animal_Run to the Movement FSM.
+        // A disabled (muted) FSM still processes events, so the run clip played on a body that cannot move: the crew ran in place.
+        // A seated occupant never runs: its Attack FSM's Animal_Run is swallowed (same rule as the NPC module's holding gunmen).
+        private static readonly Dictionary<PlayMakerFSM, PassengerGuard> SeatedAttack = new Dictionary<PlayMakerFSM, PassengerGuard>();
+
+        internal static void InstallHooks(Core.IModule owner) { Core.Hooks.SendEventEnter.Prefix(owner, BeforeSendEvent); }
+        internal static void ClearHooks() { SeatedAttack.Clear(); }
+
+        private static bool BeforeSendEvent(SendEvent action)
+        {
+            if (SeatedAttack.Count == 0) return true;                       // SendEvent runs for every FSM in the game: cheap exit first
+            var fsm = action.Fsm; if (fsm == null) return true;
+            var owner = fsm.Owner as PlayMakerFSM; if (owner == null) return true;
+            PassengerGuard guard;
+            if (!SeatedAttack.TryGetValue(owner, out guard)) return true;
+            if (guard == null || guard._passenger == null) { SeatedAttack.Remove(owner); return true; }
+            if (guard._passenger.transform.parent == null) return true;     // out of the seat (bailed out / dismounted): the game's own run
+            if (action.sendEvent == null || action.sendEvent.Name != "Animal_Run") return true;
+            action.Finish();
+            return false;
+        }
+
+        private void OnDestroy() { if (_attack != null) SeatedAttack.Remove(_attack); }
 
         internal static void Prepare(GameObject passenger, bool combatAllowed)
         {
@@ -187,6 +212,7 @@ namespace WildWasteland.Modules.Patrols
             guard._ranged = guard._rangedPrefab && PatrolsModule.RangedCombat.Value;
             guard._combat = Array.FindAll(passenger.GetComponents<PlayMakerFSM>(), f => Array.IndexOf(CombatFsms, f.FsmName) >= 0);
             guard._attack = Array.Find(guard._combat, f => f.FsmName == "Attack");
+            if (guard._attack != null) SeatedAttack[guard._attack] = guard;
             guard._fsms = passenger.GetComponents<PlayMakerFSM>();
             guard._meleeWeapons = guard._rangedPrefab ? FindMeleeWeapons(passenger) : new GameObject[0];
             var rs = new List<Renderer>(); var cs = new List<Collider>();
