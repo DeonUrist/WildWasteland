@@ -2,6 +2,32 @@
 
 Instructions for every AI agent and session working in this repo. Read all of it before changing anything. Keep it current: if you learn something that would have saved you time, add it here (or to the project doc `claude/GAME_KNOWLEDGE.md` if it is about the game, not this repo).
 
+## 0. Fixing issues: the default task (read this before anything else)
+
+From 0.1.0 on, almost every task is "fix issue #N" from the board (https://github.com/users/DeonUrist/projects/4). These rules override anything below that suggests otherwise.
+
+### 0.1 Scope: change only what the issue needs
+- One issue per task. Find the module the issue belongs to (`[Module]` in the title) and keep the change inside the files that fix it, normally one module folder.
+- Do **not** touch `src/Core/`, another module, `build.sh`, `WildWasteland.csproj`, `docs/` (except the rows your fix changes) or the wiki unless the fix cannot work without it. If it must, stop and ask Denis first, saying which file and why.
+- No refactors, renames, reformatting, comment rewrites, "cleanups", perf tweaks, dependency or language-version changes, and no "while I'm here" fixes. Keep the existing code style even when it looks odd (the ported code is dense on purpose and matches its source mod). A fix that grows beyond about 50 changed lines or into a second module: stop and ask.
+- Never rename classes, namespaces, GameObject/anchor names, save keys or prefab ids (save compatibility, 5.1 and 5.10).
+
+### 0.2 Find the cause before changing code
+- Read the issue and its comments, the code path, and Denis's log `E:\SteamLibrary\steamapps\common\Apocalypter\BepInEx\LogOutput.log` if you can reach it.
+- If the cause is not proven by code + log, do not guess: ask Denis for a log with the right switches on (F6 → Wild Wasteland → Debug → `VerboseLog`; module log switches in F7, e.g. NPC AI & navigation → Debug → `BrainLog`), and say exactly what to do in game to reproduce.
+- One fix per round. If Denis reports that a fix did not help, revert it before trying the next idea; never stack guesses (lesson from #63: three rounds, the first two aimed at the wrong cause).
+- Use the mechanism the codebase already uses for the same situation. No workarounds that hide a symptom. If the only fix is a workaround or changes another module's behaviour, describe the options and let Denis choose.
+
+### 0.3 Testing: build only, Denis tests in game
+- You cannot run the game. Do not try to launch, automate or screenshot it, and do not write test harnesses, mocks, test projects or simulations for a fix.
+- Your whole verification is: the project compiles with **zero errors** (section 7: `dotnet build WildWasteland.csproj` on Windows, or `sh build.sh` with mono). If you changed config entries, also run `tools/config-harness`. Then stop; do not loop on further checks.
+- Hand over to Denis in your final message: (1) the cause, (2) what you changed (files, about how many lines), (3) exact in-game test steps with the expected result, (4) log lines that confirm it if any. Denis tests and reports back.
+- Do not close issues and do not move them to Verified; Denis does that. Leave the status as Testing.
+
+### 0.4 Git and deploy
+- Commit only when Denis asks; the message starts with the issue (`Fix #N: ...`) and ends with your attribution lines. Never push, tag or release unless asked.
+- Deploy only when asked, with the game closed (section 8). A locked `WildWasteland.dll` means the game is running: tell Denis, do not retry.
+
 ## 1. What this repo is
 
 Wild Wasteland (WW) is one BepInEx 5 plugin for **Apocalypter** (Unity 2020.3.49f1, Mono, game logic in PlayMaker FSMs) that combines mechanics previously shipped as separate mods. The point of combining them is:
@@ -160,9 +186,9 @@ MANAGED=... BEPCORE=... sh tools/config-harness/run.sh /path/outdir [BepInEx/con
 2. Game must be closed (Task Manager; Steam re-focuses a lingering process). Copy to `BepInEx\plugins\WildWasteland\WildWasteland.dll`.
 3. md5 the file on disk == build output.
 4. Assets: `BepInEx\plugins\WildWasteland\theme\` (shared skin) and `<Id>\` folders (PlayerBody `Models\`, `Sounds\Female\`; NPC `Models\*.bundle`; Guns `Sounds\knifestab.wav`; HUD `Sounds\headshot.mp3`, optional `Textures\`; Patrols templates / textures / sounds / layouts / `WarRig\*.glb`). Not in git: take them from the old plugin folders or the release zip. Patrols copies its own on the first run; the others fall back to the old folders with a warning.
-5. The absorbed standalone plugins live in `BepInEx\disabled-by-WildWasteland\` on Denis's machine (moved, not deleted) so the conflict check passes; their cfg / data files stay in `BepInEx\config\` for the first-run migration. Remove them for good only when Denis agrees.
+5. The absorbed standalone plugins must not be in `BepInEx\plugins` (WW keeps the matching module OFF while one is loaded). On Denis's machine they were disabled through Apocasetter (`BepInEx\cache\Apocasetter\disabled\`); their cfg / data files stay in `BepInEx\config\` for the first-run migration.
 6. After launch: `Loading [Wild Wasteland x.y.z]` in `BepInEx\LogOutput.log`, then `[<Id>] started (N patches)` per module and the summary `Wild Wasteland x.y.z modules:` (every module `on`, `core hooks: ...` without `(NOT PATCHED)`, no `PATCH CONFLICTS`).
-7. Run `verification/README.md` (at least A + the scenario touched by the change). Remove ApocaFsmInspector from plugins when done debugging.
+7. In-game verification (`verification/README.md`, at least A + the scenario touched by the change) is done by **Denis**, never by an agent (section 0.3): give him the steps. Remove ApocaFsmInspector from plugins when done debugging.
 
 ## 9. Releases (only when Denis asks)
 
@@ -171,13 +197,13 @@ MANAGED=... BEPCORE=... sh tools/config-harness/run.sh /path/outdir [BepInEx/con
 - README states which standalone mods it replaces and must be removed.
 - Wiki: update the feature pages' Status, run `tools/wiki-index.py`, push the wiki repo (section 11).
 
-## 10. Definition of done for a ported mechanic
+## 10. Definition of done for a ported mechanic (porting only; for issue fixes see section 0)
 
 - [ ] Row in `docs/modules.md` filled (source commit, status `in`, services, F6/F7, migrations).
 - [ ] Code under `src/Modules/<Name>/`, original class names kept, no own update loop, no own Harmony instance, no duplicate patch targets (`docs/harmony.md` updated).
 - [ ] Config section with `Enabled`, one toggle per feature, migration from the old cfg, `ConflictsWith` set, harness passes.
 - [ ] Save data keys/formats verbatim; old sidecars/keys migrated or still read.
-- [ ] Verification A-C pass; perf scenarios recorded in `docs/perf-log.md`, not slower than the standalone baseline.
+- [ ] Denis ran verification A-C in game; perf scenarios recorded in `docs/perf-log.md`, not slower than the standalone baseline.
 - [ ] Module disables cleanly at runtime (Enabled=false) and starts again (Init re-runnable).
 - [ ] Port report written (`notes/port-<Id>.md`), wiki pages under `Modules/<Id>/` with metadata tables, `tools/wiki-index.py` run.
 
