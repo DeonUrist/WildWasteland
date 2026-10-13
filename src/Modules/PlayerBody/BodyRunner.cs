@@ -9,6 +9,15 @@ namespace WildWasteland.Modules.PlayerBody
     internal static class BodyRunner
     {
         private static Body _body;
+        private static Vector3 _jumpHeadPlayerPosition;
+        private static bool _jumpHeadReady;
+        internal static bool TryPlayerJumpHead(GameObject player, out Vector3 position)
+        {
+            position = Vector3.zero;
+            if (!_jumpHeadReady || player != Game.Player || Game.Dead || _body == null || !_body.Alive || !_body.TryJumpHead(out position)) return false;
+            position += player.transform.position - _jumpHeadPlayerPosition;
+            return true;
+        }
         internal static Body PlayerBody { get { return _body; } }
         private static float _nextBuild;
         private static string _lastMode = "";
@@ -78,6 +87,7 @@ namespace WildWasteland.Modules.PlayerBody
 
         private static void DestroyBody()
         {
+            _jumpHeadReady = false;
             if (_body != null) _body.Destroy();
             _body = null;
             _lastVelocity = Vector3.zero;
@@ -163,6 +173,8 @@ namespace WildWasteland.Modules.PlayerBody
                     if (!third && Game.PlayerCamera != null)
                         _body.ShiftFirstPerson(Quaternion.Euler(0f, Game.PlayerCamera.eulerAngles.y, 0f), new Vector3(PlayerBodyModule.FpCamX.Value, PlayerBodyModule.FpCamY.Value, PlayerBodyModule.FpCamZ.Value));
                     _body.FitFirstPersonJump(!third, Time.deltaTime);
+                    _jumpHeadPlayerPosition = Game.Player.transform.position;
+                    _jumpHeadReady = true;
                     _body.SetMesh(!third, false);
                     bool show = third || PlayerBodyModule.BodyFirstPerson.Value;
                     _body.SetVisible(show && fpCam, !third && show && fpCam);

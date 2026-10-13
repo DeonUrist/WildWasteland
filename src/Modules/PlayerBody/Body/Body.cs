@@ -1263,19 +1263,22 @@ namespace WildWasteland.Modules.PlayerBody
             }
         }
 
-        private void Crouch(float k)
+        private void Crouch(float k, float jumpDrop = -1f)
         {
-            float drop = PlayerBodyModule.CrouchDrop.Value * k;
+            float drop = jumpDrop >= 0f ? jumpDrop : PlayerBodyModule.CrouchDrop.Value * k;
             float L = _legThigh + _legShin;
             float a = Mathf.Acos(Mathf.Clamp(1f - drop / L, -1f, 1f)) * Mathf.Rad2Deg;
             Transform hips;
             if (Bones.TryGetValue("mixamorig:Hips", out hips)) hips.localPosition += Vector3.down * drop;
-            Turn("mixamorig:LeftUpLeg", Vector3.right, -a);
-            Turn("mixamorig:RightUpLeg", Vector3.right, -a);
-            Turn("mixamorig:LeftLeg", Vector3.right, 2f * a);
-            Turn("mixamorig:RightLeg", Vector3.right, 2f * a);
-            Turn("mixamorig:LeftFoot", Vector3.right, -a);
-            Turn("mixamorig:RightFoot", Vector3.right, -a);
+            if (jumpDrop < 0f)
+            {
+                Turn("mixamorig:LeftUpLeg", Vector3.right, -a);
+                Turn("mixamorig:RightUpLeg", Vector3.right, -a);
+                Turn("mixamorig:LeftLeg", Vector3.right, 2f * a);
+                Turn("mixamorig:RightLeg", Vector3.right, 2f * a);
+                Turn("mixamorig:LeftFoot", Vector3.right, -a);
+                Turn("mixamorig:RightFoot", Vector3.right, -a);
+            }
             Turn("mixamorig:Spine", Vector3.right, 18f * k);
         }
 

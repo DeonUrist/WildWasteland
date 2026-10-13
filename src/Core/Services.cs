@@ -52,6 +52,7 @@ namespace WildWasteland.Core
         /// <summary>Animation bundle loaded (clips available).</summary>
         bool Ready { get; }
         AudioClip PlayerShout { get; }
+        bool TryPlayerJumpHead(GameObject player, out Vector3 position);
         string[] ClipNames();
         bool IsPlayerClip(string name);
         AnimationClip GetClip(string name);

@@ -616,7 +616,7 @@ namespace WildWasteland.Modules.PlayerBody
             }
             // (2.1.2) the game's [Jump] FSM: Idle -> Jump (button) -> Idle on landing; Falling only when walking off an edge. Each jump clip's take-off,
             // apex and touch-down are measured once (JumpMarks); the clip starts just before its take-off, holds its apex while she is in the air,
-            // and on landing goes to its touch-down - standing still it shows ~0.25 s of the landing, moving it fades straight back to the legs.
+            // and on landing fades straight back to the legs, without the recovery whose feet float above the physical ground.
             string js = Game.JumpState;
             bool air = js == "Jump" || js == "Falling";
             bool jumpPress = live && js == "Idle" && Input.GetButtonDown("Jump");
@@ -646,17 +646,7 @@ namespace WildWasteland.Modules.PlayerBody
                 bool landed = (_jumpState == "Jump" || _jumpState == "Falling") && js == "Idle" && Time.time - _jumpAt > 0.2f;
                 if (landed)
                 {
-                    bool still = m < 0.5f;
-                    string land = _jumpPhase == "single" ? _actionClip : Has("RifleJumpDown") ? "RifleJumpDown" : null;
-                    var lm = JumpMarksOf(land);
-                    if (land != null && still)
-                    {
-                        float t = lm.z > 0f ? lm.z : 0f;
-                        StartAction(land, t);
-                        var lc = Anims.Get(land);
-                        if (lc != null) _actionUntil = Time.time + Mathf.Min(0.25f, (1f - t) * lc.length) + 0.15f;
-                    }
-                    else _actionUntil = Mathf.Min(_actionUntil, Time.time + 0.15f);   // moving: back to the legs at once
+                    _actionUntil = Mathf.Min(_actionUntil, Time.time + 0.15f);
                     _actionFade = 10f;
                     _jumpPhase = "";
                 }
@@ -754,7 +744,16 @@ namespace WildWasteland.Modules.PlayerBody
                 var xz = Vector2.ClampMagnitude(new Vector2(hp.x, hp.z), PlayerBodyModule.HipsDrift.Value);
                 if (xz.x != hp.x || xz.y != hp.z) hips.localPosition = new Vector3(xz.x, hp.y, xz.y);
             }
-            if (_noCrouchClips && _crouch > 0.001f) Crouch(_crouch);
+            if (_crouch > 0.001f && _actionW > 0.001f && _actionClip != null && _actionClip.Contains("Jump"))
+            {
+                Transform head;
+                if (Bones.TryGetValue("mixamorig:Head", out head))
+                {
+                    float top = Game.Player.transform.position.y + Game.StandingHeight * 0.5f;
+                    Crouch(_crouch * _actionW, Mathf.Max(0f, head.position.y - (top - 0.14f)));
+                }
+            }
+            else if (_noCrouchClips && _crouch > 0.001f) Crouch(_crouch);
             // running: the pack's run / sprint cycles splay the thighs, and on her narrower hips that is a bow-legged, wide-footed stance -
             // each thigh is turned a little toward the middle about the hip (the Anim object's forward axis), the foot turned back so the sole stays flat
             float legsIn = PlayerBodyModule.RunLegsIn.Value * m * _runW * (1f - crouch) * (1f - _actionW);

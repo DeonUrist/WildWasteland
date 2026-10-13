@@ -1274,6 +1274,8 @@ namespace WildWasteland.Modules.Guns
             Vector3 feet = center - up * half, top = center + up * half;
             float headR = _headR, bodyR = _bodyR;
             Vector3 headC = top - up * headR;
+            Vector3 animatedHead;
+            if (Services.Animation != null && Services.Animation.TryPlayerJumpHead(target, out animatedHead)) headC = animatedHead;
             Vector3 neck = headC - up * headR;
             // body capsule: its rounded top ends exactly at the neck, so the head zone belongs to the head alone
             Vector3 bodyLo = feet + up * bodyR, bodyHi = neck - up * bodyR;

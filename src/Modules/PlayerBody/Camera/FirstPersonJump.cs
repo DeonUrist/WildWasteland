@@ -1,39 +1,39 @@
 using UnityEngine;
+using UnityEngine.Playables;
 
 namespace WildWasteland.Modules.PlayerBody
 {
     internal sealed partial class Body
     {
-        private float _fpLeftJump, _fpRightJump;
-
-        // Applied after animation, seat/traversal pose fades and first-person body
-        // offsets. Limit the forward thigh lift in body space, independent of mouse
-        // pitch: looking down still shows the legs, without pulling a knee toward the eye.
-        public void FitFirstPersonJump(bool firstPerson, float dt)
+        private float _fpJumpLogNext;
+        private string _fpJumpLogState;
+        internal bool TryJumpHead(out Vector3 position)
         {
-            if (!firstPerson || !PlayerBodyModule.FirstPersonJumpFix.Value || !PlayerBodyModule.BodyFirstPerson.Value || Traversal != null || _inCar || _prone > .01f)
-            { _fpLeftJump = _fpRightJump = 0f; return; }
-            if (Game.Paused) dt = 0f;
-            float strength = Mathf.Clamp01(PlayerBodyModule.FirstPersonJumpKneeCorrection.Value);
-            if (strength <= 0f) { _fpLeftJump = _fpRightJump = 0f; return; }
-            bool jumping = _actionW > .001f && _actionClip != null && _actionClip.Contains("Jump");
-            if (!jumping && _fpLeftJump <= 0f && _fpRightJump <= 0f) return;
-            FitJumpThigh("mixamorig:LeftUpLeg", "mixamorig:LeftLeg", jumping, strength, dt, ref _fpLeftJump);
-            FitJumpThigh("mixamorig:RightUpLeg", "mixamorig:RightLeg", jumping, strength, dt, ref _fpRightJump);
+            position = Vector3.zero;
+            Transform head;
+            if (_inCar || Traversal != null || _prone > .01f || _actionW <= .001f || _actionClip == null || !_actionClip.Contains("Jump") || !Bones.TryGetValue("mixamorig:Head", out head)) return false;
+            position = head.position; return true;
         }
 
-        private void FitJumpThigh(string thighName, string kneeName, bool jumping, float strength, float dt, ref float correction)
+        public void FitFirstPersonJump(bool firstPerson, float dt)
         {
-            Transform thigh, knee;
-            if (!Bones.TryGetValue(thighName, out thigh)
-                || !Bones.TryGetValue(kneeName, out knee)) { correction = 0f; return; }
-            Vector3 leg = Quaternion.Inverse(Root.transform.rotation) * (knee.position - thigh.position);
-            float lift = Mathf.Atan2(leg.z, -leg.y) * Mathf.Rad2Deg;
-            float target = jumping ? Mathf.Max(0f, lift - 30f) * strength : 0f;
-            // Up to a 90-degree tuck settles in 0.1 s; clip/action fades already
-            // ease the incoming pose. Never change the knee joint or bone lengths.
-            correction = Mathf.MoveTowards(correction, target, Mathf.Max(0f, dt) * 900f);
-            if (correction > .001f) thigh.rotation = Quaternion.AngleAxis(correction, Root.transform.right) * thigh.rotation;
+            if (!PlayerBodyModule.FirstPersonJumpFix.Value || Traversal != null || _inCar || _prone > .01f)
+                return;
+            if (Core.Log.Verbose && Game.Player != null && Game.PlayerCamera != null)
+            {
+                string state = Game.JumpState;
+                bool recovery = _actionW > .001f && _actionClip != null && _actionClip.Contains("Jump");
+                if ((state != "Idle" || state != _fpJumpLogState || recovery) && Time.unscaledTime >= _fpJumpLogNext)
+                {
+                    Transform head;
+                    if (Bones.TryGetValue("mixamorig:Head", out head))
+                        PlayerBodyModule.Verbose("Jump alignment: " + state + ", move=" + Game.MoveState + ", clip=" + _actionClip + ", weight=" + _actionW.ToString("0.00") + ", playerY=" + Game.Player.transform.position.y.ToString("0.000") + ", eyeY=" + Game.PlayerCamera.position.y.ToString("0.000") + ", headY=" + head.position.y.ToString("0.000") + ", height=" + Game.StandingHeight.ToString("0.000"));
+                    Transform left, right;
+                    if (Bones.TryGetValue("mixamorig:LeftFoot", out left) && Bones.TryGetValue("mixamorig:RightFoot", out right))
+                        PlayerBodyModule.Verbose("Jump feet: " + state + ", firstPerson=" + firstPerson + ", clipTime=" + (_action.IsValid() ? _action.GetTime().ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) : "none") + ", groundY=" + (Game.Player.transform.position.y - Game.StandingHeight * .5f).ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) + ", leftY=" + left.position.y.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) + ", rightY=" + right.position.y.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture));
+                    _fpJumpLogState = state; _fpJumpLogNext = Time.unscaledTime + 0.1f;
+                }
+            }
         }
     }
 }
