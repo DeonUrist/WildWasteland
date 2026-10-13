@@ -79,10 +79,15 @@ namespace WildWasteland.Modules.PlayerBody
             if (_camera != Game.PlayerCamera)
             {
                 _camera = Game.PlayerCamera;
-                _weapons = _camera != null ? _camera.Find("HandItemUse/Weapons") : null;
+                _weapons = null;
+                _weaponFsm = null;
+                Array.Clear(Items, 0, Items.Length); Drawn = -1;
+            }
+            if (_weapons == null && _camera != null)
+            {
+                _weapons = _camera.Find("Weapons") ?? _camera.Find("HandItemUse/Weapons");
                 _weaponFsm = null;
                 if (_weapons != null) foreach (var f in _weapons.GetComponents<PlayMakerFSM>()) if (f.FsmName == "Weapons") _weaponFsm = f;
-                Array.Clear(Items, 0, Items.Length); Drawn = -1;
             }
             Resolve();
             if (_instance != null)
