@@ -50,7 +50,7 @@ Modules never reference each other's types. Every dependency below goes through 
 
 | Provider | Service | Was (standalone API) | Consumers |
 |---|---|---|---|
-| PlayerBody | `Services.Animation` (`IAnimationApi`, `IAnimatedCharacter`) | `Apocaplayer.ModAPI` / `ModAPI.Character` (+ Apocapatrol's `Rider.Clip` reflection) | NPC (ApBody: gunmen animations, probes every 5 s until Ready), Patrols (PlayerAnims: human turrets; `GetClip` for riders) |
+| PlayerBody | `Services.Animation` (`IAnimationApi`, `IAnimatedCharacter`) | `Apocaplayer.ModAPI` / `ModAPI.Character` (+ Apocapatrol's `Rider.Clip` reflection) | NPC (ApBody: gunmen animations, probes every 5 s until Ready; Senses: `PlayerShout` supplies the selected character's yell), Patrols (PlayerAnims: human turrets; `GetClip` for riders) |
 | NPC | `Services.Npc` (`INpcApi` + `Structures(list)`) | `NPCAI.Api` v1 + `NPCAI.Nav._structures` reflection | Guns (Bridge: `Shot`, `Hurt`, `SpreadFactor`; built-in spread fallback), Patrols (SimpleBanditBridge; TrafficLocations: camp maps) |
 | Guns | `Services.Guns` (`IGunsApi` + `HandlesFittedWheelMelee`) | `Gunplay.Api` + the `Apocapatrol.MeleeWheels.RaiderHandles` Harmony redirect | NPC (WeaponRanges, VanillaEvents: `ProjectilesEnabled` decides vanilla-observer vs projectile mode), Patrols (MeleeWheels stands down when `HandlesFittedWheelMelee`) |
 | HUD | `Services.Hud` (`IHitFeedback`) | `GunplayHUD.Api` (reflection from Gunplay) | Guns (PlayerHit / PartHit; sets `ExternalReporter = ProjectilesEnabled` every frame and on toggle; HUD seeds it in Init) |

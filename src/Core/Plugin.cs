@@ -77,6 +77,9 @@ namespace WildWasteland
                 Core.UI.ToolWindow.Init();
                 SceneManager.sceneLoaded += OnSceneLoaded;
 
+                // Reset audio before any module creates clips.
+                var audioVoices = Modules.Patrols.PatrolsModule.AudioVoices;
+                if (audioVoices != null) ApplyAudioVoices(audioVoices.Value);
                 Core.ModuleHost.StartAll();
                 Core.Log.Always(Core.ModuleHost.Summary());
             }
@@ -94,6 +97,21 @@ namespace WildWasteland
             Core.ModuleHost.Add(new Modules.Guns.GunsModule());
             Core.ModuleHost.Add(new Modules.HUD.HudModule());
             Core.ModuleHost.Add(new Modules.Patrols.PatrolsModule());
+        }
+
+        static void ApplyAudioVoices(int want)
+        {
+            try
+            {
+                var cfg = UnityEngine.AudioSettings.GetConfiguration();
+                if (want <= 0 || cfg.numRealVoices == want) { Core.Log.Info("[Core] Audio: " + cfg.numRealVoices + " real voices (unchanged)"); return; }
+                int before = cfg.numRealVoices;
+                cfg.numRealVoices = want;
+                if (cfg.numVirtualVoices < want) cfg.numVirtualVoices = want * 8;
+                bool ok = UnityEngine.AudioSettings.Reset(cfg);
+                Core.Log.Always("[Core] Audio: real voices " + before + " -> " + UnityEngine.AudioSettings.GetConfiguration().numRealVoices + (ok ? "" : " (Reset failed)"));
+            }
+            catch (Exception e) { Core.Log.Warn("[Core] Audio: could not set the voice count: " + e.Message); }
         }
 
         static void RegisterCoreJobs()

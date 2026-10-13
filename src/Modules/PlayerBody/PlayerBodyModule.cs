@@ -110,7 +110,7 @@ namespace WildWasteland.Modules.PlayerBody
             FemaleArms = cfg.Player("", "FirstPersonArmSkin", true, "The game's first-person arms and kick leg wear your character's skin (Female; Male keeps the game's own).");
             ReplaceDriver = cfg.Player("", "ReplaceDriver", true, "Your character replaces the game's man in the driver's seat (posed from the seat, guns and throws from the seat) and on the TAB screen picture.");
             EquipmentOnBody = cfg.Player("", "EquipmentOnBody", true, "Show the carried equipment on the body: backpack, long guns on the back, sidearms, blades, binoculars, flashlight (with its glow).");
-            PainSounds = cfg.Player("", "FemalePainSounds", true, "Female character: female voice for the player's hurt sounds.");
+            PainSounds = cfg.Player("", "FemalePainSounds", true, "Female character: four female hurt sounds and a female death sound.");
             FirstPersonSwayOn = cfg.Player("", "SmoothWeaponSway", true, "First person: frame-rate independent weapon / item sway (the game's own sway stutters with uneven frame times).");
             FirstPersonJumpFix = cfg.Player("", "FirstPersonJumpLegs", true, "First person with the body shown: keep the knees below the hips while jumping (no knee in the eye). Strength in F7.");
             SmoothAimDownSights = cfg.Player("", "SmoothAimDownSights", true, "First person: the gun eases between hip and sights (right mouse button) instead of jumping. Time in F7.");
@@ -291,7 +291,7 @@ namespace WildWasteland.Modules.PlayerBody
             GunPose.Bind(Path.Combine(Paths.ConfigPath, OldCfg));
             AimLift.Load(DataDir);
             ClimbingController.Init();
-            FemalePain.LoadClips();
+            Scheduler.StartCoroutine(FemalePain.LoadClips());
 
             // shared hooks (Core dispatchers) and module patches
             Hooks.GetButtonDownUpdate.Prefix(this, ThirdPerson.BeforeGetButtonDown);

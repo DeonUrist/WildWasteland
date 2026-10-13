@@ -36,7 +36,7 @@ namespace WildWasteland.Modules.Patrols
         // BepInEx\plugins\WildWasteland\Patrols (templates, layouts, poses, textures, sounds, War Rig models)
         internal static string DataDir = ".";
 
-        static bool _audioApplied, _paintPreloaded;
+        static bool _paintPreloaded;
         GameObject _host;
         Patrol _patrol; TemplateMenu _menu; TemplateExporter _exporter; TurretSpotter _spotter; BusPassengerPoseEditor _busPose;
         Convoy _convoy; WorldTraffic _traffic; Cleanup _cleanup; MerchantEditor _merchantEditor;
@@ -82,7 +82,6 @@ namespace WildWasteland.Modules.Patrols
             Paint.Init(DataDir);
             EditorStore.Load(DataDir);
             CarTemplates.Init(DataDir);
-            if (!_audioApplied) { _audioApplied = true; ApplyAudioVoices(); }      // restarts Unity audio: once per process, at the first Init
             if (!_paintPreloaded) { _paintPreloaded = true; Paint.Preload(); }     // all Textures decoded now, not in the middle of a spawn
             CarTemplates.Load();
             Try("War Rig", () => WarRig.WarRigFeature.Install(this, Path.Combine(DataDir, "WarRig")));
@@ -196,24 +195,6 @@ namespace WildWasteland.Modules.Patrols
                     var mb = o as MonoBehaviour;
                     if (mb != null) mb.StopAllCoroutines();
                 }
-        }
-
-        // Unity mixes at most numRealVoices sounds; the rest are virtual (silent until a slot frees up). Reset() restarts the audio system,
-        // so this runs once per process at the first Init (plugin load), before the game plays anything.
-        static void ApplyAudioVoices()
-        {
-            try
-            {
-                int want = AudioVoices.Value;
-                var cfg = AudioSettings.GetConfiguration();
-                if (want <= 0 || cfg.numRealVoices == want) { Log.Info("[Patrols] Audio: " + cfg.numRealVoices + " real voices (unchanged)"); return; }
-                int before = cfg.numRealVoices;
-                cfg.numRealVoices = want;
-                if (cfg.numVirtualVoices < want) cfg.numVirtualVoices = want * 8;
-                bool ok = AudioSettings.Reset(cfg);
-                Log.Always("[Patrols] Audio: real voices " + before + " -> " + AudioSettings.GetConfiguration().numRealVoices + (ok ? "" : " (Reset failed)"));
-            }
-            catch (Exception e) { Log.Warn("[Patrols] Audio: could not set the voice count: " + e.Message); }
         }
 
         static void Try(string what, Action a)

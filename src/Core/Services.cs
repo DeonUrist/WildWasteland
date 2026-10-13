@@ -51,6 +51,7 @@ namespace WildWasteland.Core
         string Version { get; }
         /// <summary>Animation bundle loaded (clips available).</summary>
         bool Ready { get; }
+        AudioClip PlayerShout { get; }
         string[] ClipNames();
         bool IsPlayerClip(string name);
         AnimationClip GetClip(string name);

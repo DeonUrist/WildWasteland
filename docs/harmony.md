@@ -57,6 +57,7 @@ Not Harmony but worth knowing: `Core.SaveBus` polls `SaveLoadGame.ActiveStateNam
 | `HutongGames.PlayMaker.ActionHelpers.DoMousePick(float,int)` | postfix | `PickAssist.AfterDoMousePick` | `Running` + static `ThirdPerson.On / CarShift` | once per frame something picks |
 | `HutongGames.PlayMaker.Actions.iTweenMoveTo.OnEnter` | prefix | `AimTransition.BeforeMoveTo` | `Fsm.Name == "AimDownSights"` | per ADS press / release |
 | `HutongGames.PlayMaker.Actions.PlayRandomSound.OnEnter` | prefix + finalizer | `FemalePain.Before` / `Finally` | `FemalePainSounds` + Female (static), FSM name, owner == Player | per damage sound |
+| `HutongGames.PlayMaker.Actions.SetAudioClip.OnEnter` | prefix + finalizer | `FemalePain.BeforeDeath` / `FinallyDeath` | `FemalePainSounds` + Female (static), Health/playerDeath, owner == Player | per death sound |
 
 Dropped from Apocaplayer: `BepInEx.Configuration.ConfigFile.Save` postfix (SettingsLayout). Non-Harmony hook: `Camera.onPreCull += ThirdPerson.PreCull` (only while third person is on).
 

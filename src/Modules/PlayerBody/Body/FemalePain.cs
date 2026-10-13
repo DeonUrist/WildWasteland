@@ -1,5 +1,5 @@
 using System;
-using System.IO;
+using System.Collections;
 using HutongGames.PlayMaker;
 using HutongGames.PlayMaker.Actions;
 using UnityEngine;
@@ -8,17 +8,47 @@ namespace WildWasteland.Modules.PlayerBody
 {
     internal static class FemalePain
     {
-        private static readonly string[] Names = { "human_hurt", "human_hurt_2" };
-        private static readonly AudioClip[] Clips = new AudioClip[2];
+        private static readonly string[] Names = { "FEMPAIN1", "FEMPAIN2", "FEMPAIN3", "FEMPAIN4" };
+        private static readonly AudioClip[] Clips = new AudioClip[Names.Length];
+        private static FsmObject[] _pain;
+        private static FsmFloat[] _weights;
+        private static FsmObject _death;
+        private static readonly AudioClip[] Shouts = new AudioClip[2];
+        internal static AudioClip PlayerShout { get { return Shouts[PlayerBodyModule.Female ? 1 : 0]; } }
 
         // (WW) the clips are decoded once per game session (module Init), the patch is a module patch through Core.Patches
-        internal static void LoadClips()
+        internal static IEnumerator LoadClips()
         {
+            yield return null;
+            if (!PlayerBodyModule.Running) yield break;
             for (int i = 0; i < Names.Length; i++)
             {
                 if (Clips[i] != null) continue;
-                try { Clips[i] = Load(PlayerBodyModule.ModPath("Sounds/Female/" + Names[i] + ".wav")); }
+                try { Clips[i] = Core.VoiceAudio.LoadWav(PlayerBodyModule.ModPath("Sounds/Female/" + Names[i] + ".wav"), Names[i]); PlayerBodyModule.Verbose("Female pain loaded: " + Names[i]); }
                 catch (Exception e) { PlayerBodyModule.Warn("Female pain " + Names[i] + ": " + e.Message); }
+            }
+            _pain = new FsmObject[Clips.Length]; _weights = new FsmFloat[Clips.Length];
+            for (int i = 0; i < Clips.Length; i++)
+            {
+                if (Clips[i] == null) { _pain = null; break; }
+                _pain[i] = new FsmObject { ObjectType = typeof(AudioClip), Value = Clips[i] };
+                _weights[i] = new FsmFloat { Value = 1f };
+            }
+            if (_death == null)
+            {
+                try { _death = new FsmObject { ObjectType = typeof(AudioClip), Value = Core.VoiceAudio.LoadWav(PlayerBodyModule.ModPath("Sounds/Female/FEMDEATH.wav"), "FEMDEATH", 0.2f) }; PlayerBodyModule.Verbose("Female death loaded: FEMDEATH"); }
+                catch (Exception e) { PlayerBodyModule.Warn("Female death: " + e.Message); }
+            }
+            for (int i = 0; i < Shouts.Length; i++)
+            {
+                if (Shouts[i] != null) continue;
+                string name = i == 0 ? "shout_male" : "shout_female";
+                try
+                {
+                    Shouts[i] = Core.VoiceAudio.LoadWav(PlayerBodyModule.ModPath("Sounds/" + name + ".wav"), name, 0.35f);
+                    PlayerBodyModule.Verbose("Shout sound loaded: " + name + ".wav");
+                }
+                catch (Exception e) { PlayerBodyModule.Warn("Shout sound " + name + ": " + e.Message); }
             }
         }
 
@@ -27,12 +57,17 @@ namespace WildWasteland.Modules.PlayerBody
             Core.Patches.Patch(owner, HarmonyLib.AccessTools.Method(typeof(PlayRandomSound), "OnEnter"),
                 prefix: HarmonyLib.AccessTools.Method(typeof(FemalePain), nameof(Before)),
                 finalizer: HarmonyLib.AccessTools.Method(typeof(FemalePain), nameof(Finally)));
+            Core.Patches.Patch(owner, HarmonyLib.AccessTools.Method(typeof(SetAudioClip), "OnEnter"),
+                prefix: HarmonyLib.AccessTools.Method(typeof(FemalePain), nameof(BeforeDeath)),
+                finalizer: HarmonyLib.AccessTools.Method(typeof(FemalePain), nameof(FinallyDeath)));
         }
 
-        internal static void Before(PlayRandomSound __instance, out FsmObject[] __state)
+        internal struct SoundState { internal FsmObject[] Clips; internal FsmFloat[] Weights; }
+
+        internal static void Before(PlayRandomSound __instance, out SoundState __state)
         {
-            __state = null;
-            if (!PlayerBodyModule.Running || !PlayerBodyModule.PainSounds.Value || !PlayerBodyModule.Female || __instance.Fsm == null || __instance.audioClips == null) return;
+            __state = new SoundState();
+            if (!PlayerBodyModule.Running || !PlayerBodyModule.PainSounds.Value || !PlayerBodyModule.Female || _pain == null || __instance.Fsm == null || __instance.audioClips == null) return;
             string fsm = __instance.Fsm.Name;
             if (fsm != "DamageEffectSound" && fsm != "DamageEffectSound_InCar") return;
             var owner = __instance.Owner;
@@ -40,52 +75,31 @@ namespace WildWasteland.Modules.PlayerBody
             bool player = Game.Player != null ? owner == Game.Player || owner.transform.IsChildOf(Game.Player.transform)
                 : owner.name == "Player" || owner.name == "head" && owner.transform.parent != null && owner.transform.parent.name == "Player";
             if (!player) return;
-            FsmObject[] replacement = null;
-            for (int i = 0; i < __instance.audioClips.Length; i++)
-            {
-                var original = __instance.audioClips[i] != null ? __instance.audioClips[i].Value as AudioClip : null;
-                int index = original != null ? Array.IndexOf(Names, original.name) : -1;
-                if (index < 0 || Clips[index] == null) continue;
-                if (replacement == null) replacement = (FsmObject[])__instance.audioClips.Clone();
-                replacement[i] = new FsmObject { ObjectType = typeof(AudioClip), Value = Clips[index] };
-            }
-            if (replacement == null) return;
-            __state = __instance.audioClips; __instance.audioClips = replacement;
+            __state.Clips = __instance.audioClips; __state.Weights = __instance.weights;
+            __instance.audioClips = _pain; __instance.weights = _weights;
         }
 
-        internal static Exception Finally(PlayRandomSound __instance, FsmObject[] __state, Exception __exception)
+        internal static Exception Finally(PlayRandomSound __instance, SoundState __state, Exception __exception)
         {
-            if (__state != null) __instance.audioClips = __state;
+            if (__state.Clips != null) { __instance.audioClips = __state.Clips; __instance.weights = __state.Weights; }
             return __exception;
         }
 
-        private static AudioClip Load(string path)
+        internal static void BeforeDeath(SetAudioClip __instance, out FsmObject __state)
         {
-            using (var reader = new BinaryReader(File.OpenRead(path)))
-            {
-                if (new string(reader.ReadChars(4)) != "RIFF") throw new InvalidDataException("Not a RIFF WAV");
-                reader.ReadUInt32(); if (new string(reader.ReadChars(4)) != "WAVE") throw new InvalidDataException("Not a WAV");
-                ushort format = 0, channels = 0, bits = 0; int rate = 0; byte[] data = null;
-                while (reader.BaseStream.Position + 8 <= reader.BaseStream.Length)
-                {
-                    string chunk = new string(reader.ReadChars(4)); uint size = reader.ReadUInt32();
-                    long end = reader.BaseStream.Position + size;
-                    if (end > reader.BaseStream.Length) throw new InvalidDataException("Truncated WAV");
-                    if (chunk == "fmt ")
-                    {
-                        format = reader.ReadUInt16(); channels = reader.ReadUInt16(); rate = reader.ReadInt32();
-                        reader.ReadUInt32(); reader.ReadUInt16(); bits = reader.ReadUInt16();
-                    }
-                    else if (chunk == "data") data = reader.ReadBytes((int)size);
-                    reader.BaseStream.Position = Math.Min(reader.BaseStream.Length, end + (size & 1));
-                }
-                if (format != 1 || bits != 16 || channels < 1 || rate < 1 || data == null || data.Length % (channels * 2) != 0)
-                    throw new InvalidDataException("Expected 16-bit PCM WAV");
-                var samples = new float[data.Length / 2];
-                for (int i = 0; i < samples.Length; i++) samples[i] = (short)(data[i * 2] | data[i * 2 + 1] << 8) / 32768f;
-                var clip = AudioClip.Create("Apocaplayer.Female." + Path.GetFileNameWithoutExtension(path), samples.Length / channels, channels, rate, false);
-                clip.hideFlags = HideFlags.DontUnloadUnusedAsset; clip.SetData(samples, 0); return clip;
-            }
+            __state = null;
+            if (!PlayerBodyModule.Running || !PlayerBodyModule.PainSounds.Value || !PlayerBodyModule.Female || _death == null || __instance.Fsm == null || __instance.audioClip == null) return;
+            if (__instance.Fsm.Name != "Health" || __instance.Fsm.ActiveStateName != "playerDeath") return;
+            var owner = __instance.Owner;
+            if (owner == null || (Game.Player != null ? owner != Game.Player : owner.name != "Player")) return;
+            __state = __instance.audioClip; __instance.audioClip = _death;
+            PlayerBodyModule.Verbose("Female death: FEMDEATH selected");
+        }
+
+        internal static Exception FinallyDeath(SetAudioClip __instance, FsmObject __state, Exception __exception)
+        {
+            if (__state != null) __instance.audioClip = __state;
+            return __exception;
         }
     }
 }

@@ -1084,6 +1084,8 @@ namespace WildWasteland.Modules.NPC
 
         private static AudioClip Voice()
         {
+            var animation = Core.Services.Animation;
+            if (animation != null && animation.PlayerShout != null) return animation.PlayerShout;
             if (_voice == null || _voice.Length == 0 || _voice[0] == null)
             {
                 // Flexa's own shouts, read from the Flexa prefab asset (Gungirl's voice swap only ever edits spawned instances, so the
