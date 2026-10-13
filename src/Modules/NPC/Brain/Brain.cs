@@ -182,7 +182,9 @@ namespace WildWasteland.Modules.NPC
             {
                 var n = kv.Value;
                 if (n.Owner == null) continue;
-                if(SimpleBandits.Has(n.Owner)&&!SimpleBandits.Fighting(n.Owner))continue;
+                // #63: a seated simple convoy bandit is skipped here, before Drive() could suspend its body; one registered in the moment it was
+                // spawned (before Patrols seated it) kept the player animation framework on, which then animated the car's motion as a run
+                if(SimpleBandits.Has(n.Owner)&&!SimpleBandits.Fighting(n.Owner)){if(n.Body!=null&&!ApBody.Suspended(n.Body))ApBody.Suspend(n.Body,true);continue;}
                 if (!on)
                 {
                     if (n.Mode != Mode.Off) SetMode(n, Mode.Off, "brain off");

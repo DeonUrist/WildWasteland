@@ -75,7 +75,6 @@ namespace WildWasteland.Modules.Patrols
             Try("Traffic roads", TrafficRoads.Install);
             Try("Camp status", () => TrafficCamps.Install(this));
             Try("Seated LOS guard", () => SeatedLosGuard.Install(this));
-            Try("Seated crew run guard", () => PassengerGuard.InstallHooks(this));
             Try("QuietFsm", () => QuietFsm.Install(this));
             Try("Suspension", () => Suspension.Install(this));
             Try("Motorcycle save hook (saved motorcycles may not load)", () => MotorcycleIntegration.Install(this));
@@ -115,7 +114,6 @@ namespace WildWasteland.Modules.Patrols
             if (_host != null) UnityEngine.Object.Destroy(_host);
             _host = null; _patrol = null; _menu = null; _exporter = null; _spotter = null; _busPose = null; _convoy = null; _traffic = null; _cleanup = null; _merchantEditor = null;
             BusPassengerPoseEditor.Target = null;
-            PassengerGuard.ClearHooks();
             ModVehicles.Clear();
             Instance = null;
         }
