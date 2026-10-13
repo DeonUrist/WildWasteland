@@ -16,6 +16,8 @@ namespace WildWasteland.Modules.PlayerBody
             public float Depth;
             public Bounds Bounds;
             public Vector3 Barrel, Magazine;
+            public bool Lance;
+            public float LanceRadius;
             // (WW) long guns: the posed bounds depend only on the visual and on whether a backpack is worn - computed once per change
             // (was LocalBounds = GetComponentsInChildren<MeshFilter> every frame for mounts 1 and 2)
             public bool PosedValid, PosedBackpack;
@@ -108,6 +110,13 @@ namespace WildWasteland.Modules.PlayerBody
             if (i == FlashIndex) { MountFlashlight(mount, item); return; }
             var bounds = LocalBounds(mount.Visual);
             mount.Bounds = bounds;
+            mount.Lance = item.name.StartsWith("blastlance", StringComparison.OrdinalIgnoreCase);
+            if (mount.Lance)
+            {
+                var shaft = LocalBounds(mount.Visual, true);
+                mount.LanceRadius = Mathf.Min(shaft.size.x, shaft.size.z) * .5f;
+                PlayerBodyModule.Verbose("Blast lance mount " + i + ": shaft radius=" + mount.LanceRadius);
+            }
             Vector3 axis = MajorAxis(bounds.size), thin = ThinAxis(bounds.size, axis);
             Vector3 major = i >= 1 && i <= 6 ? Props.Barrel(mount.Visual) : axis;
             if (major.sqrMagnitude < .01f) major = axis;
@@ -195,7 +204,7 @@ namespace WildWasteland.Modules.PlayerBody
                 // with a backpack: one long gun on each side of it, barrel down (as before 2.1.11); without one: both crossed straight on her back
                 // (2.2.2) at the same spot and the same depth, each against her back (not one on top of the other)
                 Quaternion rotation = backpack
-                    ? Quaternion.LookRotation(Vector3.down, Vector3.back) * Quaternion.Inverse(Quaternion.LookRotation(mount.Barrel, mount.Magazine))
+                    ? Quaternion.LookRotation(mount.Lance ? Vector3.up : Vector3.down, Vector3.back) * Quaternion.Inverse(Quaternion.LookRotation(mount.Barrel, mount.Magazine))
                     : Quaternion.AngleAxis(i == 1 ? -35f : 35f, Vector3.forward) * Quaternion.LookRotation(Vector3.up, Vector3.forward)
                         * Quaternion.Inverse(Quaternion.LookRotation(mount.Barrel, ThinAxis(mount.Bounds.size, MajorAxis(mount.Bounds.size))));
                 mount.Visual.transform.localRotation = rotation;
@@ -209,8 +218,8 @@ namespace WildWasteland.Modules.PlayerBody
             }
             if (i == 1 || i == 2) mount.Depth = posed.size.z;
             Vector3 offset = i == 0 ? new Vector3(0, -.08f, -.08f - _packDepth * .5f)
-                : i <= 2 ? backpack ? new Vector3(side * (_packWidth * .5f + posed.size.x * .5f + .005f), -.08f, -.08f - _packDepth * .5f)
-                    : new Vector3(-.02f, 0f, -.08f - mount.Depth * .5f)              // (2.2.5) the cross 2 cm to her left and 8 cm higher than 2.2.3 (Denis's screenshot: the middle of her back)
+                : i <= 2 ? backpack ? new Vector3(side * (_packWidth * .5f + (mount.Lance ? mount.LanceRadius : posed.size.x * .5f) + .005f), -.08f, -.08f - _packDepth * .5f)
+                    : new Vector3(-.02f, 0f, -.08f - mount.Depth * .5f + (mount.Lance && i == 2 ? .02f : 0f))              // (2.2.5) the cross 2 cm to her left and 8 cm higher than 2.2.3 (Denis's screenshot: the middle of her back)
                 : i <= 4 ? new Vector3(side * .11f, -.15f, .015f)
                 : i <= 6 ? new Vector3(side * .20f, -.09f, .04f)
                 : new Vector3(0, .03f, -.20f);
@@ -271,12 +280,13 @@ namespace WildWasteland.Modules.PlayerBody
             if (major == Vector3.up) return size.x <= size.z ? Vector3.right : Vector3.forward;
             return size.x <= size.y ? Vector3.right : Vector3.up;
         }
-        internal static Bounds LocalBounds(GameObject model)
+        internal static Bounds LocalBounds(GameObject model, bool lanceShaft = false)
         {
             var bounds = new Bounds(); bool first = true;
             foreach (var filter in model.GetComponentsInChildren<MeshFilter>(true))
             {
                 if (filter.sharedMesh == null || filter.GetComponent<Renderer>() == null) continue;
+                if (lanceShaft && filter.sharedMesh.name != "blastlance_1" && filter.sharedMesh.name != "blastlance_2") continue;
                 var b = filter.sharedMesh.bounds;
                 for (int i = 0; i < 8; i++)
                 {
