@@ -11,11 +11,14 @@ Wild Wasteland (WW) is one BepInEx 5 plugin for **Apocalypter** (Unity 2020.3.49
 
 A port that works but breaks either goal is not done.
 
+State at 0.1.0: five modules are in (PlayerBody, NPC, Guns, HUD, Patrols - see `docs/modules.md`), compiled and reviewed, **not yet verified in the game**. `docs/PORTING.md` is the recipe the ports followed and the recipe for the next one.
+
 ## 2. Read first
 
 - Project doc **`claude/GAME_KNOWLEDGE.md`** (Claude project "Apocalypter Mods"): the game facts and gotchas. Its section 0 ("30 rules") is mandatory.
 - Project doc `claude/<mod>-notes.md` for every source mod you port.
-- `docs/modules.md` (which mechanics are in, from which commit), `docs/harmony.md` (patch inventory), `docs/decisions.md`, `docs/perf-log.md`, `verification/README.md`.
+- `docs/modules.md` (which mechanics are in, from which commit, services, migrations), `docs/harmony.md` (patch inventory), `docs/decisions.md`, `docs/perf-log.md`, `docs/PORTING.md`, `docs/WIKI-FORMAT.md`, `verification/README.md`.
+- The port reports and the integration review of 0.1.0 (`notes/port-<Id>.md`, `notes/review-integration.md` in the working folder of the porting sessions) explain why the code looks the way it does.
 
 ## 3. Ground rules (same as every Apocalypter repo)
 
@@ -33,126 +36,153 @@ A port that works but breaks either goal is not done.
 | Plugin GUID | `com.denis.apocalypter.wildwasteland` |
 | Plugin name | `Wild Wasteland` |
 | Assembly / DLL | `WildWasteland.dll` |
-| Root namespace | `WildWasteland` |
-| Harmony id | same as GUID, ONE Harmony instance |
-| Install path | `BepInEx\plugins\WildWasteland\` (DLL + assets) |
-| Config | `BepInEx\config\com.denis.apocalypter.wildwasteland.cfg` (+ `BepInEx\config\WildWasteland\` for data/sidecars) |
-| Version | plain `System.Version` (`0.1.0`), never `0.1.0-beta` (BepInEx silently skips it). Release tag = this version. |
+| Root namespace | `WildWasteland` (Core: `WildWasteland.Core`, modules: `WildWasteland.Modules.<Id>`) |
+| Harmony ids | created only by `Core.Patches`: the GUID for Core and the shared dispatchers, `<GUID>.<ModuleId>` per module (runtime unpatch). Never `new Harmony` elsewhere. |
+| Install path | `BepInEx\plugins\WildWasteland\` (DLL + `theme\` + `<ModuleId>\` assets) |
+| Config | `BepInEx\config\com.denis.apocalypter.wildwasteland.cfg` (F6, player-facing), `BepInEx\config\WildWasteland\tools.cfg` (F7, technical), `BepInEx\config\WildWasteland\<ModuleId>\` for data/sidecars |
+| Version | plain `System.Version` (`0.1.0`), never `0.1.0-beta` (BepInEx silently skips it). Release tag = this version. `Plugin.VERSION` is the single source. |
 
 ## 5. Architecture (how combined mechanics must be built)
 
 ### 5.1 Layout
 ```
-src/Core/            Plugin entry, Runner, Scheduler, ModuleHost, GameRefs, Origin, SaveBus, SpawnBus, InputBus, Log, Config helpers
-src/Modules/<Name>/  one folder per mechanic (namespace WildWasteland.Modules.<Name>)
-src/Patches/         Harmony dispatchers, one class per patched target (optional; may live in Core)
+src/Core/            Plugin, Runner, Scheduler, ModuleHost, ModuleBase/IModule, ModuleConfig (+Legacy), Hooks, Patches, Services,
+                     GameRefs (+FsmUtil), Origin, SaveBus, SaveTypes, Hotkeys, Assets, Log, ApocasetterBridge, UI/ (ToolWindow, ToolPage,
+                     CorePages, EditorSession, Skin, Ledger)
+src/Modules/<Id>/    one folder per module (namespace WildWasteland.Modules.<Id>); <Id>Module.cs = entry; <Id>Pages.cs = F7 pages
+src/Modules/<Id>/<Framework>/   subfolders = the logical frameworks of the module (NPC/Detection, Navigation, Brain, Animals, Hazards;
+                     Patrols/Spawning, Vehicles, Crews, Traffic, Merchants, Editor, Persistence, WarRig ...). Folders do NOT change the namespace.
+src/Modules/<Id>/Embedded/      files embedded as resources (logical name <Id>.<path with / -> .>)
 docs/  verification/  tools/
 ```
-Modules may depend on Core. Modules must not reference each other's internals; cross-module calls go through a small interface in Core or an event on a bus. Record any module-to-module dependency in `docs/modules.md`.
+- **Modules keep the original class names and nesting of the source mod** (decisions 2026-10-13): `Core.SaveTypes` resolves saved component types by a pure namespace-prefix rename (`Apocapatrol.X, Apocapatrol` -> `WildWasteland.Modules.Patrols.X`). One namespace per module; sub-namespaces only where documented in `docs/modules.md` (`Patrols.Motorcycles`, `Patrols.WarRig`).
+- Modules may depend on Core. Modules must not reference each other's types; cross-module calls go through `Core.Services` (5.5). Record any module-to-module dependency in `docs/modules.md` 1.3.
 
 ### 5.2 One entry point, one runner
-- The `BaseUnityPlugin` only binds config, applies patches and creates the **Runner**. The game destroys plugin GameObjects on scene load, so `BaseUnityPlugin.Update/OnGUI` never run.
-- Runner = one hidden GameObject (`HideAndDontSave` + `DontDestroyOnLoad`), recreated on `SceneManager.sceneLoaded` if gone. It owns the only `Update`, `LateUpdate`, `FixedUpdate`, `OnGUI` of the whole mod and forwards to modules through the scheduler. Modules never create their own MonoBehaviour update loops (exception: components that must sit on a specific game object, e.g. per-NPC brain; even those should be ticked centrally when possible).
+- `Plugin.Awake` only: `Assets.Init`, `Skin.Init`, first-run flags, binds Core entries, `RegisterModules()` (order = init order = F6 order: PlayerBody, NPC, Guns, HUD, Patrols), `ModuleHost.BindAll`, `Runner.Ensure`, Core jobs, `SaveTypes.Install`, `ToolWindow.Init`, `ModuleHost.StartAll`, logs the startup summary. The game destroys plugin GameObjects on scene load, so `BaseUnityPlugin.Update/OnGUI` never run.
+- Runner = `WildWasteland.Runner` GameObject (`HideAndDontSave` + `DontDestroyOnLoad`) with three MonoBehaviours (`EarlyRunner` order -1000, `Runner`, `LateRunner` order 20000) that call `Scheduler.Run(phase)`; `Runner.OnGUI` also draws the F7 window; `OnApplicationQuit` -> `ModuleHost.Quit`. Recreated on `SceneManager.sceneLoaded` if gone. Modules never create their own MonoBehaviour update loops (exception: components that must sit on a specific game object, e.g. per-NPC brain, per-car crew; they gate on the module's `Running` flag and die on Shutdown).
 
-### 5.3 Module contract
-Each module implements a Core interface with at least:
-- `Id`, `DisplayName`, `[Section] Enabled` config entry (default decided per module).
-- `ConflictsWith` = GUIDs of the standalone mods it replaces (see 5.8).
-- `Init()` (once, after config), `OnSceneLoaded()`, `OnWorldReady()` (SaveLoadGame reached `isPlay`), `OnSaveBegin()/OnSaveEnd()`, `OnOriginShift(Vector3 delta)`, `Shutdown()`.
-- Work registered with the scheduler (5.4), not done in raw Update.
-ModuleHost calls every hook inside its own try/catch, counts exceptions per module, logs the first few with stack, and **disables a module after repeated failures** (and says so in the log) instead of throwing every frame.
-Scheduler jobs are isolated per job: a job that throws 20 times in 10 s is switched off (logged, "(off)" on the F7 Performance page) while the rest of the module keeps running; only hook / lifecycle failures count towards the module-level disable (40 in 10 s). A failed Init runs the module's Shutdown (keep it safe to call after a partial Init) and can be retried from the Enabled toggle.
+### 5.3 Module contract (src/Core/ModuleBase.cs, as implemented)
+`public sealed class <X>Module : ModuleBase` with:
+- `Id` (stable, = config section prefix, Harmony id suffix, asset folder), `DisplayName`, `ConflictsWith` (standalone GUIDs, 5.8), `DefaultEnabled` (true).
+- `BindConfig(ModuleConfig cfg)`: bind EVERY entry (5.7). Called for every module, enabled or not, before any Init, in module order; Core binds `[<Id>] Enabled` first and sets `Config`.
+- `Init()`: once, only when enabled and no conflicting plugin is loaded: patches (`Core.Patches`), hooks (`Core.Hooks`), jobs (`Scheduler`), hotkeys (`Core.Hotkeys`), services, assets. **Must be re-runnable after Shutdown** (runtime off -> on from F6/F7, retry after a failed Init): reset statics at the start of Init or in Shutdown; AssetBundles stay loaded across off/on.
+- `Shutdown()`: undo game-state side effects (restore materials/renderers/camera/FSM variables, destroy module-added components and objects, stop coroutines), set the provided `Services.X` back to null, `Running = false` first so re-entrant handlers no-op. Core then removes jobs, hooks, hotkeys and patches (`ModuleHost.Cleanup`). Must be safe after a partial Init.
+- `OnSceneLoaded(scene, mode)`, `OnWorldReady()` (first `isPlay` after LoadGame / setSeed / new scene), `OnSaveBegin(slot)` (`SaveGame`), `OnSaveEnd(slot)` (back to `isPlay`; sidecar writes go through `SaveBus.AfterSave`), `OnLoadBegin(slot)` (`LoadGame`), `OnOriginShift(delta)`, `ToolPages()` (F7 pages, 5.11). All virtual, all called by `ModuleHost` inside try/catch.
+- `Active` (set by Core while running), `Config`, `Dir` (= `BepInEx\plugins\WildWasteland\<Id>\`).
+- ModuleHost states: `NotStarted, Running, OffByConfig, OffConflict, InitFailed, DisabledAfterErrors`. `ModuleHost.Restart(m)` for tools that change Init-time settings. The startup summary (`ModuleHost.Summary()`) lists every module with state and patch count plus `core hooks: ...`.
 
-### 5.4 Scheduler and frame budget
-- All periodic work is a scheduled job: `EveryFrame` (only for things that are visibly wrong otherwise, e.g. camera, held-item pose), `Interval(seconds)` with a random phase so jobs don't all fire on the same frame, or `Sliced` (a work queue processed for at most N microseconds per frame).
-- Global budget (initial, see docs/perf-log.md): WW managed time avg <= 0.5 ms/frame, worst <= 2 ms. The scheduler measures each job with `Stopwatch` (cheap) and exposes per-module totals in the debug overlay; sliced jobs stop when the frame's budget is spent and continue next frame.
-- Scale think intervals with load (precedent from NPCAI: 0.1 s for <= 5 agents, 0.2 s <= 10, 0.3 s <= 20, 0.5 s above).
-- Heavy one-off work (grid bakes, prefab scans, texture decodes) is sliced (~1 ms/frame) or done at startup, never in one frame during play.
+### 5.4 Scheduler and frame budget (src/Core/Scheduler.cs)
+- API: `Scheduler.EveryFrame(this, "Name", Tick, Phase)`, `Interval(this, "Name", seconds, Tick, Phase, scaledTime)` (random initial phase so jobs spread over frames; `RunNow()` forces the next tick), `Sliced(this, "Name", micros, Step)` (step while it returns true, within the job's microseconds and the whole-frame budget), `Gui(this, "Name", Draw)`, `StartCoroutine / StopCoroutine` (on the Core runner). Phases: `EarlyUpdate` (= old `[DefaultExecutionOrder(-1000)]` runners), `Update`, `LateUpdate`, `LateUpdateLast`, `EarlyFixedUpdate`, `FixedUpdate`, `Gui`. Jobs run in registration order within a phase (= module init order, preserving each source mod's internal order). Name jobs as `<Id>.<Thing>`; tick methods must be named methods, not lambdas (ModProfiler Focus captures show method names).
+- `EveryFrame` only for things that are visibly wrong otherwise (camera, held-item pose, projectiles); interval-gated work becomes `Interval`; heavy one-off work (grid bakes, prefab scans, texture decodes) is `Sliced` (~1 ms/frame) or done at startup, never in one frame during play. Scale think intervals with load (NPCAI precedent: 0.1 s for <= 5 agents, 0.2 s <= 10, 0.3 s <= 20, 0.5 s above).
+- Budget: WW managed time avg <= 0.5 ms/frame, worst <= 2 ms (docs/perf-log.md). Every job is timed with a Stopwatch; `FrameMs` is the frame's total; sliced jobs stop once `FrameMs > FrameBudgetMs` (`[Core] Frame budget (ms)` in tools.cfg, default 2). F7 -> Performance shows per job and per module avg/last/worst ms, calls, errors.
+- **Job isolation**: a job that throws 20 times in 10 s is switched off (`Enabled = false`, logged once, "(off)" on the Performance page); the module keeps running. Job errors are counted per module (first 5 logged with stack) but never disable the module. Hook-handler and lifecycle-hook errors count towards the module rule (40 in 10 s -> `DisabledAfterErrors`). Off -> on re-registers all jobs.
 
-### 5.5 Shared services (write once in Core, use from every module)
-- **GameRefs**: Player, PlayerCamera(Holder), `__GameManager__` FSMs (Menu), SaveLoadGame FSM, `NewGO_ArrayList` proxies (`ArrayList_Items/Cars/Sandstorms`), `itemNameID`. Re-found after every scene load; never `GameObject.Find`/`FindObjectsOfType` per frame or per spawn. `InGame` = Menu `play` && SaveLoadGame `isPlay` && timeScale > 0.
-- **FSM lookup helpers**: iterate `GetComponents<PlayMakerFSM>()` and match `FsmName` (no `FindFsmOnGameObject`, it logs per miss); `Find*` variables (never `GetFsm*` as existence test); check `Fsm.Initialized`. Cache per instance id, sweep destroyed entries, clear on scene load.
-- **Origin**: tracks `FloatingOrigin` shifts (1000 m) and raises `OnOriginShift(delta)`. Modules store long-lived positions relative to the MapMagic anchor, never raw world coordinates across frames.
-- **SaveBus**: the only code that watches SaveLoadGame (`SaveGame`/`wait`/`isPlay`/`LoadGame`/`setSeed`). Raises save/load phases to modules, resolves the current slot from `ES3Settings.defaultSettings.path`, writes all WW sidecar data after the vanilla save finishes (~1 s after `isPlay`; ES3 cache rule), restores ~0.5 s after `isPlay` following LoadGame, cancels restores on new LoadGame/scene reset. One sidecar per slot: `BepInEx\config\WildWasteland\<SaveGameN>.json`, one section per module. Integrates with Apocasaver if present (soft).
-- **SpawnBus**: one postfix on `CreateObject.OnEnter`, one post-load scan; modules subscribe by prefab name/tag instead of each scanning the scene. Also owns the save-compatible spawn recipe (Instantiate -> itemNameID++ -> `<prefab>(Clone)N` -> ArrayListAdd once -> optional `Randomize`) and clean removal (remove from every proxy, then Destroy).
-- **InputBus**: one prefix on `GetButtonDown.OnUpdate` (and `GetMouseButtonDown.OnUpdate`) with a lookup table (fsm name + button) -> handler; one place that knows all WW hotkeys and checks conflicts. Hotkeys default to None or verified-free keys (game: F2 Heal, F9 hide UI, F11 god mode; our mods use F1, F3-F8, Insert).
-- **Log**: `[Debug] VerboseLog` (default off) gates all info logging; no string building on hot paths when it is off. Warnings/errors always on, rate-limited.
+### 5.5 Shared services (src/Core, write once, use from every module)
+- **GameRefs**: `Player`, `PlayerCameraHolder`, `GameManager`, `Menu` FSM, `SaveLoadGame` FSM, `NewGOArrayList`, `ItemNameId`, `MainCamera` (per frame), `InGame` (Menu `play` && SaveLoadGame `isPlay` && timeScale > 0), `InPlay` (same, ignoring timeScale - for tools while paused), `SaveLoadState`. Looked up at most once per second while missing, cleared on scene load. `FsmUtil.Find(go, fsmName)` iterates `GetComponents<PlayMakerFSM>` (no `FindFsmOnGameObject`: it logs per miss). Never `GameObject.Find` / `FindObjectsOfType` per frame or per spawn in modules.
+- **Origin**: patches `FloatingOrigin.Jump` (always) and raises `IModule.OnOriginShift(delta)` (delta = old - new TotalOffset; add it to cached scene positions). `Origin.Anchor` / `World()` / `Scene()` convert to MapMagic-relative positions for long-lived data. NWH moves scene root objects itself, not DontDestroyOnLoad objects.
+- **SaveBus**: the only watcher of SaveLoadGame (reads `ActiveStateName` once per frame; no patch). Raises `StateChanged(prev, now)` (for ported watchers) and the module hooks `OnSaveBegin` / `OnSaveEnd` / `OnLoadBegin` / `OnWorldReady`; `SaveBus.AfterSave(action, delay)` runs ~1 s after the save returned to `isPlay` (ES3 cache rule); `Slot` (`SaveGameN.es3` from `ES3Settings.defaultSettings.path`), `State`, `Saving`, `Loading`, `Busy`. Module save formats are kept verbatim (decisions): the planned per-slot JSON sidecar is not used by any 0.1.0 module. Apocasaver coexistence rules: notes/HostMods.md 2.6 (observe, never patch its ES3 targets with conflicting semantics).
+- **SaveTypes**: prefix on `ES3Reflection.GetType(string)` mapping `<OldAsm>, <OldNs>.X` -> `WildWasteland.Modules.<Id>.X` (aliases WarRig, Apocapatrol, Apocaplayer, NPCAI, Gunplay, GunplayHUD; longer prefixes first; leaves the lookup to ES3 when the old assembly is still loaded). `Resolved` count; verbose log per mapped type.
+- **Services** (src/Core/Services.cs): `Services.Animation` (`IAnimationApi`/`IAnimatedCharacter`, PlayerBody), `Services.Npc` (`INpcApi` + `Structures`, NPC), `Services.Guns` (`IGunsApi`, Guns), `Services.Hud` (`IHitFeedback`, HUD); events `CrewBailedOut`, `VehicleExploded` (raised by Patrols via `RaiseCrewBailedOut` / `RaiseVehicleExploded`, handlers wrapped in try/catch). Provider sets the field in Init and nulls it in Shutdown (`is` check so a module never clears another's instance); consumers null-check at every call site and fall back exactly like the old "provider mod not installed" path. New cross-module needs = a new interface member here, never a type reference.
+- **Hotkeys**: `Hotkeys.Register(this, entry, action, when, allowWhilePaused)` for `ConfigEntry<Key>` entries (InputSystem `Key`, the only type Apocasetter rebinds); polled once per frame in EarlyUpdate (`Core.Frame` job); nothing fires while Apocasetter's InputBlocker is active, the window is unfocused, or timeScale == 0 (unless `allowWhilePaused`). `CheckConflicts()` logs duplicate keys and game keys (F2 heal, F9 hide UI, F11 god mode) after Init. `Pressed(key)` / `Held(key)` helpers. Context-polled keys (editors' numpad) stay inside the editor's tick. The PlayMaker button hooks (`GetButtonDown.OnUpdate` etc.) are Hooks dispatchers, not Hotkeys.
+- **Assets**: `Assets.Root` (plugin folder), `ModuleDir(id)` = `plugins\WildWasteland\<Id>\`, `ConfigDir` = `config\WildWasteland\`, `ModuleConfigDir(id)` (created), `LegacyPluginDir("<OldFolder>")` for one-time data migration. Embedded resources: `src/Modules/<Id>/Embedded/...` -> `<Id>.<path>` (build.sh / csproj).
+- **Log**: `Log.Info` only when `[Debug] VerboseLog` (`Log.Verbose`) - check it before building strings on hot paths; `Log.Always` for startup summary / migrations / state changes; `Warn` / `Error` always, rate-limited to 5 repeats per message (reset on scene load). Prefix messages with `[<Id>] `.
+- **ApocasetterBridge**: the only file that talks to Apocasetter (reflection): `InputBlocked`, `SetInputBlock(bool)`, `GameFont`, `Present`. Other host-mod bridges (Apocasaver, Dog Companion, ApocaDustStorm, MotorcycleMod, Apocaspawner, Apocapocket) live in one file each inside the module that needs them, `object`-typed, `NoInlining`.
+- **UI**: `Core.UI.EditorSession` (one modal owner for the whole mod: pauses, frees the cursor, blocks input via Apocasetter, releases one frame after close), `Skin` (= Apocapatrol's PatrolSkin; theme in `plugins\WildWasteland\theme\`), `Ledger` / `LedgerDropdown` (editor widgets), `ToolWindow` / `ToolPage` (5.11).
 - **Json**: use a hand-written serializer/MiniJson; Unity `JsonUtility` drops nested custom arrays.
 
-### 5.6 Harmony rules
-- ONE patch method per target per kind for all of WW, implemented as a dispatcher that calls subscribed modules. Two modules patching the same method is a review blocker.
-- Every target is listed in `docs/harmony.md` with its subscribers, call frequency and early-out filter.
-- PlayMaker action patches run for every FSM in the game: first line must be a cheap filter (reference compare of `Fsm`/owner against a cached set, or a static bool), no allocations, no string compares on unrelated FSMs.
-- Patch each `[HarmonyPatch]` class separately (`CreateClassProcessor(t).Patch()` in try/catch), so one bad target disables only its dispatcher; report it in the startup summary.
-- Prefer postfixes/observation over skipping originals. When skipping (`return false`), respect `eventTarget` on `SendEvent` and call `Finish()` where the action would have finished.
+### 5.6 Harmony rules (src/Core/Hooks.cs, src/Core/Patches.cs)
+- **Shared targets go through `Core.Hooks`**: one `[HarmonyPatch]` forwarder per target+kind (`P_<Target>` classes at the bottom of Hooks.cs), subscribed with `Hooks.<Target>.Prefix(this, handler)` / `Postfix` / `Finalizer` / `Resolver` in Init; `Hooks.RemoveAll(module)` on Shutdown; `Hooks.ApplyUsed()` patches a dispatcher only when it has a subscriber. Semantics = HarmonyX with separate plugins: all prefixes run in module init order, the original is skipped when any returned false, postfixes/finalizers always run; owners are tracked in arrays parallel to the handlers so a module removed mid-dispatch still reports to the right owner. Current dispatchers: `docs/harmony.md` section 1. Adding one: a `Hook<T>` field + `P_` class + lines in `RemoveAll`, `ApplyUsed`, `Summary`.
+- **Module-only targets**: `Core.Patches.Patch(this, original, prefix:, postfix:, finalizer:)` or `Patches.ApplyClass(this, typeof(PatchClass))` (each `[HarmonyPatch]` class separately, try/catch, recorded; a failure disables only that target and shows as `patches N (M failed)` in the summary). Harmony id = `<GUID>.<Id>`; `Patches.Unpatch(module)` on Shutdown. Two modules patching the same target+kind directly is detected (`CONFLICT` in the log and summary) and is a review blocker: move it to a Hooks dispatcher. Never `new Harmony`, never `PatchAll`.
+- Every target is listed in `docs/harmony.md` with its subscribers in order, kind, call frequency, early-out filter and known other patchers. The F7 "Harmony patches" page shows the live list.
+- PlayMaker action patches run for every FSM in the game: first line must be a cheap filter (static bool, reference compare of `Fsm`/owner against a cached set, length gate before a string compare, dictionary lookup), no allocations, no string building on unrelated FSMs. Read private action fields with `AccessTools.FieldRefAccess` / `Traverse` set up once in Init.
+- Prefer postfixes/observation over skipping originals. When skipping (`return false`), respect `eventTarget` on `SendEvent` and call `Finish()` where the action would have finished (and only when `!everyFrame` where that applies).
+- Apocasetter's InputBlocker prefixes every PlayMaker input action: WW's input prefixes still run under it (all prefixes run), so they early-out on `ApocasetterBridge.InputBlocked` / `timeScale <= 0` where it matters.
 
-### 5.7 Config
-- Sections: `[General]` (`Apocasetter = true` for the Mods menu, master switches), one section per module (`[<Module>] Enabled` first), `[Debug]` last.
-- Bind order = display order in Apocasetter; bind `Enabled` first in each section.
-- Only player-facing settings in the cfg; tuning constants and hidden state in a separate never-saved `ConfigFile` (`SaveOnConfigSet = false`).
-- Migrations from source mods: read their old cfg files directly (BepInEx `ContainsKey` only sees bound entries), copy values, write once, log what was migrated. Purge orphaned entries via `ConfigFile.OrphanedEntries` (reflection).
-- InvariantCulture for every float parse/format.
+### 5.7 Config (src/Core/ModuleConfig.cs): F6 vs F7
+- **Main cfg (F6, Apocasetter)**: `[General] Apocasetter = true` (Core), `[Keys]` (every hotkey of every module, `cfg.Hotkey(key, Key.X, desc)`), then per module `[<Id>] Enabled` (bound by Core first) + `cfg.Player(sub, key, def, desc[, AcceptableValueRange/List])` into `[<Id>]` or `[<Id> / <Sub>]`, `[Debug] VerboseLog` last (Core). Bind order = display order; feature toggles first, in feature order; **one on/off toggle per player-visible feature**; target <= ~25 F6 entries per module; `AcceptableValueRange` for sliders, enum / `AcceptableValueList` for dropdowns; descriptions plain text ("restart" in a description = Apocasetter's NEEDS A RESTART chip); sections with "debug" in the name fold; > 40 entries per section collapse.
+- **tools.cfg (F7)**: `cfg.Tool(sub, key, def, desc[, range])` -> `BepInEx\config\WildWasteland\tools.cfg`, sections `<Id> / <Sub>`: tuning constants, offsets, poses, debug switches, editor toggles, developer options, the old mods' hidden never-saved settings (same keys and defaults). Invisible to Apocasetter; edited live on F7 `ConfigPage`s. No never-saved `ConfigFile`s any more.
+- **Migration**: `cfg.Migrate(entry, "<old cfg file>", "<old section>", "<old key>")` right after binding; applies only on the first WW run (`Legacy.FirstRunMain` = main cfg missing at startup, `FirstRunTools` = tools.cfg missing), reads the old file raw (`Core.Legacy.Get`; BepInEx `ContainsKey` only sees bound entries), logs every migrated value, never writes the old files. Chains of moved keys: oldest first, newest wins. KeyCode -> Key names: PlayerBody `KeyMap` (Core request: move it to ModuleConfig).
+- Use `SettingChanged` for anything that must react live (F6 and F7 write entries live, Apocasetter forces `Save()`); handlers check the module's `Running` flag. InvariantCulture for every float parse/format. Never purge orphans / `Config.Clear()` / re-order the shared files (`SettingsLayout`, `PurgeStaleEntries`, `OrphanedEntries` hacks of the old mods are gone).
+- `tools/config-harness` binds every module's config on plain mono and catches type mismatches, (section,key) collisions, foreign sections, BindConfig exceptions and migration errors before the first in-game run (section 7).
 
 ### 5.8 Coexistence with the standalone mods it replaces
-BepInEx will happily load WW and the old standalone mod side by side (different GUIDs) and every feature then runs twice. At startup WW must:
-1. For each module, check `Chainloader.PluginInfos` for the GUIDs in `ConflictsWith` (use `ReferenceEquals(info.Instance, null)`, plugin instances read as destroyed).
-2. If found: keep that module OFF, log a clear warning naming the DLL to remove, and show it in the Apocasetter page.
-3. Never do the reverse (patch or disable the other mod).
-Exception: if a module keeps a source mod's GUID for save compatibility (precedent: Ultimate Tools kept Part Adjustment's GUID), that must be a separate plugin class and documented in `docs/decisions.md`.
+BepInEx will happily load WW and the old standalone mod side by side (different GUIDs) and every feature then runs twice. At startup `ModuleHost.StartAll`:
+1. For each module, checks `Chainloader.PluginInfos` for the GUIDs in `ConflictsWith` (`!ReferenceEquals(info.Instance, null)`; plugin instances read as destroyed). `Plugin` has a soft `BepInDependency` on every such GUID so they load first.
+2. If found: the module stays `OffConflict`, the log names the DLL to remove, the F7 Modules page and the startup summary show it (Apocasetter shows it once the index entry lists the GUID in `replaces`).
+3. Never does the reverse (patch or disable the other mod).
+Exception: if a module keeps a source mod's GUID for save compatibility (precedent: Ultimate Tools kept Part Adjustment's GUID), that must be a separate plugin class and documented in `docs/decisions.md`. Never the Apocapatrol / Apocapocket GUIDs (Apocasaver binds private members by name on them).
 
 ### 5.9 Inter-mod APIs and soft dependencies
-- Soft dependencies (Apocasetter, Apocaplayer ModAPI, ApocalypterGarage, Apocasaver): `[BepInDependency(guid, SoftDependency)]`, all calls to that mod in ONE file per dependency with `[MethodImpl(MethodImplOptions.NoInlining)]`, fields typed `object`, so WW loads without it. Verify with load test A.3.
-- APIs that other mods use today (NPCAI.Api v1, Apocaplayer ModAPI, Apocapatrol hooks) must keep their public names/namespaces if WW absorbs the provider, or WW must ship a compatibility shim. Note each in `docs/modules.md`.
-- Third-party: ApocalypterAI drives the same NPC actions as NPCAI (only one brain per body); ApocalypterGarage objects are spawned only through its API.
+- Soft dependencies (Apocasetter, Apocasaver, Dog Companion, ApocaDustStorm, MotorcycleMod, Apocaspawner, PartAdjustment, Apocapocket): `[BepInDependency(guid, SoftDependency)]` on `Plugin`, all calls to that mod in ONE file per dependency with `[MethodImpl(MethodImplOptions.NoInlining)]`, fields typed `object`, so WW loads without it. Verify with load test A.3.
+- APIs that other mods used (NPCAI.Api v1, Apocaplayer ModAPI, Gunplay.Api, GunplayHUD.Api, Apocapatrol hooks) are replaced by `Core.Services` for the absorbed consumers; third-party consumers need a shim that WW does not ship yet (documented gap, `docs/modules.md` 1.4).
+- Third-party: ApocalypterAI drives the same NPC actions as the NPC module (only one brain per body); ApocalypterGarage objects are spawned only through its API.
 
 ### 5.10 Saves
 - Never add components to saved game objects; never `SetActive(false)` objects that must receive `SaveGame` (hide renderers/colliders instead).
-- Prefer sidecar data to custom ES3 prefabs. A save made with WW should still load without WW; if a module cannot achieve that, record it in docs/decisions.md and the README.
-- When absorbing a mod that owns save data, read its old sidecar/keys on first load (migration) and keep reading them for at least one release.
+- Module save data keeps the source mod's keys and formats verbatim (decisions 2026-10-13): ES3 keys `Apocapatrol.Patrol`, `Apocaunloader.Magazines`, binary / text sidecars under `config\WildWasteland\<Id>\Saves\`, ES3 prefab ids resolved through `Hooks.GetPrefab`, component types through `SaveTypes`. Old sidecar locations stay readable for at least one release.
+- A save made with WW loads without WW as well as a save made with the standalone mods loaded without them (mod-created objects - motorcycles, War Rigs, crews - cannot be resolved by the game alone; documented in README).
+- New modules that own save data: prefer sidecars; ES3 keys only with a prefix and following notes/HostMods.md 2.6 (Apocasaver's transaction).
+
+### 5.11 F7 tool window (src/Core/UI/ToolWindow.cs, ToolPage.cs, CorePages.cs)
+- One window for the whole mod, key `[Keys] Tool window` (F7, Core's), drawn by the Core runner's OnGUI with the ledger skin at `GUI.depth -900`, pauses the game through `EditorSession`, Esc / CLOSE closes. Left column = groups (`ToolGroups.Order`: Wild Wasteland, Player body & animation, NPC AI & navigation, Weapons & HUD, Patrols & vehicles, Seat & turret poses, Merchants, Debug & performance), pages in registration order inside a group. Core pages: Modules (state + Enabled toggles), Performance, Harmony patches, Core settings.
+- **Adding a page**: return it from the module's `ToolPages()` (collected once when F7 first opens; `Owner` is set to the module). Use `new ConfigPage(this, group, title, Config.Tools, "Id / Section", "Id / Prefix*") { Intro = ... }` for lists of tool settings, `new ActionPage(this, group, title, DrawMethod)` for live values and buttons, or a `ToolPage` subclass with `OnShow` / `Update` (per frame while shown) / `Draw(ToolLayout l)`. Layout helpers: `l.Heading`, `Text`, `Value(label, value)`, `Button`, `Buttons(...)`, `Toggle(entry)`, `Slider`, `Entry(ConfigEntryBase)`, `Space`. A page of a module that is not running shows a note and is read-only unless `ShowWhenModuleOff` (ConfigPages stay editable). Buttons that need the world use `GameRefs.InPlay` (the game is paused while F7 is open).
+- A page that opens another modal editor calls `ToolWindow.CloseThen(() => editor.Open())`. Live in-world editors (numpad editors) keep running after F7 closes; their page shows the on/off toggle, the key list, the current selection and SAVE / RESET buttons.
 
 ## 6. Performance rules (checked in review)
 
-Banned in per-frame or per-spawn paths: `GameObject.Find*`, `FindObjectsOfType`, `Resources.FindObjectsOfTypeAll`, `GetComponentsInChildren` (cache instead), LINQ, string concatenation/format, boxing, lambdas capturing locals, `new` collections, `Camera.main` (cache), `Physics.RaycastAll` (use NonAlloc with reused buffers), per-instance material copies.
+Banned in per-frame or per-spawn paths: `GameObject.Find*`, `FindObjectsOfType`, `Resources.FindObjectsOfTypeAll`, `GetComponentsInChildren` (cache instead), LINQ, string concatenation/format, boxing, lambdas capturing locals (they allocate a closure on every call, even on the early-out path), `new` collections, `Camera.main` (use `GameRefs.MainCamera`), `Physics.RaycastAll` (use NonAlloc with reused buffers), per-instance material copies, reflection `GetValue`/`Invoke` (compile delegates once).
 
 Required:
 - Reused buffers/heaps; caches keyed by instance id, swept for destroyed objects, cleared on scene load.
-- Every job registered with the scheduler has a name so ModProfiler and the WW overlay can attribute time.
-- Before porting a module, profile the standalone mod (ModProfiler) on the scenarios in `verification/README.md` and record the baseline in `docs/perf-log.md`; the ported module must not be slower.
+- Every job registered with the scheduler has a name and a named tick method so ModProfiler and the F7 Performance page can attribute time.
+- Before porting a module, profile the standalone mod (ModProfiler) on the scenarios in `verification/README.md` and record the baseline in `docs/perf-log.md`; the ported module must not be slower. Preserving behaviour beats a perf gain: apply only local, safe fixes (notes section 10 of each mod).
 - When two modules do the same scan/raycast/lookup, move it to a Core service and share the result.
 
 ## 7. Build
 
-No compiler on the device VM. Build in the cloud:
+No compiler on the device VM. Build in the cloud (mono mcs 6.8):
 ```
-apt-get update && apt-get install -y mono-mcs
+apt-get update && apt-get install -y mono-mcs mono-runtime
 # stage <game>\Apocalypter_Data\Managed\*.dll and <game>\BepInEx\core\*.dll, then:
-MANAGED=/path/Managed BEPCORE=/path/core sh build.sh /path/outdir
+MANAGED=/path/Managed BEPCORE=/path/core sh build.sh /path/outdir            # -> outdir/WildWasteland.dll
+MANAGED=... BEPCORE=... sh tools/build-module.sh <Id> [outdir]               # Core + one module, the other four stubbed
+MANAGED=... BEPCORE=... sh tools/config-harness/run.sh /path/outdir [BepInEx/config with the old cfg files]
 ```
-- `build.sh` compiles every `.cs` under `src/` (same set as the csproj glob). Old mcs: C# 7, no local functions, `lock` is a keyword, avoid type names `Path`, `Cursor`, methods named `System`. Compile only against the game's DLLs.
-- Windows alternative: `dotnet build WildWasteland.csproj` (deploy is opt-in: `-p:Deploy=true`, game closed).
-- If a reference DLL is missing in Managed\, remove it from both build.sh and the csproj.
-- Config check without the game: `MANAGED=... BEPCORE=... sh tools/config-harness/run.sh <outdir> [BepInEx/config with the old cfg files]` binds every module's config on plain mono (needs `mono-runtime`): catches AcceptableValue type mismatches, duplicate / colliding (section,key) pairs, foreign sections, BindConfig exceptions and migration errors before the first in-game run.
+- `build.sh` compiles every `.cs` under `src/` (same set as the csproj glob) against the game's DLLs (the reference list is in build.sh; if a DLL is missing in Managed\, remove it from both build.sh and the csproj) and embeds every file under `src/Modules/<Id>/Embedded/` as resource `<Id>.<path with / -> .>` (e.g. `Patrols.DefaultTemplates.Bike.json`, `HUD.Textures.crosshair_dot.png`). `-langversion:latest` = C# 7.x: no local functions, no `out var` / pattern variables inside iterator methods, no locals shadowing a lambda parameter, no tuples / `default` literal / `in` params; `?.`, `=>`, `nameof`, interpolation are fine; `lock` is a keyword; avoid type names `Path`, `Cursor`, methods named `System`. Must build with zero errors (2 known warnings: NPC `Nav.cs` CS0675).
+- `tools/build-module.sh <Id>` copies Core + one module into a temp tree with empty `ModuleBase` stubs for the others - the way to check a port in isolation.
+- `tools/config-harness/run.sh` compiles `Harness.cs` against the built DLL and runs `BindConfig` of every module (alone and through `ModuleHost.BindAll`) on plain mono: catches AcceptableValue type mismatches, duplicate / colliding (section,key) pairs, statics of one module that share one entry (BepInEx returns the existing entry on a duplicate Bind of the same type), foreign sections, BindConfig exceptions and migration errors against Denis's real old cfg files. Color entries log "could not be parsed" there (native ColorUtility): ignore.
+- Windows alternative: `dotnet build WildWasteland.csproj` (`LangVersion 7.3`; deploy is opt-in: `-p:Deploy=true`, game closed).
 
 ## 8. Deploy and verify (every build)
 
 1. Staging name must be unique per build: `WildWasteland_<ver><letter>.dll` (same-name transfers have delivered stale bytes).
 2. Game must be closed (Task Manager; Steam re-focuses a lingering process). Copy to `BepInEx\plugins\WildWasteland\WildWasteland.dll`.
 3. md5 the file on disk == build output.
-4. After launch: `Loading [Wild Wasteland x.y.z]` in `BepInEx\LogOutput.log` and the WW startup summary (all modules, state, patches applied).
-5. Run `verification/README.md` (at least A + the scenario touched by the change). Remove ApocaFsmInspector from plugins when done debugging.
-6. Remove the standalone DLLs of absorbed mechanics from Denis's plugins only when he agrees.
+4. Assets: `BepInEx\plugins\WildWasteland\theme\` (shared skin) and `<Id>\` folders (PlayerBody `Models\`, `Sounds\Female\`; NPC `Models\*.bundle`; Guns `Sounds\knifestab.wav`; HUD `Sounds\headshot.mp3`, optional `Textures\`; Patrols templates / textures / sounds / layouts / `WarRig\*.glb`). Not in git: take them from the old plugin folders or the release zip. Patrols copies its own on the first run; the others fall back to the old folders with a warning.
+5. The absorbed standalone plugins live in `BepInEx\disabled-by-WildWasteland\` on Denis's machine (moved, not deleted) so the conflict check passes; their cfg / data files stay in `BepInEx\config\` for the first-run migration. Remove them for good only when Denis agrees.
+6. After launch: `Loading [Wild Wasteland x.y.z]` in `BepInEx\LogOutput.log`, then `[<Id>] started (N patches)` per module and the summary `Wild Wasteland x.y.z modules:` (every module `on`, `core hooks: ...` without `(NOT PATCHED)`, no `PATCH CONFLICTS`).
+7. Run `verification/README.md` (at least A + the scenario touched by the change). Remove ApocaFsmInspector from plugins when done debugging.
 
 ## 9. Releases (only when Denis asks)
 
-- Zip unpacks into `BepInEx\plugins` (`WildWasteland\WildWasteland.dll` + assets + README). Tag `v<version>` == `[BepInPlugin]` version. Zips go to `V:\Repos\Apocalypter\_releases\`.
-- uploads.github.com is blocked from both shells: create the release, Denis attaches the zip (or uses Mod Publisher). Then register/update the entry in Apocasetter-Index (`mods/com.denis.apocalypter.wildwasteland.json`, with `replaces` listing the absorbed standalone GUIDs).
+- Zip unpacks into `BepInEx\plugins` (`WildWasteland\WildWasteland.dll` + `theme\` + `<Id>\` assets + README). Tag `v<version>` == `[BepInPlugin]` version. Zips go to `V:\Repos\Apocalypter\_releases\`.
+- uploads.github.com is blocked from both shells: create the release, Denis attaches the zip (or uses Mod Publisher). Then register/update the entry in Apocasetter-Index (`mods/com.denis.apocalypter.wildwasteland.json`, `pluginFolder: "WildWasteland"`, `replaces` listing the absorbed standalone GUIDs, `optional` the host mods); later mark the absorbed mods `deprecated` with `replacedBy`.
 - README states which standalone mods it replaces and must be removed.
+- Wiki: update the feature pages' Status, run `tools/wiki-index.py`, push the wiki repo (section 11).
 
 ## 10. Definition of done for a ported mechanic
 
-- [ ] Row in `docs/modules.md` filled (source commit, status `in`).
-- [ ] Code under `src/Modules/<Name>/`, no own update loop, no own Harmony instance, no duplicate patch targets (`docs/harmony.md` updated).
-- [ ] Config section with `Enabled`, migration from the old cfg, `ConflictsWith` set.
-- [ ] Save data through SaveBus; old save data migrated.
+- [ ] Row in `docs/modules.md` filled (source commit, status `in`, services, F6/F7, migrations).
+- [ ] Code under `src/Modules/<Name>/`, original class names kept, no own update loop, no own Harmony instance, no duplicate patch targets (`docs/harmony.md` updated).
+- [ ] Config section with `Enabled`, one toggle per feature, migration from the old cfg, `ConflictsWith` set, harness passes.
+- [ ] Save data keys/formats verbatim; old sidecars/keys migrated or still read.
 - [ ] Verification A-C pass; perf scenarios recorded in `docs/perf-log.md`, not slower than the standalone baseline.
-- [ ] Module disables cleanly at runtime (Enabled=false) without leaving patches active in an inconsistent state.
+- [ ] Module disables cleanly at runtime (Enabled=false) and starts again (Init re-runnable).
+- [ ] Port report written (`notes/port-<Id>.md`), wiki pages under `Modules/<Id>/` with metadata tables, `tools/wiki-index.py` run.
+
+## 11. Wiki
+
+- Source: the separate repo `V:\Repos\Apocalypter\WildWastelandWiki` (exact spelling), pushed as the GitHub wiki of this repo. Format: `docs/WIKI-FORMAT.md`. One page per feature with the metadata table (Module / Framework / Status / F6 toggle / F7 tools / Source / Since) as the first table after the title; module overview pages `Modules/<Id>/<Id>-Module.md`; hand-written `Guides/` and `Architecture/`; `Backlog-Candidates.md` for the remaining candidate mods.
+- GitHub wikis flatten folders: every file name must be unique across the wiki and links are `[[Page-Name]]` or `[text](Page-Name)` (no folders, no `.md`).
+- `python3 tools/wiki-index.py <wiki folder>` (no dependencies) parses the metadata tables and regenerates `Home.md`, `_Sidebar.md`, `Feature-Status.md` and `features.json` (the board export). Never edit those four by hand. Statuses: Backlog / Working on / Testing / Verified / Done (= the GitHub project columns). Run it after every wiki change; it fails on an unknown status or a duplicate file name.
