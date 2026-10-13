@@ -1602,6 +1602,10 @@ namespace WildWasteland.Modules.NPC
         private static Npc Make(GameObject owner)
         {
             if (owner.transform.parent != null) return null;         // seated in a car (Apocapatrol), or a part of something
+            // #63: Patrols flags its crew as simple convoy bandits before the body is switched on, so a crew member is seen here in the
+            // moment it spawns, not yet seated. Refused before any work (no scan, no animation framework body built and torn down);
+            // not cached as ignored, so a crew member that dismounts to fight (flagged Fighting) is registered normally.
+            if (SimpleBandits.Has(owner) && !SimpleBandits.Fighting(owner)) { _retry = true; return null; }
             var rb = owner.GetComponent<Rigidbody>();
             if (rb == null || !rb.useGravity) return null;         // flyers (bats, wasps, Terror of the Night) have gravity off
             PlayMakerFSM attack = null, movement = null, detection = null, unstuck = null;
