@@ -3,56 +3,59 @@
   "patrols": [
     {
       "id": "acf5d3370dde43f081082217f3de58ea",
-      "name": "Buzzard Tiny",
+      "name": "Buzzard Scout",
+      "faction": "Scrapyard",
       "minKm": 0,
       "minBosses": 0,
       "chance": 5,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Fast_Blast_Bike"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "e75a27ea1511439894ec01486e9fb340",
-      "name": "Buzzard Small",
+      "name": "Buzzard Small Patrol",
+      "faction": "Scrapyard",
       "minKm": 10,
       "minBosses": 0,
       "chance": 5,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Porcupine",
         "Fast_Blast_Bike",
         "Fast_Blast_Bike"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "d8e44a4078c14163aea04359f8377a05",
-      "name": "Buzzard Medium",
+      "name": "Buzzard Medium Patrol",
+      "faction": "Scrapyard",
       "minKm": 20,
       "minBosses": 1,
       "chance": 10,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Fast_Blast_Bike",
         "Fast_Blast_Bike",
         "Porcupine",
         "Porcupine"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "3981e4cff8124cd29c0f04e93201016b",
-      "name": "Buzzard Big",
+      "name": "Buzzard Big Patrol",
+      "faction": "Scrapyard",
       "minKm": 30,
       "minBosses": 3,
       "chance": 10,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Porcupine",
         "Porcupine",
@@ -60,31 +63,33 @@
         "Spikeback_Motorcycle",
         "Spikeback_Motorcycle"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "basic-bikers",
-      "name": "Basic bikers",
+      "name": "Small bikers gang",
+      "faction": "Scrapyard",
       "minKm": 0,
       "minBosses": 0,
       "chance": 35,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Bike",
         "Bike",
         "Bike"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "advanced-bikers",
-      "name": "Advanced bikers",
+      "name": "Bikers gang",
+      "faction": "Scrapyard",
       "minKm": 20,
       "minBosses": 1,
       "chance": 30,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Bike",
         "Blast_Bike",
@@ -92,16 +97,17 @@
         "Spikeback_Motorcycle",
         "Spikeback_Motorcycle"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "super-bikers",
-      "name": "Super bikers",
+      "name": "Large bikers gang",
+      "faction": "Scrapyard",
       "minKm": 30,
       "minBosses": 3,
       "chance": 25,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Junker_Advanced",
         "Blast_Bike",
@@ -110,16 +116,17 @@
         "Spikeback_Motorcycle",
         "Spikeback_Motorcycle"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "186bed2c2d6d4f8d82fe633f68d257f0",
-      "name": "Chariots",
+      "name": "Chariot patrol",
+      "faction": "Scrapyard",
       "minKm": 40,
       "minBosses": 3,
       "chance": 15,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Chariot",
         "Chariot",
@@ -127,16 +134,17 @@
         "Chariot",
         "Chariot"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "a35ae35051c04229b17d6bd120678acd",
       "name": "Biker Horde",
+      "faction": "Scrapyard",
       "minKm": 60,
       "minBosses": 4,
       "chance": 10,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Chariot",
         "Bike",
@@ -147,60 +155,64 @@
         "Bike",
         "Bike"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "basic-cars",
-      "name": "Scout",
+      "name": "Scrapyard scout",
+      "faction": "Scrapyard",
       "minKm": 0,
       "minBosses": 0,
       "chance": 10,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Piperat_Scout"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "0d3af2727da24a8e8ec0a9bcfff1a469",
       "name": "Small patrol",
+      "faction": "Scrapyard",
       "minKm": 10,
       "minBosses": 0,
       "chance": 15,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Piperat_Bandit",
         "Piperat_Bandit",
         "Piperat_Scout"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "cd12b479eb734eec82261b20e759ffe5",
       "name": "Medium Patrol",
+      "faction": "Scrapyard",
       "minKm": 20,
       "minBosses": 1,
       "chance": 15,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Piperat_Bandit",
         "Piperat_Bandit",
         "Vulture_Gunner",
         "Tiny_Tyrant"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "ac00a5b23a63476089be4c5c254081ae",
       "name": "Large Patrol",
+      "faction": "Scrapyard",
       "minKm": 30,
       "minBosses": 2,
       "chance": 15,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Piperat_Bandit",
         "Piperat_Bandit",
@@ -209,16 +221,17 @@
         "Junker_Advanced",
         "Vulture_Gunner"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "6a60d08117104ffe8226b05602233a22",
       "name": "Warboys Band",
+      "faction": "Scrapyard",
       "minKm": 40,
       "minBosses": 3,
       "chance": 10,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Weak_Warboy",
         "Weak_Warboy",
@@ -226,64 +239,77 @@
         "Warboy_Tyrant",
         "Warboy_Vulture"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "243b27017e1a47459fcb6b0a1588d444",
       "name": "Warboy Army",
+      "faction": "Scrapyard",
       "minKm": 50,
       "minBosses": 4,
       "chance": 15,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Warboy_Armored_Tyrant",
         "Warboy_Tyrant",
-        "Warboy_Tyrant",
         "Junker_Warboy",
         "Junker_Warboy",
-        "Warboy_Bike",
-        "Warboy_Bike",
-        "Warboy_Vulture"
+        "Warboy_Vulture",
+        "Warboy_Bike"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "612abe3afec4428cbd984104ca16d6b7",
-      "name": "War Rig",
+      "name": "Scrapyard War Bus",
+      "faction": "Scrapyard",
       "minKm": 60,
       "minBosses": 5,
       "chance": 10,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "War_rig",
         "Warboy_Armored_Tyrant",
-        "Warboy_Tyrant",
         "Junker_Warboy",
         "Junker_Warboy",
-        "Warboy_Bike",
-        "Warboy_Bike",
         "Warboy_Vulture",
         "Warboy_Vulture"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "6ef05f543f59487698a42929c8a01e5d",
-      "name": "Truck War Rig",
+      "name": "Scrapyard Truck War Rig",
+      "faction": "Scrapyard",
       "minKm": 60,
       "minBosses": 5,
       "chance": 10,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Weak_Warboy",
         "Weak_Warboy",
         "Weak_Warboy",
         "Truck_War_Rig"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
+    },
+    {
+      "id": "e7c4ec41e59a4afe898dd38a04b76139",
+      "name": "Coyote Scout",
+      "faction": "Coyotes",
+      "minKm": 0,
+      "minBosses": 0,
+      "chance": 10,
+      "uniformCargo": false,
+      "templates": [
+        "Coyote_Trader"
+      ],
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "coyote-patrol",
@@ -297,24 +323,23 @@
         "Coyote_PipeRat",
         "Coyote_PipeRat"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     }
   ],
   "convoys": [
     {
       "id": "basic-loot",
-      "name": "Basic loot convoy",
+      "name": "Small convoy",
+      "faction": "Scrapyard",
       "minKm": 5,
       "minBosses": 0,
       "chance": 70,
       "uniformCargo": true,
-      "faction": "Scrapyard",
       "templates": [
         "Rustcargo_Loot",
         "Piperat_Bandit",
         "Tiny_Tyrant",
-        "Blast_Bike",
-        "Blast_Bike",
         "Vulture_Gunner"
       ],
       "allowedCargo": [
@@ -326,22 +351,21 @@
         "truck-weapons",
         "truck-drugs",
         "truck-mechanic",
-        "truck-corpses",
         "truck-rats"
-      ]
+      ],
+      "merchantTypes": []
     },
     {
       "id": "advanced-loot",
-      "name": "Advanced loot convoy",
+      "name": "Convoy",
+      "faction": "Scrapyard",
       "minKm": 20,
       "minBosses": 2,
       "chance": 30,
       "uniformCargo": true,
-      "faction": "Scrapyard",
       "templates": [
         "Rustcargo_Loot_Advanced",
         "Junker_Warboy",
-        "Weak_Warboy",
         "Weak_Warboy",
         "Warboy_Vulture",
         "Vulture_Gunner",
@@ -356,40 +380,38 @@
         "truck-weapons",
         "truck-drugs",
         "truck-mechanic",
-        "truck-corpses",
         "truck-rats"
-      ]
+      ],
+      "merchantTypes": []
     },
     {
       "id": "49f6d10dca3f42b0b43e3b582412e5d8",
       "name": "Huge Convoy",
+      "faction": "Scrapyard",
       "minKm": 30,
       "minBosses": 3,
       "chance": 10,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "Rustcargo_Loot_Advanced",
         "Rustcargo_Loot_Advanced",
-        "Warboy_Armored_Tyrant",
         "Junker_Warboy",
         "Junker_Warboy",
         "Bike_with_Rider_Scrud",
         "Bike_with_Rider_Scrud",
-        "Warboy_Vulture",
-        "Warboy_Vulture",
         "Vulture_Gunner"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
     },
     {
       "id": "44928a87a9fc4dddbff29723e97a886b",
       "name": "War Rig Convoy",
+      "faction": "Scrapyard",
       "minKm": 50,
       "minBosses": 4,
       "chance": 10,
       "uniformCargo": false,
-      "faction": "Scrapyard",
       "templates": [
         "War_rig",
         "Rustcargo_Loot_Advanced",
@@ -401,7 +423,58 @@
         "Vulture_Gunner",
         "Vulture_Gunner"
       ],
-      "allowedCargo": []
+      "allowedCargo": [],
+      "merchantTypes": []
+    }
+  ],
+  "merchants": [
+    {
+      "id": "coyote-merchant",
+      "name": "Organic merchant",
+      "faction": "Coyotes",
+      "minKm": 0,
+      "minBosses": 0,
+      "chance": 10,
+      "uniformCargo": false,
+      "templates": [
+        "Coyote_Trader"
+      ],
+      "allowedCargo": [],
+      "merchantTypes": [
+        "organic"
+      ]
+    },
+    {
+      "id": "coyote-merchant-new",
+      "name": "Merchant",
+      "faction": "Coyotes",
+      "minKm": 0,
+      "minBosses": 0,
+      "chance": 10,
+      "uniformCargo": false,
+      "templates": [
+        "Coyote_Trader"
+      ],
+      "allowedCargo": [],
+      "merchantTypes": [
+        "general"
+      ]
+    },
+    {
+      "id": "coyote-merchant-mechanic",
+      "name": "Mechanic",
+      "faction": "Coyotes",
+      "minKm": 0,
+      "minBosses": 0,
+      "chance": 10,
+      "uniformCargo": false,
+      "templates": [
+        "Coyote_Trader"
+      ],
+      "allowedCargo": [],
+      "merchantTypes": [
+        "mechanic"
+      ]
     }
   ],
   "carLoot": [
@@ -619,19 +692,6 @@
       ]
     },
     {
-      "id": "truck-corpses",
-      "name": "Corpses cargo",
-      "textureKey": "Corpses",
-      "default": true,
-      "spawnChance": 7,
-      "items": [
-        {
-          "id": "Scraffa_Dead",
-          "chance": 400
-        }
-      ]
-    },
-    {
       "id": "truck-rats",
       "name": "Rats cargo",
       "textureKey": "Rats",
@@ -659,7 +719,6 @@
     "Junker_Basic",
     "Bike",
     "PipeRat_Basic",
-    "Bike",
     "Bike_with_Rider_Scrud",
     "Spikeback_Motorcycle",
     "Blast_Bike",
@@ -682,55 +741,5 @@
     "Warboy_Armored_Tyrant",
     "Warboy_Vulture",
     "Truck_War_Rig"
-  ],
-  "merchants": [
-    {
-      "id": "coyote-merchant",
-      "name": "Coyote merchant",
-      "faction": "Coyotes",
-      "minKm": 0,
-      "minBosses": 0,
-      "chance": 10,
-      "uniformCargo": false,
-      "templates": [
-        "Coyote_Trader"
-      ],
-      "allowedCargo": [],
-      "merchantTypes": [
-        "general"
-      ]
-    },
-    {
-      "id": "coyote-merchant-mechanic",
-      "name": "Coyote mechanic",
-      "faction": "Coyotes",
-      "minKm": 0,
-      "minBosses": 0,
-      "chance": 10,
-      "uniformCargo": false,
-      "templates": [
-        "Coyote_Trader"
-      ],
-      "allowedCargo": [],
-      "merchantTypes": [
-        "mechanic"
-      ]
-    },
-    {
-      "id": "coyote-merchant-organic",
-      "name": "Coyote organic mechanic",
-      "faction": "Coyotes",
-      "minKm": 0,
-      "minBosses": 0,
-      "chance": 10,
-      "uniformCargo": false,
-      "templates": [
-        "Coyote_Trader"
-      ],
-      "allowedCargo": [],
-      "merchantTypes": [
-        "organic"
-      ]
-    }
   ]
 }
