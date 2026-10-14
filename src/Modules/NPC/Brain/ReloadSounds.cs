@@ -23,7 +23,10 @@ namespace WildWasteland.Modules.NPC
             var found = new List<AudioClip>();
             try
             {
-                foreach (var f in Resources.FindObjectsOfTypeAll<PlayMakerFSM>())
+                // (WW perf) the player's guns hang under PlayerCameraHolder (.../WeaponsArm/Parent/<key>): its FSMs instead of every FSM in memory
+                // (a 30-100 ms scan on the first reload of each weapon); the old scan only when the rig is not found
+                var holder = Core.GameRefs.PlayerCameraHolder;
+                foreach (var f in holder != null ? holder.GetComponentsInChildren<PlayMakerFSM>(true) : Resources.FindObjectsOfTypeAll<PlayMakerFSM>())
                 {
                     if (f == null || f.FsmName != "AnimSound" || !f.gameObject.scene.IsValid()) continue;
                     if (!string.Equals(f.gameObject.name, key, StringComparison.OrdinalIgnoreCase)) continue;

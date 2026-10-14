@@ -43,7 +43,8 @@ namespace WildWasteland.Modules.NPC
         // (1.4.0) NPCs burrowed or travelling right now: Senses.Visible looks a target up in the agent table only while there is any
         internal static int Hidden;
 
-        internal static void OnSceneLoaded() { _list.Clear(); _effect = null; _clip = null; _nextFind = 0f; _sandLayers.Clear(); Hidden = 0; }
+        // (WW perf) _effect is a prefab asset, not a scene object: it survives scene loads (unloaded -> Unity-null -> found again), no new FSM scan per scene
+        internal static void OnSceneLoaded() { _list.Clear(); if (_effect == null) { _effect = null; _clip = null; } _nextFind = 0f; _sandLayers.Clear(); Hidden = 0; }
 
         // (WW) module shutdown: a hunter under the ground comes back up where it dived (colliders on, not kinematic), every body is raised
         // to its rig's own position, the brain's hold is released

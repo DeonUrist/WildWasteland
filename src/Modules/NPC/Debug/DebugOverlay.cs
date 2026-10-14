@@ -15,11 +15,12 @@ namespace WildWasteland.Modules.NPC
             _lineStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.UpperRight, fontStyle = FontStyle.Bold };
         }
 
-        // debug helpers (Senses ghosts): a diamond and a label at a world point
+        // debug helpers (Senses ghosts): a diamond and a label at a world point; nothing beyond Range m (WW perf: a raid's labels cost 1-4 ms/frame)
+        internal const float Range = 200f;
         internal static void Mark(Vector3 world, Color c, float size)
         {
             var cam = Core.GameRefs.MainCamera; if (cam == null) return;
-            Vector3 sp = cam.WorldToScreenPoint(world); if (sp.z <= 0f) return;
+            Vector3 sp = cam.WorldToScreenPoint(world); if (sp.z <= 0f || sp.z > Range) return;
             EnsureStyles();
             Vector2 centre = new Vector2(sp.x, Screen.height - sp.y);
             var old = GUI.color; GUI.color = c;
@@ -33,7 +34,7 @@ namespace WildWasteland.Modules.NPC
         internal static void Label(Vector3 world, string text, Color c)
         {
             var cam = Core.GameRefs.MainCamera; if (cam == null) return;
-            Vector3 sp = cam.WorldToScreenPoint(world); if (sp.z <= 0f) return;
+            Vector3 sp = cam.WorldToScreenPoint(world); if (sp.z <= 0f || sp.z > Range) return;
             EnsureStyles();
             _floatStyle.fontSize = 12;
             DrawText(new Rect(sp.x - 200f, Screen.height - sp.y - 10f, 400f, 20f), text, _floatStyle, c);

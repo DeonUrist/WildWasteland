@@ -1706,9 +1706,11 @@ namespace WildWasteland.Modules.NPC
         internal static void DrawDebug()
         {
             if (!On || !NpcModule.ShowGhosts.Value) return;
-            float now = Time.time;
+            var cam = Core.GameRefs.MainCamera; if (cam == null) return;
+            float now = Time.time, r2 = DebugOverlay.Range * DebugOverlay.Range; Vector3 cp = cam.transform.position;   // (WW perf) no label strings for what is not drawn
             foreach (var g in _ghosts)
             {
+                if ((g.Pos - cp).sqrMagnitude > r2) continue;
                 var c = g.Retired ? Color.gray : SrcColor[(int)g.Src];
                 DebugOverlay.Mark(g.Pos + Vector3.up * 1.2f, c, 14f);
                 DebugOverlay.Label(g.Pos + Vector3.up * 1.6f, "#" + g.Id + " " + g.Src.ToString().ToUpperInvariant() + (g.Retired ? " (searched)" : "") + " " + g.About + "  (" + g.Holders.Count + ", " + (now - g.Born).ToString("0") + " s)", c);
@@ -1716,7 +1718,7 @@ namespace WildWasteland.Modules.NPC
             foreach (var kv in _agents)
             {
                 var a = kv.Value;
-                if (a.Owner == null || a.State == State.Idle) continue;
+                if (a.Owner == null || a.State == State.Idle || (a.T.position - cp).sqrMagnitude > r2) continue;
                 string s; Color c;
                 switch (a.State)
                 {

@@ -42,15 +42,19 @@ namespace WildWasteland.Modules.NPC
             public byte[] Edges;                    // per cell, 1 = open edge toward +x (bit 0), +z (1), +x+z (2), -x+z (3): no wall or spike between the two cells;
                                                     // bits 4 (+x) and 5 (+z): a HOP edge - a low lip / kerb / step of MaxStep..HopStep a body hops over
             public int[] Comp; public int[] CompSize;   // connected areas (flood fill over open edges) and their sizes
+            public float StepAtBake;                // MaxStep the edges and areas were baked with (Next's area short cut holds while it is not lowered)
             public int Phase;                       // bake: 0 floors, 1 edges, 2 connected areas (sliced too), then Baked
             public int CompScan, CompCur, CompCurSize; public Stack<int> CompStack; public List<int> CompSizes;   // phase 2 progress
             public readonly Dictionary<long, Field> Fields = new Dictionary<long, Field>();
             public Core.NavStructure Pub;                // (WW) the Core.Services.Npc view of it (reused, refreshed by Structures())
         }
 
-        internal sealed class Field { public float[] Dist; public float Made; public bool GoalInside; public int GoalCell; }
+        // (WW perf) a route field is expanded lazily: Build stops once the asking cell is settled and keeps its heap (H) to resume later
+        // (Expand); Settled = the key of the last cell popped: every cell with Dist <= Settled is final (Dijkstra), H == null = complete
+        internal sealed class Field { public float[] Dist; public float Made; public bool GoalInside; public int GoalCell; public Heap H; public float Settled; }
         // distance arrays are big (W*H floats); fields that expire give theirs back here, Build takes one from here when it fits
         private static readonly Dictionary<int, Stack<float[]>> _pool = new Dictionary<int, Stack<float[]>>();
+        private static readonly Stack<Heap> _heaps = new Stack<Heap>();
         private static float[] Rent(int n)
         {
             Stack<float[]> st;
@@ -64,6 +68,7 @@ namespace WildWasteland.Modules.NPC
             if (!_pool.TryGetValue(f.Dist.Length, out st)) _pool[f.Dist.Length] = st = new Stack<float[]>();
             if (st.Count < 8) st.Push(f.Dist);
             f.Dist = null;
+            if (f.H != null) { if (_heaps.Count < 8) _heaps.Push(f.H); f.H = null; }
         }
         private static readonly List<long> _expired = new List<long>();
         internal static bool LogOn { get { return NpcModule.BrainLog != null && NpcModule.BrainLog.Value; } }
@@ -89,7 +94,7 @@ namespace WildWasteland.Modules.NPC
 
         internal static bool On { get { return NpcModule.Running && NpcModule.NavEnabled.Value; } }
 
-        public static void OnSceneLoaded() { _needed = null; Needed = false; _structures.Clear(); _known.Clear(); _baking = null; _debug.Clear(); _floorCols.Clear(); _exits.Clear(); _relaxedFields.Clear(); _pool.Clear(); _player = null; _sweep.Clear(); _nodeKind.Clear(); _outPlans.Clear(); _outMemo.Clear(); _compRing.Clear(); }
+        public static void OnSceneLoaded() { _needed = null; Needed = false; _structures.Clear(); _known.Clear(); _baking = null; _debug.Clear(); _floorCols.Clear(); _exits.Clear(); _relaxedFields.Clear(); _pool.Clear(); _heaps.Clear(); _player = null; _sweep.Clear(); _nodeKind.Clear(); _outPlans.Clear(); _outMemo.Clear(); _compRing.Clear(); }
 
         // ---------- discovery + baking (per frame) ----------
         public static void Tick()
@@ -292,7 +297,7 @@ namespace WildWasteland.Modules.NPC
         {
             s.FloorY = new float[s.W * s.H]; s.Why = new byte[s.W * s.H]; s.Open = new bool[s.W * s.H]; s.FloorHits = new Dictionary<int, int>();
             s.Edges = new byte[s.W * s.H]; s.Comp = null; s.CompSize = null; s.Phase = 0; s.CompStack = null; s.CompSizes = null;
-            s.Next = 0; s.Walkable = 0; s.NoFloor = 0; s.Tight = 0; s.Solid = 0; s.ScanLimit = 0; s.BakeMs = 0f; s.BakeFrames = 0;
+            s.Next = 0; s.Walkable = 0; s.NoFloor = 0; s.Tight = 0; s.Solid = 0; s.ScanLimit = 0; s.BakeMs = 0f; s.BakeFrames = 0; s.StepAtBake = Mathf.Max(0.1f, NpcModule.NavMaxStep.Value);
             // the base height: the floor under the structure's pivot (a ray from well above, first walkable surface below the pivot + 2 m)
             Vector3 p = s.Root.position;
             s.RefY = p.y;
@@ -749,8 +754,12 @@ namespace WildWasteland.Modules.NPC
             }
             if (!goalInside && IsEdge(s, from)) { LastReason = LogOn ? "at the edge of " + s.Name : "-"; return false; }             // already at the edge of the footprint: out we go
 
-            var f = FieldFor(s, goal, goalInside, goalCell);
-            float d0 = f.Dist[from];
+            // (WW perf) the bake's areas use the very step rule of the field (Move = Step + the corner checks): cells of different areas have
+            // no route between them, no need for a field to say so (as long as MaxStep was not lowered live since the bake: a lower step
+            // closes edges the areas still contain)
+            Field f; float d0;
+            if (goalInside && s.Comp != null && s.Comp[from] != s.Comp[goalCell] && Mathf.Max(0.1f, NpcModule.NavMaxStep.Value) >= s.StepAtBake) { f = null; d0 = float.PositiveInfinity; }
+            else { f = FieldFor(s, goal, goalInside, goalCell, from); d0 = f.Dist[from]; }
             if (float.IsInfinity(d0))
             {
                 // The map has no way from here to the goal (the goal is outside and the footprint's outer ring can't be reached, or the goal sits
@@ -762,7 +771,7 @@ namespace WildWasteland.Modules.NPC
                 _tExit = exit; _tRelaxed = relaxed;
                 if (exit < 0 || exit == from) { LastReason = LogOn ? "no way out of this spot on the " + s.Name + " map" + (exit == from ? " (already at the best open spot)" : "") : "-"; return false; }
                 if (relaxed) return RelaxedNext(owner, s, from, exit, pos, goal, out next, out pathLeft);
-                f = FieldFor(s, CellCenter(s, exit % s.W, exit / s.W, s.FloorY[exit]), true, exit);
+                f = FieldFor(s, CellCenter(s, exit % s.W, exit / s.W, s.FloorY[exit]), true, exit, from);
                 d0 = f.Dist[from];
                 if (float.IsInfinity(d0)) { LastReason = LogOn ? "no way to the exit on the " + s.Name + " map" : "-"; return false; }
                 Vector3 ec = CellCenter(s, exit % s.W, exit / s.W, 0f);
@@ -939,7 +948,7 @@ namespace WildWasteland.Modules.NPC
                     }
                     if (exit < 0) { handled = false; return false; }
                 }
-                f = ExitField(s, p.Exit, now);
+                f = ExitField(s, p.Exit, now, 2, from);
                 d0 = f.Dist[from];
                 if (float.IsInfinity(d0) || d0 <= 0f) continue;
                 pick = Descend(s, f, from);
@@ -955,13 +964,16 @@ namespace WildWasteland.Modules.NPC
         }
 
         // the field to one exit cell: seeded at exactly that cell (FieldFor shares a field between goal cells up to 2 cells apart - an exit
-        // whose own line out was never checked)
-        private static Field ExitField(Structure s, int exit, float now)
+        // whose own line out was never checked), expanded up to cell until (< 0: whole). Key space 2: exit cells (OutNext); 3: the NPC's own
+        // cell (ExitCell / PickOutExit read the whole field from it). Seeded at a fixed cell it depends on nothing but the map, so it lives
+        // at least FixedLife s (longer than FieldSeconds, which is for moving goals).
+        private const float FixedLife = 5f;
+        private static Field ExitField(Structure s, int exit, float now, long space, int until)
         {
-            long key = (2L << 40) | (long)(uint)exit;
+            long key = (space << 40) | (long)(uint)exit;
             float life = Mathf.Max(0.2f, NpcModule.NavFieldSeconds.Value);
             Field f;
-            if (s.Fields.TryGetValue(key, out f) && now - f.Made < life) return f;
+            if (s.Fields.TryGetValue(key, out f) && now - f.Made < Mathf.Max(FixedLife, life)) { Expand(s, f, until); return f; }
             if (f != null) { Return(f); s.Fields.Remove(key); }
             if (s.Fields.Count >= 16)
             {
@@ -970,7 +982,7 @@ namespace WildWasteland.Modules.NPC
                 foreach (var k in _expired) { Return(s.Fields[k]); s.Fields.Remove(k); }
                 if (s.Fields.Count >= 32) { foreach (var kv in s.Fields) Return(kv.Value); s.Fields.Clear(); }
             }
-            f = Build(s, Vector3.zero, true, exit);
+            f = Build(s, Vector3.zero, true, exit, until);
             s.Fields[key] = f;
             return f;
         }
@@ -985,7 +997,7 @@ namespace WildWasteland.Modules.NPC
             OutMemo m;
             if (!fresh && _outMemo.TryGetValue(key, out m) && m.S == s && now < m.Until && (m.Exit < 0 || (m.Exit != from && !float.IsNaN(s.FloorY[m.Exit])))) return m.Exit;
             var sw = Stopwatch.StartNew();
-            var mine = Build(s, goal, true, from);
+            var mine = ExitField(s, from, now, 3, -1);      // (WW perf) the whole field from the NPC's cell, shared with ExitCell and every NPC on that cell
             int n = s.W * s.H, cnt = 0;
             if (_ocKeys.Length < n) { _ocKeys = new float[n]; _ocIdx = new int[n]; }
             for (int i = 0; i < n; i++)
@@ -995,7 +1007,6 @@ namespace WildWasteland.Modules.NPC
                 Vector3 c = CellCenter(s, i % s.W, i / s.W, 0f);
                 _ocKeys[cnt] = d + new Vector2(goal.x - c.x, goal.z - c.z).magnitude; _ocIdx[cnt] = i; cnt++;
             }
-            Return(mine);
             Array.Sort(_ocKeys, _ocIdx, 0, cnt);
             int exit = -1, tested = 0;
             for (int k = 0; k < cnt && tested < MaxOutTests; k++)
@@ -1057,8 +1068,8 @@ namespace WildWasteland.Modules.NPC
             float now = Time.time;
             if (_exits.TryGetValue(mkey, out m) && m.S == s && now < m.Until && m.Exit >= 0 && m.Exit < s.W * s.H && !float.IsNaN(s.FloorY[m.Exit])) { exitRelaxed = m.Relaxed; return m.Exit; }
             if (_exits.Count > 64) _exits.Clear();
-            // distances from the NPC over its part of the map
-            var mine = Build(s, goal, true, from);
+            // distances from the NPC over its part of the map (the whole field; cached per cell, shared with PickOutExit)
+            var mine = ExitField(s, from, now, 3, -1);
             int n = s.W * s.H, best = -1, bestAny = -1, size = 0, open = 0; bool edge = false;
             float bc = float.MaxValue, bca = float.MaxValue;
             for (int i = 0; i < n; i++)
@@ -1107,7 +1118,6 @@ namespace WildWasteland.Modules.NPC
                 s.NextDump = now + 20f;
                 Dump(s, "noroute_" + (owner != null ? owner.name.Replace("(Clone)", "") : "npc"), from, goalInside ? goalCell : -1, best, mine.Dist);
             }
-            Return(mine);
             exitRelaxed = relaxed;
             return best;
         }
@@ -1283,7 +1293,8 @@ namespace WildWasteland.Modules.NPC
             }
         }
 
-        private static Field FieldFor(Structure s, Vector3 goal, bool inside, int goalCell)
+        // the field for a goal, expanded (at least) up to cell until - the cell the caller reads
+        private static Field FieldFor(Structure s, Vector3 goal, bool inside, int goalCell, int until)
         {
             float now = Time.time;
             // an inside goal is bucketed to 4 x 4 cells (2 m): a running target doesn't force a new Dijkstra every think; the cached field
@@ -1292,7 +1303,7 @@ namespace WildWasteland.Modules.NPC
                               : (long)1 << 40 | (long)(Mathf.FloorToInt(goal.x / 4f) & 0xFFFFF) << 20 | (long)(Mathf.FloorToInt(goal.z / 4f) & 0xFFFFF);
             float life = Mathf.Max(0.2f, NpcModule.NavFieldSeconds.Value);
             Field f;
-            if (s.Fields.TryGetValue(key, out f) && now - f.Made < life && (!inside || f.GoalCell == goalCell || f.Dist[goalCell] <= s.Cell * 2.9f)) return f;
+            if (s.Fields.TryGetValue(key, out f) && now - f.Made < life && (!inside || f.GoalCell == goalCell || Settle(s, f, goalCell) <= s.Cell * 2.9f)) { Expand(s, f, until); return f; }
             if (f != null) { Return(f); s.Fields.Remove(key); }
             if (s.Fields.Count >= 16)
             {
@@ -1301,18 +1312,21 @@ namespace WildWasteland.Modules.NPC
                 foreach (var k in _expired) { Return(s.Fields[k]); s.Fields.Remove(k); }
                 if (s.Fields.Count >= 32) { foreach (var kv in s.Fields) Return(kv.Value); s.Fields.Clear(); }
             }
-            f = Build(s, goal, inside, goalCell);
+            f = Build(s, goal, inside, goalCell, until);
             s.Fields[key] = f;
             return f;
         }
+        private static float Settle(Structure s, Field f, int cell) { Expand(s, f, cell); return f.Dist[cell]; }
 
-        // Dijkstra over the grid (8 neighbours, no corner cutting, step limit)
-        private static Field Build(Structure s, Vector3 goal, bool inside, int goalCell)
+        // Dijkstra over the grid (8 neighbours, no corner cutting, step limit); the whole reachable area (until < 0) or only up to the cell
+        // until (then Expand resumes it when a farther cell is asked for)
+        private static Field Build(Structure s, Vector3 goal, bool inside, int goalCell) { return Build(s, goal, inside, goalCell, -1); }
+        private static Field Build(Structure s, Vector3 goal, bool inside, int goalCell, int until)
         {
             int n = s.W * s.H;
             var dist = Rent(n);
             for (int i = 0; i < n; i++) dist[i] = float.PositiveInfinity;
-            var heap = _heap ?? (_heap = new Heap(Math.Max(64, n / 4)));    // one heap for every build (main thread only, no nesting): a large map's heap is ~0.7 MB
+            var heap = _heaps.Count > 0 ? _heaps.Pop() : new Heap(Math.Max(64, n / 4));    // a large map's heap is ~0.7 MB: pooled like the arrays
             heap.Clear();
             if (inside) { dist[goalCell] = 0f; heap.Push(goalCell, 0f); }
             else
@@ -1320,6 +1334,19 @@ namespace WildWasteland.Modules.NPC
                 for (int x = 0; x < s.W; x++) { Seed(s, x, 0, goal, dist, heap); Seed(s, x, s.H - 1, goal, dist, heap); }
                 for (int z = 1; z < s.H - 1; z++) { Seed(s, 0, z, goal, dist, heap); Seed(s, s.W - 1, z, goal, dist, heap); }
             }
+            var f = new Field { Dist = dist, Made = Time.time, GoalInside = inside, GoalCell = inside ? goalCell : -1, H = heap, Settled = float.NegativeInfinity };
+            Expand(s, f, until);
+            return f;
+        }
+
+        // resumes the field's Dijkstra until cell until is settled (its distance final: Dist <= Settled) or the area is exhausted (until < 0:
+        // the whole field, for the readers that scan every cell). The pops continue exactly where they stopped, so every settled distance
+        // equals the full build's; Downhill only steps to cells with a smaller distance than a settled one, which are settled too.
+        private static void Expand(Structure s, Field f, int until)
+        {
+            var heap = f.H;
+            if (heap == null || (until >= 0 && f.Dist[until] <= f.Settled)) return;
+            float[] dist = f.Dist;
             float c1 = s.Cell, c2 = s.Cell * 1.41421356f;
             int i0; float d;
             while (heap.Pop(out i0, out d))
@@ -1340,8 +1367,10 @@ namespace WildWasteland.Modules.NPC
                         if (s.Near != null && s.Near[j]) nd += NearCost;
                         if (nd < dist[j]) { dist[j] = nd; heap.Push(j, nd); }
                     }
+                if (i0 == until) { f.Settled = d; return; }
             }
-            return new Field { Dist = dist, Made = Time.time, GoalInside = inside, GoalCell = inside ? goalCell : -1 };
+            f.Settled = float.PositiveInfinity; f.H = null;
+            if (_heaps.Count < 8) _heaps.Push(heap);
         }
 
         private static void Seed(Structure s, int x, int z, Vector3 goal, float[] dist, Heap heap)
@@ -1353,8 +1382,7 @@ namespace WildWasteland.Modules.NPC
             if (d < dist[i]) { dist[i] = d; heap.Push(i, d); }
         }
 
-        private static Heap _heap;
-        private sealed class Heap
+        internal sealed class Heap
         {
             private int[] _i; private float[] _k; private int _n;
             public Heap(int cap) { _i = new int[cap]; _k = new float[cap]; }
@@ -1387,6 +1415,7 @@ namespace WildWasteland.Modules.NPC
         // ---------- debug ([Debug] ShowNav) ----------
         private struct Mark { public Vector3 Next; public string Where; public float At; }
         private static readonly Dictionary<GameObject, Mark> _debug = new Dictionary<GameObject, Mark>();
+        private static readonly List<GameObject> _dead = new List<GameObject>();
         private static void Remember(GameObject owner, Vector3 next, Structure s)
         {
             if (owner == null || !NpcModule.ShowNav.Value) return;
@@ -1698,15 +1727,15 @@ namespace WildWasteland.Modules.NPC
         {
             if (!On || !NpcModule.ShowNav.Value) return;
             var cyan = new Color(0.3f, 0.9f, 1f);
+            var p = Player();
             foreach (var s in _structures)
             {
                 if (s.Root == null) continue;
-                var p = Player();
                 if (p != null && s.Box.SqrDistance(p.position) > 150f * 150f) continue;
                 DebugOverlay.Label(new Vector3(s.Box.center.x, s.RefY + 3f, s.Box.center.z), s.Name + (s.Baked ? (s.FloorY != null ? " baked, " + s.Walkable + "/" + (s.W * s.H) + " cells" : " (bake failed)") : _baking == s ? " baking " + (100 * s.Next / Math.Max(1, s.W * s.H)) + " %" : " not baked"), cyan);
             }
             float now = Time.time;
-            var dead = new List<GameObject>();
+            var dead = _dead; dead.Clear();
             foreach (var kv in _debug)
             {
                 if (kv.Key == null || now - kv.Value.At > 1.5f) { dead.Add(kv.Key); continue; }
