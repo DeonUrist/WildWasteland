@@ -19,6 +19,7 @@ namespace WildWasteland
     [BepInDependency("com.denis.apocalypter.npcai", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.gunplay", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.apocaunloader", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("com.denis.apocalypter.itweenguard", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.gunplayhud", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.apocapatrol", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.warrig", BepInDependency.DependencyFlags.SoftDependency)]
@@ -74,6 +75,8 @@ namespace WildWasteland
                 Core.Runner.Ensure();
                 RegisterCoreJobs();
                 Core.SaveTypes.Install();
+                Core.ITweenGuard.Init();
+                Core.QuietFsm.Install();
                 Core.UI.ToolWindow.Init();
                 SceneManager.sceneLoaded += OnSceneLoaded;
 

@@ -125,4 +125,4 @@ Rules shared by all modules (details per module in the wiki pages and port repor
 | CaveDarkness | com.denis.apocalypter.cavedarkness | 1.0.0 / 2eac97c | candidate | |
 | ultimatetools | com.denis.apocalypter.partadjustment | 2.3.2 / e0abb4c | candidate | Already a merge (Part Adjustment + toolbox); kept the old GUID for save compatibility - absorbing it means a second plugin class (AGENTS.md 5.8 exception). |
 | Apocaclimber | com.denis.apocalypter.apocaclimber | 1.0.2 / (no git) | candidate | Already absorbed: inside PlayerBody (Climbing/), via Apocaplayer 2.3.9. Listed in PlayerBody's ConflictsWith. |
-| iTweenGuard | com.denis.apocalypter.itweenguard | 1.0.0 / d7f5411 | candidate | Tiny fix; could stay standalone. |
+| iTweenGuard | com.denis.apocalypter.itweenguard | 1.0.0 / d7f5411 | in (Core) | Always-on Core fix in `src/Core/ITweenGuard.cs`; no settings (the standalone `LogFixes` line is now Log.Info under VerboseLog, first 20 repairs). Prefix on `iTween.TweenUpdate`; stands down if the standalone plugin is loaded. |

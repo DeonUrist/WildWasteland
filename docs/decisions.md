@@ -6,6 +6,9 @@ Format:
 ## YYYY-MM-DD - title
 Decision. Why. What it rules out.
 
+## 2026-10-14 - iTween Guard and QuietFsm live in Core
+Denis asked for iTweenGuard 1.0.0 (`d7f5411`) in Core and QuietFsm in Core. `Core.ITweenGuard.Init` (Plugin.Awake, after HealthStacks) patches `iTween.TweenUpdate` through `Core.Patches.Patch(null, ...)`: same logic as the standalone mod, with the private `physics`/`kinematic` fields injected by Harmony instead of reflection; no settings (repairs logged under VerboseLog, first 20). Soft dependency on the standalone GUID; the built-in fix stays off while it is loaded. `Core.QuietFsm` is the Patrols class moved unchanged (log line now `[Core]`, Log.Info under VerboseLog) and installed by Core, so the warnings stay hidden when Patrols is off; the existing tools.cfg switch `Patrols / Debug` "Hide missing-FSM warnings" (default true) still drives `QuietFsm.On` (no config change, no migration). Rules out: a module switch for either fix.
+
 ## 2026-10-13 - Modules keep their original class names and nested structure
 Every ported type keeps its class name and nesting (`Crew`, `Patrol+CorpseEject`, `Motorcycles.MotorcycleBalance`, `WarRig.WarRigUnit`, ...); only the namespace changes to `WildWasteland.Modules.<Id>` (plus the documented sub-namespaces `.Motorcycles`, `.WarRig`). Why: Easy Save 3 stores component types as `Namespace.Type, Assembly`; `Core.SaveTypes` maps the old assembly + namespace prefix to the new one by a **pure prefix rename**, so old saves with Apocapatrol / War Rig components load without a per-type table. Rules out: renaming or moving classes that can end up on saved objects, and one module spanning several namespaces. Documented gap: third-party mods that find the old types by reflection (`NPCAI.Api`, `Apocaplayer.ModAPI`, `Gunplay.Api`, `GunplayHUD.Api`, `Apocapatrol.*`) no longer find them; the absorbed consumers use `Core.Services`; a shim is only written when a real consumer appears (docs/modules.md 1.4).
 

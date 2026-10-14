@@ -75,7 +75,6 @@ namespace WildWasteland.Modules.Patrols
             Try("Traffic roads", TrafficRoads.Install);
             Try("Camp status", () => TrafficCamps.Install(this));
             Try("Seated LOS guard", () => SeatedLosGuard.Install(this));
-            Try("QuietFsm", () => QuietFsm.Install(this));
             Try("Suspension", () => Suspension.Install(this));
             Try("Motorcycle save hook (saved motorcycles may not load)", () => MotorcycleIntegration.Install(this));
 

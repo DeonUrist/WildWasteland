@@ -63,6 +63,7 @@ State at 0.1.0: five modules are in (PlayerBody, NPC, Guns, HUD, Patrols - see `
 
 ## 4. Identity
 
+- iTweenGuard 1.0.0 (`d7f5411`) is an always-on Core fix (`src/Core/ITweenGuard.cs`, prefix on `iTween.TweenUpdate`), started in Plugin.Awake right after HealthStacks; no settings; stands down when standalone `com.denis.apocalypter.itweenguard` is loaded. QuietFsm (`src/Core/QuietFsm.cs`, "Could not find FSM" warnings) is also Core-installed from Plugin.Awake (moved out of Patrols, so it works with Patrols off); its switch is still the Patrols tools.cfg entry `Hide missing-FSM warnings`, bound in PatrolsSettings.BindConfig.
 | Item | Value |
 |---|---|
 | Plugin GUID | `com.denis.apocalypter.wildwasteland` |

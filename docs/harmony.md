@@ -44,6 +44,8 @@ Dispatcher semantics = HarmonyX with separate plugins: every prefix handler runs
 | Target | Kind | Handler | Purpose | Hot? | Filter |
 |---|---|---|---|---|---|
 | `ES3Internal.ES3Reflection.GetType(string)` | prefix | `Core.SaveTypes.Prefix` | Maps saved component type strings `Apocapatrol.X, Apocapatrol`, `WarRig.X, WarRig` (and `Apocaplayer`, `NPCAI`, `Gunplay`, `GunplayHUD`, unused today) to `WildWasteland.Modules.<Id>.X` by prefix rename; leaves the lookup to ES3 when the old assembly is still loaded | per saved type string on load (cached per string) | `typeString` has no comma -> vanilla; dictionary cache |
+| `iTween.TweenUpdate` | prefix | `Core.ITweenGuard.Prefix` (iTween Guard 1.0.0, always on) | A physics tween whose Rigidbody was removed (part bolted on, item picked up) is switched to non-physics (`physics`/`kinematic` = false via Harmony `___field` injection) instead of throwing a NullReferenceException every physics tick | per running tween per Update/FixedUpdate | `!___physics` -> return (bool field, no call); then one `GetComponent<Rigidbody>` for physics tweens only. Not patched when the standalone iTweenGuard is loaded |
+| `HutongGames.PlayMaker.ActionHelpers.GetGameObjectFsm(GameObject,string)` | prefix (skip) | `Core.QuietFsm.Prefix` (moved from Patrols 2026-10-14; works with Patrols off) | Same lookup as vanilla without the "Could not find FSM" warning | every FSM lookup | static bool `QuietFsm.On` (= tools.cfg `Patrols / Debug` "Hide missing-FSM warnings", default true) |
 
 Not Harmony but worth knowing: `Core.SaveBus` polls `SaveLoadGame.ActiveStateName` once per frame (no patch on the SaveLoadGame FSM); Apocasetter's `InputBlocker` prefixes every PlayMaker input action and WW's input handlers still run under it (HarmonyX runs all prefixes) - `Core.Hotkeys` early-outs on `ApocasetterBridge.InputBlocked`.
 
@@ -102,7 +104,6 @@ No module-only patches (its single target is the shared `SetFsmFloat.OnEnter` pr
 
 | Target | Kind | Handler | Filter (first line) | Hot? |
 |---|---|---|---|---|
-| `HutongGames.PlayMaker.ActionHelpers.GetGameObjectFsm(GameObject,string)` | prefix (skip) | `QuietFsm.Prefix` (silences "missing FSM" warnings during builds) | static bool `QuietFsm.On` | every FSM lookup |
 | `ArrayListGetRandom.GetRandomItem` | postfix | `WorldSpawning.SplitTrailerSelection.Postfix` (War Rig share of trailer picks) | per-Fsm cached bool (`Dictionary<Fsm,bool>`, cleared on scene load) | every ArrayListGetRandom |
 | `ArrayListGetRandom.OnEnter` | prefix | `WorldSpawning.BeforeTrailerSelection.Prefix` | same cache | same |
 | `PlayMakerFSM.OnEnable` | postfix | `NativeStormProtection.TrackDust.Postfix` | `FsmName != "SandPlayer"` (string, per enable, not per frame) | per FSM enable |
