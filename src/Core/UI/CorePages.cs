@@ -81,6 +81,8 @@ namespace WildWasteland.Core.UI
             Switch(l, "Needs", CleanHudSettings.ShowNeeds);
             Switch(l, "HP and armor numbers", CleanHudSettings.ShowHealthNumbers);
             Switch(l, "Insanity", CleanHudSettings.ShowInsanity);
+            Switch(l, "Convoys on compass", CleanHudSettings.ShowConvoys);
+            Switch(l, "Locations on compass (1 km)", CleanHudSettings.ShowLocations);
             l.Entry(CleanHudSettings.Scale);
             CrosshairSelection(l);
             Switch(l, "Grabbing dot", HudSettings.SelectionDot);
@@ -153,7 +155,8 @@ namespace WildWasteland.Core.UI
         {
             if (ReferenceEquals(e, CleanHudSettings.Enabled) || ReferenceEquals(e, CleanHudSettings.MenuEnabled)
                 || ReferenceEquals(e, CleanHudSettings.ShowNeeds) || ReferenceEquals(e, CleanHudSettings.ShowHealthNumbers)
-                || ReferenceEquals(e, CleanHudSettings.ShowInsanity) || ReferenceEquals(e, CleanHudSettings.Scale)) return false;
+                || ReferenceEquals(e, CleanHudSettings.ShowInsanity) || ReferenceEquals(e, CleanHudSettings.Scale)
+                || ReferenceEquals(e, CleanHudSettings.ShowConvoys) || ReferenceEquals(e, CleanHudSettings.ShowLocations)) return false;
             if (ReferenceEquals(e, Player.Character) || ReferenceEquals(e, Player.BodyFirstPerson) || ReferenceEquals(e, Player.FullBodyOnlyOnFoot)
                 || ReferenceEquals(e, Player.EmptyHandArms) || ReferenceEquals(e, Player.FirstPersonArmsOnlyOnFoot) || ReferenceEquals(e, Player.OcclusionPrototype)
                 || ReferenceEquals(e, Player.ThirdPersonOnFoot) || ReferenceEquals(e, Player.ClimbingOn) || ReferenceEquals(e, Patrols.FuryRoad)

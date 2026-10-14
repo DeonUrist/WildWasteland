@@ -12,11 +12,12 @@ using WildWasteland.Core.UI;
 
 namespace WildWasteland.Modules.CleanHUD
 {
-    public sealed class CleanHudModule : ModuleBase, IVehicleStatusDisplay
+    public sealed class CleanHudModule : ModuleBase, IVehicleStatusDisplay, ICompassMarkers
     {
         internal const string GUID = "com.denis.apocalypter.cleanhud";
         internal static ConfigEntry<bool> Enabled, ShowNeeds, ShowHealthNumbers, ShowInsanity, MenuEnabled, EnableCheats;
         internal static ConfigEntry<float> Scale;
+        internal static ConfigEntry<bool> ShowConvoys, ShowLocations;
         internal static LayoutFile Layout;
         private Hud _hud;
         private Menu _menu;
@@ -36,6 +37,8 @@ namespace WildWasteland.Modules.CleanHUD
             ShowNeeds = Bind(cfg, "HUD", "ShowNeeds", true, "Show water, food and sleep beneath HP and armor.");
             ShowHealthNumbers = Bind(cfg, "HUD", "ShowHealthNumbers", true, "Show HP and armor values inside their bars.");
             ShowInsanity = Bind(cfg, "HUD", "ShowInsanity", true, "Show insanity in the top right while above zero.");
+            ShowConvoys = cfg.Player("HUD", "ShowConvoys", true, "Compass icons and distances for vehicle groups: merchants yellow, Coyotes green, patrols red and convoys orange.");
+            ShowLocations = cfg.Player("HUD", "ShowLocations", true, "Compass icons and distances for native locations within 1 km.");
             MenuEnabled = Bind(cfg, "Menu", "Enabled", true, "Replace the title and pause menus with CleanHUD's menus.");
             EnableCheats = Bind(cfg, "Menu", "EnableCheats", false, "Add the game's cheat controls to the menu settings.");
             bool saved = Legacy.Get(cfg.Main.ConfigFilePath, cfg.Section("HUD"), "Scale") != null;
@@ -77,16 +80,19 @@ namespace WildWasteland.Modules.CleanHUD
             Layout.Poll(true);
             Assets.Preload();
             SceneCache.Reset();
+            LocationMarkers.Init();
             _loadingScreen = new LoadingScreen();
             ApocasaverLoading.Install(this, _loadingScreen);
             _menu = new Menu(_loadingScreen);
             SaveBus.StateChanged += _loadingScreen.StateChanged;
             Services.VehicleStatus = this;
+            Services.Compass = this;
             Core.Patches.Patch(this, AccessTools.Method(typeof(UiTextSetText), "OnEnter"), postfix: AccessTools.Method(typeof(MessageHook), "Postfix"));
             Hooks.GetButtonDownUpdate.Prefix(this, CancelHook.Prefix);
             Scheduler.Sliced(this, "Scene key discovery", 500, SceneCache.Step);
             Scheduler.Sliced(this, "Weapon icons", 500, Assets.RenderStep);
             Scheduler.Interval(this, "Layout reload", 2f, PollLayout);
+            Scheduler.Interval(this, "Location markers", .5f, LocationMarkers.Tick);
             _attach = Scheduler.Interval(this, "HUD attachment", 1f, AttachHud, Phase.LateUpdateLast);
             _attach.RunNow();
             Scheduler.EveryFrame(this, "HUD", TickHud, Phase.LateUpdateLast);
@@ -118,6 +124,12 @@ namespace WildWasteland.Modules.CleanHUD
             _hud.SetVehicleStatus(ignitionOff, handbrakeOn, playing, volume);
             return true;
         }
+        bool ICompassMarkers.VehiclesEnabled { get { return Running && Enabled.Value && ShowConvoys.Value; } }
+        int ICompassMarkers.Add(string owner, Func<Vector3> position, string icon, Color color)
+        { return Api.Compass.Add(owner, position, new Api.Marker { Icon = icon, Color = color, ShowDistance = true }); }
+        bool ICompassMarkers.Exists(int id) { return Api.Compass.Exists(id); }
+        bool ICompassMarkers.Remove(int id) { return Api.Compass.Remove(id); }
+        void ICompassMarkers.RemoveAll(string owner) { Api.Compass.RemoveAll(owner); }
         private void HudChanged(object sender, EventArgs args)
         {
             if (!Running) return;
@@ -131,6 +143,7 @@ namespace WildWasteland.Modules.CleanHUD
         }
         public override void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
+            LocationMarkers.Clear();
             Release(); _menu.Teardown(); SceneCache.Reset(); MessageHook.Clear(); Bindings.Clear(); Assets.SceneLoaded();
             _loadingScreen.SceneLoaded();
             _retry = 0; _attach.RunNow();
@@ -141,6 +154,8 @@ namespace WildWasteland.Modules.CleanHUD
         {
             Running = false; Release();
             if (ReferenceEquals(Services.VehicleStatus, this)) Services.VehicleStatus = null;
+            if (ReferenceEquals(Services.Compass, this)) Services.Compass = null;
+            LocationMarkers.Shutdown();
             if (_menu != null) _menu.Teardown(); _menu = null;
             ApocasaverLoading.Clear();
             if (_loadingScreen != null) { SaveBus.StateChanged -= _loadingScreen.StateChanged; _loadingScreen.Dispose(); _loadingScreen = null; }

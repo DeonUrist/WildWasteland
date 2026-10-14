@@ -101,3 +101,11 @@ Apocasaver displays a dynamic clone of native LoadingScreen on a sorting-31000 c
 ## 0.1.4 RC1 — 2026-10-15
 
 Reviewed 691 bound installed config entries; ten defaults changed, ToggleIronsights explicitly remains false. All current local source changes built in Windows Release with Deploy=true: 0 errors, 7 existing warnings. Installed/build/package DLL MD5 8C700DED83EE607C870BEF46172DC2D3. Defaults introduce no jobs or allocations; CleanHUD runtime profiling and in-game verification remain pending with Denis. Release candidate does not promote feature statuses.
+
+## Compass vehicle/location markers — 2026-10-15
+
+Static audit: two named 0.5 s reconciliation jobs; existing registered traffic/merchant/car lists only. Native mapIcon discovery shares the existing 500 microsecond SceneCache slice; tile-apply callback queues work rather than scanning synchronously. Only locations within 1 km are registered for per-frame compass drawing, whose existing icon/distance pools are reused. No new MonoBehaviour Update loop, resource scan, texture decode, save entry or Harmony patch. Two player config entries (ShowConvoys / ShowLocations), both true. Windows Release build with Deploy=true passed with 0 errors (7 existing warnings); installed/build DLL MD5 4564EBED5E35C24BDED034F98D34E23A. Denis must verify colors, duplicate suppression, retirement/off-on/load behavior and profiler timings in game.
+
+## 0.1.5 RC2 — 2026-10-15
+
+Release contains the compass vehicle-group and native location feeds documented above. Version-only rebuild in Windows Release with Deploy=true passed with 0 errors, 7 existing warnings. Build/installed DLL MD5 E5977630DF9C1D676157FABF3DDC7245. Two new player entries ShowConvoys and ShowLocations default true. Verification and runtime timings remain with Denis; project statuses stay Testing.

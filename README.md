@@ -2,7 +2,7 @@
 
 A BepInEx 5 mod for **Apocalypter** that combines gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
 
-Version **0.1.4 RC1** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
+Version **0.1.5 RC2** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
 
 | Module | What it is | Replaces (remove these from `BepInEx\plugins`) |
 |---|---|---|
@@ -30,13 +30,13 @@ While any of those standalone plugins is still installed, the module that replac
    BepInEx\plugins\WildWasteland\Patrols\             templates, textures, sounds, layouts, WarRig\ models
    ```
    If an asset is missing, WW falls back to the old plugin folder (`plugins\Apocaplayer\`, `plugins\NPCAI\Models\`, `plugins\Gunplay\Sounds\`, `plugins\GunplayHUD\Sounds\`, `plugins\Apocapatrol\`, `plugins\WarRig\`) or to a copy built into the DLL, and warns in the log. Patrols copies its old data into its new folder on the first run.
-4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.4]` and a summary `Wild Wasteland 0.1.4 modules:` with every module `on`.
+4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.5]` and a summary `Wild Wasteland 0.1.5 modules:` with every module `on`.
 
 ## Settings: F6 and F7
 
 - **F6 (Apocasetter → Wild Wasteland)** shows `In-Game Settings Button` (default **F3**) and `Enable Debug` (default false). The Apocasetter opt-in remains enabled and hidden. File: `BepInEx\config\com.denis.apocalypter.wildwasteland.cfg`.
 - **Internal SETTINGS menu** (default **F3**, historically called F7) has **Game** (Player, World, HUD), **Modules** (module switches and performance), and **Debug** when enabled in F6. It pauses the game; Esc or CLOSE closes it. Gameplay values and keys live in `BepInEx\config\WildWasteland\settings.cfg`; technical settings live in `tools.cfg`. Debug includes editors and switches; fine tuning stays in the config file.
-- RC1 defaults match Denis's reviewed setup, except **Toggle Ironsights stays off** as requested. CleanHUD needs and HP/armor numbers are on, the crosshair is Vanilla, observing is toggled, camera occlusion is off, and third-person distances are 3.26 m on foot / 5.38 m in cars. Patrols debug spawn controls and traffic debug-map routes are on. Global verbose logging and Enable Debug remain off. The [complete defaults audit](docs/defaults-rc1.md) records all 691 active entries. Existing config values and first-run standalone migration are preserved.
+- RC1 defaults match Denis's reviewed setup, except **Toggle Ironsights stays off** as requested. CleanHUD needs and HP/armor numbers are on, the crosshair is Vanilla, observing is toggled, camera occlusion is off, and third-person distances are 3.26 m on foot / 5.38 m in cars. Patrols debug spawn controls and traffic debug-map routes are on. Global verbose logging and Enable Debug remain off. The [complete defaults audit](docs/defaults-rc1.md) records the 691 RC1 base entries; RC2 adds ShowConvoys and ShowLocations, both enabled by default. Existing config values and first-run standalone migration are preserved.
 
 Module data and sidecars: `BepInEx\config\WildWasteland\<Module>\`.
 
@@ -83,3 +83,5 @@ MANAGED=... BEPCORE=... sh tools/config-harness/run.sh <outdir> <BepInEx/config 
 - Wiki (features, settings, troubleshooting, architecture): https://github.com/DeonUrist/WildWasteland/wiki (source: `V:\Repos\Apocalypter\WildWastelandWiki`)
 - Project board (feature status: Backlog / Working on / Testing / Verified / Done): the GitHub project of this repository; `Feature-Status` in the wiki mirrors it.
 - Apocasetter / mod index: https://github.com/DeonUrist/Apocasetter-Index
+
+Compass markers (Testing): SETTINGS → Game → HUD has **Convoys on compass** and **Locations on compass (1 km)**, both on by default. Convoys covers all vehicle groups: merchant yellow, Coyotes green, patrols red, convoys orange, with one car icon and distance per group. Nearby native locations use a camp icon and distance within 1 km. These are independent of debug-map routes; toggles are saved as `CleanHUD / HUD` ShowConvoys / ShowLocations in settings.cfg. Existing unrelated compass markers remain available.

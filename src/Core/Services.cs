@@ -20,6 +20,7 @@ namespace WildWasteland.Core
         /// <summary>Hit feedback (HUD module, ex GunplayHUD.Api). Null when HUD is off.</summary>
         public static IHitFeedback Hud;
         public static IVehicleStatusDisplay VehicleStatus;
+        public static ICompassMarkers Compass;
         private static IPoiApi _poi;
         public static event Action<IPoiApi> PoiChanged;
         public static IPoiApi Poi
@@ -68,6 +69,15 @@ namespace WildWasteland.Core
     {
         void Register(PoiDefinition definition);
         void Remove(string id);
+    }
+
+    public interface ICompassMarkers
+    {
+        bool VehiclesEnabled { get; }
+        int Add(string owner, Func<Vector3> position, string icon, Color color);
+        bool Exists(int id);
+        bool Remove(int id);
+        void RemoveAll(string owner);
     }
 
     // ------------------------------------------------------------------ Animation (PlayerBody)

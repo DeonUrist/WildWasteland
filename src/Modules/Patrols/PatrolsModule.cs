@@ -101,6 +101,7 @@ namespace WildWasteland.Modules.Patrols
         public override void Shutdown()
         {
             Running = false;
+            TrafficCompass.Clear();
             if (_onSaveState != null) { SaveBus.StateChanged -= _onSaveState; _onSaveState = null; }
             Try("persistence flush", PatrolPersistence.Uninstall);
             Try("road cache flush", () => { TrafficRoads.Flush(); TrafficRoads.Uninstall(); });
@@ -119,6 +120,7 @@ namespace WildWasteland.Modules.Patrols
 
         public override void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
+            TrafficCompass.Clear();
             PickupCatalog.Invalidate(); PatrolVisibility.Reset(); EnsureRunner(); Patrol.ResetForScene(); PlayerRef.Reset(); PatrolPersistence.ResetForScene(); Convoy.ResetForScene();
             WarRig.WarRigFeature.OnSceneLoaded();
         }
@@ -154,6 +156,8 @@ namespace WildWasteland.Modules.Patrols
         // WorldTraffic, Cleanup (then the absorbed MerchantSpotter editor). Each job re-reads the component (recreated after a scene load).
         void RegisterJobs()
         {
+            TrafficCompass.Clear();
+            Scheduler.Interval(this, "Compass markers", .5f, TrafficCompass.Tick);
             Scheduler.EveryFrame(this, "Patrol.Tick", () => { if (_patrol != null) _patrol.Tick(); });
             Scheduler.EveryFrame(this, "TemplateMenu.Tick", () => { if (_menu != null) _menu.Tick(); });
             Scheduler.EveryFrame(this, "TemplateExporter.Tick", () => { if (_exporter != null) _exporter.Tick(); });

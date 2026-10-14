@@ -17,13 +17,14 @@ namespace WildWasteland.Modules.CleanHUD
         private static readonly List<GameObject> RootBuffer = new List<GameObject>();
         private static readonly List<PlayMakerFSM> FsmBuffer = new List<PlayMakerFSM>();
         private static readonly Stack<Transform> Walk = new Stack<Transform>();
+        private static readonly HashSet<Transform> QueuedRoots = new HashSet<Transform>();
         private static IEnumerator _scan;
         internal static bool KeysReady;
 
         internal static void Clear()
         {
             var disposable = _scan as IDisposable; if (disposable != null) disposable.Dispose();
-            _scan = null; Walk.Clear(); Roots.Clear(); Paths.Clear(); Missing.Clear(); FsMs.Clear(); RootBuffer.Clear(); FsmBuffer.Clear(); KeysReady = false;
+            _scan = null; Walk.Clear(); QueuedRoots.Clear(); Roots.Clear(); Paths.Clear(); Missing.Clear(); FsMs.Clear(); RootBuffer.Clear(); FsmBuffer.Clear(); KeysReady = false;
         }
         internal static void Reset()
         {
@@ -48,13 +49,20 @@ namespace WildWasteland.Modules.CleanHUD
             if (_scan == null) return false;
             if (_scan.MoveNext()) return true;
             var disposable = _scan as IDisposable; if (disposable != null) disposable.Dispose();
-            _scan = null; return false;
+            _scan = null; QueuedRoots.Clear(); return false;
+        }
+        internal static void QueueRoot(Transform root)
+        {
+            if (root == null || !QueuedRoots.Add(root)) return;
+            Walk.Push(root);
+            if (_scan == null) _scan = Discover(false);
         }
         private static IEnumerator Discover(bool keys)
         {
             while (Walk.Count > 0)
             {
                 var t = Walk.Pop(); if (t == null) continue;
+                if (t.name == "mapIcon") LocationMarkers.Observe(t.parent);
                 for (int i = 0; i < t.childCount; i++) Walk.Push(t.GetChild(i));
                 FsmBuffer.Clear(); t.GetComponents<PlayMakerFSM>(FsmBuffer);
                 for (int i = 0; i < FsmBuffer.Count; i++)
