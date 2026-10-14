@@ -2,7 +2,7 @@
 
 A BepInEx 5 mod for **Apocalypter** that combines five gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
 
-Version **0.1.0** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: ported and reviewed, in-game verification pending - treat it as a test build.
+Version **0.1.3** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
 
 | Module | What it is | Replaces (remove these from `BepInEx\plugins`) |
 |---|---|---|
@@ -29,7 +29,7 @@ While any of those standalone plugins is still installed, the module that replac
    BepInEx\plugins\WildWasteland\Patrols\             templates, textures, sounds, layouts, WarRig\ models
    ```
    If an asset is missing, WW falls back to the old plugin folder (`plugins\Apocaplayer\`, `plugins\NPCAI\Models\`, `plugins\Gunplay\Sounds\`, `plugins\GunplayHUD\Sounds\`, `plugins\Apocapatrol\`, `plugins\WarRig\`) or to a copy built into the DLL, and warns in the log. Patrols copies its old data into its new folder on the first run.
-4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.0]` and a summary `Wild Wasteland 0.1.0 modules:` with every module `on`.
+4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.3]` and a summary `Wild Wasteland 0.1.3 modules:` with every module `on`.
 
 ## Settings: F6 and F7
 

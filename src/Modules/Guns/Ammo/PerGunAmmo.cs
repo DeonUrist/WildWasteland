@@ -51,6 +51,10 @@ namespace WildWasteland.Modules.Guns
 
         internal static PlayMakerFSM Find(GameObject go, string name) { return FsmUtil.Find(go, name); }
 
+        // Vanilla's Folk 17 weaponType is "folk17", but its arm model is "folk_17".
+        private static bool MatchesModel(string type, string model)
+        { return type == model || (type == "folk17" && model == "folk_17"); }
+
         internal static bool ArmModel(GameObject go)
         {
             for (var p = go == null ? null : go.transform.parent; p != null; p = p.parent)
@@ -108,7 +112,7 @@ namespace WildWasteland.Modules.Guns
             var itemTypeFsm = Find(item, "weaponType");
             var itemType = itemTypeFsm == null ? null : itemTypeFsm.FsmVariables.GetFsmString("weaponType");
             // Only the physical item selected by vanilla owns this model. Save-time activation of all models is ignored.
-            if (item == null || itemType == null || itemType.Value != model.name || string.IsNullOrEmpty(item.name)) return;
+            if (item == null || itemType == null || !MatchesModel(itemType.Value, model.name) || string.IsNullOrEmpty(item.name)) return;
             if (_item == item && _reload == reload) return;
             AmmoRunner.Unloader.CompleteForSwitch();
             Capture();
@@ -169,7 +173,7 @@ namespace WildWasteland.Modules.Guns
                 for (int i = 0; i < _buf.Count; i++)
                 {
                     var f = _buf[i];
-                    if (f != null && f.FsmName == "Reload" && f.gameObject.name == type.Value && f.gameObject.activeInHierarchy && ArmModel(f.gameObject))
+                    if (f != null && f.FsmName == "Reload" && MatchesModel(type.Value, f.gameObject.name) && f.gameObject.activeInHierarchy && ArmModel(f.gameObject))
                     { Draw(_handler.Fsm, f.gameObject); break; }
                 }
             }

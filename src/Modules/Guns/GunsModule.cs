@@ -39,6 +39,8 @@ namespace WildWasteland.Modules.Guns
         internal static ConfigEntry<bool> OrbsHitWalls;        // ex [Gunplay] MonsterProjectilesHitWalls
         internal static ConfigEntry<bool> MeleeOnWheels;       // new toggle (was always on)
         internal static ConfigEntry<bool> NpcAim;              // new toggle (was always on): gates NpcAimAtBody + LeadTargets
+        internal static ConfigEntry<bool> IronsightWheelZoom, ToggleIronsights;
+        internal static ConfigEntry<bool> SmoothWeaponSwitch;
         // ---------------- F6 values ----------------
         internal static ConfigEntry<float> BulletSpeed, BoltSpeed, HeadshotMultiplier, BossHpPercent;
         internal static ConfigEntry<bool> TracersDraw, PlayerGunTracers, VehicleDamage, WheelPopOff;
@@ -51,6 +53,7 @@ namespace WildWasteland.Modules.Guns
         internal static ConfigEntry<float> FullDamageUntil, NpcHitRadius, NpcShotgunDamage, ShotgunPelletSpread, PlayerBodyRadius, PlayerHeadRadius,
             VehicleDamagePer1, WheelDamageMultiplier, LeadAccuracy, LeadError, MaxLeadTime;
         internal static ConfigEntry<string> StabSound, StabWeapons;
+        internal static ConfigEntry<float> PlayerAccuracy, NpcAccuracy;
 
         /// <summary>EnableGunplay while the module runs (Services.Guns.ProjectilesEnabled, HUD ExternalReporter).</summary>
         internal static bool ProjectilesEnabled { get { return _running && TracersEnabled != null && TracersEnabled.Value; } }
@@ -59,6 +62,8 @@ namespace WildWasteland.Modules.Guns
         /// <summary>[NPC aim] toggle x hidden NpcAimAtBody / LeadTargets.</summary>
         internal static bool AimAtBody { get { return NpcAim.Value && NpcAimAtBody.Value; } }
         internal static bool Lead { get { return NpcAim.Value && LeadTargets.Value; } }
+        // Central accuracy source for spread; future player skills can adjust the base value here.
+        internal static float Accuracy(bool player) { return Mathf.Clamp((player ? PlayerAccuracy : NpcAccuracy).Value, 0f, 100f); }
 
         internal static void Verbose(string message) { if (Core.Log.Verbose) Core.Log.Info("[Guns] " + message); }
 
@@ -84,6 +89,12 @@ namespace WildWasteland.Modules.Guns
                 "Your melee weapons hit wheels hard (x [Guns / Ballistics] WheelDamageMultiplier), also fitted wheels the game's own swing passes through; a wheel brought to 0 pops off (WheelPopOff). Off = the game's own melee damage on wheels (the Patrols module's simpler fitted-wheel melee takes over).");
             NpcAim = cfg.Player("", "NpcAim", true,
                 "NPC gunmen aim at the centre of your body and lead moving targets (tuning in F7 > Weapons & HUD > NPC aim). Off = the game's own aim point (your head) and no lead. Needs Projectiles.");
+            IronsightWheelZoom = cfg.Player("", "IronsightWheelZoom", true,
+                "First person: while aiming down sights, scroll up to zoom in smoothly and down to zoom out. Up to 4x additional zoom, including scopes. Leaving sights resets the zoom.");
+            ToggleIronsights = cfg.Player("", "ToggleIronsights", false,
+                "Press Aim Down Sights once to aim and again to stop aiming. Off: hold the button as in the original game.");
+            SmoothWeaponSwitch = cfg.Player("", "SmoothWeaponSwitch", true,
+                "First person: lower the current weapon and raise the next weapon smoothly when drawing, holstering or switching slots.");
 
             BulletSpeed = cfg.Player("Projectiles", "BulletSpeed", 250f, "Bullet speed, m/s.", new AcceptableValueRange<float>(20f, 2000f));
             BoltSpeed = cfg.Player("Projectiles", "BoltSpeed", 60f, "Crossbow bolt speed, m/s.", new AcceptableValueRange<float>(10f, 500f));
@@ -136,6 +147,10 @@ namespace WildWasteland.Modules.Guns
                 new AcceptableValueRange<float>(0f, 5f));
             ShotgunPellets = cfg.Tool("Ballistics", "ShotgunPellets", 3, "Pellets per vanilla shotgun ray (a vanilla blast is 4 rays; 3 = 12 pellets). The blast's damage is split between them.", new AcceptableValueRange<int>(1, 8));
             ShotgunPelletSpread = cfg.Tool("Ballistics", "ShotgunPelletSpread", 1f, "Extra spread of each pellet, degrees.", new AcceptableValueRange<float>(0f, 15f));
+            PlayerAccuracy = cfg.Tool("Ballistics", "PlayerAccuracy", 100f,
+                "Player shotgun pellet distribution, %: 0 favours the rim, 50 is uniform across the circle, 100 favours the centre. Full spread remains possible; applies to the next shot.", new AcceptableValueRange<float>(0f, 100f));
+            NpcAccuracy = cfg.Tool("Ballistics", "NpcAccuracy", 50f,
+                "NPC shotgun pellet distribution, %: 0 favours the rim, 50 is uniform across the circle, 100 favours the centre. Applies to extra pellet spread; NPC aim and lead are separate.", new AcceptableValueRange<float>(0f, 100f));
             PlayerBodyRadius = cfg.Tool("Ballistics", "PlayerBodyRadius", 0.22f,
                 "Your body as NPC bullets see it: a capsule from your feet to your neck with this radius, m (the game's own collider is only 0.17-0.20).",
                 new AcceptableValueRange<float>(0.05f, 0.6f));
@@ -177,6 +192,8 @@ namespace WildWasteland.Modules.Guns
             Instance = this;
             AssetDir = Dir;
             ResetAll();
+            Ironsights.Init(this);
+            WeaponTransition.Init(this);
 
             // shared targets: Core dispatchers (module init order NPC -> Guns keeps NPCAI's shot counting before the projectile prefix)
             Hooks.SensorRayHitEnter.Prefix(this, Tracers.BeforeRayHit);
@@ -226,6 +243,8 @@ namespace WildWasteland.Modules.Guns
             ArmorOverflow.Reset();
             AmmoRunner.ResetAll();
             PerGunAmmo.ResetAll();
+            Ironsights.Reset();
+            WeaponTransition.Reset();
             PlayerRig.Reset();
             _creates.Clear();
         }
@@ -233,6 +252,8 @@ namespace WildWasteland.Modules.Guns
         public override void Shutdown()
         {
             _running = false;
+            Ironsights.Shutdown();
+            WeaponTransition.Shutdown();
             try { AmmoRunner.Unloader.CompleteForSwitch(); } catch (Exception e) { Core.Log.Error("[Guns] shutdown: unload", e); }
             Tracers.Shutdown();
             Bosses.OnSceneLoaded();
@@ -248,6 +269,8 @@ namespace WildWasteland.Modules.Guns
 
         public override void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
+            Ironsights.Reset();
+            WeaponTransition.Reset();
             Tracers.OnSceneLoaded();
             Bosses.OnSceneLoaded();
             BackpackOverflow.Reset();

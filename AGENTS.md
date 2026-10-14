@@ -47,6 +47,7 @@ State at 0.1.0: five modules are in (PlayerBody, NPC, Guns, HUD, Patrols - see `
 - Project doc `claude/<mod>-notes.md` for every source mod you port.
 - `docs/modules.md` (which mechanics are in, from which commit, services, migrations), `docs/harmony.md` (patch inventory), `docs/decisions.md`, `docs/perf-log.md`, `docs/PORTING.md`, `docs/WIKI-FORMAT.md`, `verification/README.md`.
 - The port reports and the integration review of 0.1.0 (`notes/port-<Id>.md`, `notes/review-integration.md` in the working folder of the porting sessions) explain why the code looks the way it does.
+- Existing local FSM dumps for read-only research are in `V:\Repos\Apocalypter\_tools\wiki\sources\fsm_detail.txt` (action parameters) and `fsm_dump.txt` (states/actions). The `claude/` project docs are not present in this checkout.
 
 ## 3. Ground rules (same as every Apocalypter repo)
 
@@ -225,4 +226,5 @@ MANAGED=... BEPCORE=... sh tools/config-harness/run.sh /path/outdir [BepInEx/con
 
 - Source: the separate repo `V:\Repos\Apocalypter\WildWastelandWiki` (exact spelling), pushed as the GitHub wiki of this repo. Format: `docs/WIKI-FORMAT.md`. One page per feature with the metadata table (Module / Framework / Status / F6 toggle / F7 tools / Source / Since) as the first table after the title; module overview pages `Modules/<Id>/<Id>-Module.md`; hand-written `Guides/` and `Architecture/`; `Backlog-Candidates.md` for the remaining candidate mods.
 - GitHub wikis flatten folders: every file name must be unique across the wiki and links are `[[Page-Name]]` or `[text](Page-Name)` (no folders, no `.md`).
+- If the local wiki folder has no `.git`, clone `https://github.com/DeonUrist/WildWasteland.wiki.git` into a separate staging folder and sync the local Markdown pages there by unique file name before committing and pushing; do not treat the local snapshot as a Git checkout.
 - `python3 tools/wiki-index.py <wiki folder>` (no dependencies) parses the metadata tables and regenerates `Home.md`, `_Sidebar.md`, `Feature-Status.md` and `features.json` (the board export). Never edit those four by hand. Statuses: Backlog / Working on / Testing / Verified / Done (= the GitHub project columns). Run it after every wiki change; it fails on an unknown status or a duplicate file name.

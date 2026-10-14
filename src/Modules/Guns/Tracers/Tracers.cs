@@ -149,7 +149,10 @@ namespace WildWasteland.Modules.Guns
                 {
                     Vector3 d = dir;
                     if (spread > 0f && pellets > 1)
-                        d = Quaternion.AngleAxis(UnityEngine.Random.Range(0f, spread), Vector3.Cross(dir, UnityEngine.Random.onUnitSphere).normalized) * dir;
+                    {
+                        Vector2 offset = SpreadOffset(GunsModule.Accuracy(false)) * Mathf.Tan(spread * Mathf.Deg2Rad);
+                        d = Quaternion.FromToRotation(Vector3.forward, dir) * new Vector3(offset.x, offset.y, 1f).normalized;
+                    }
                     var s = new Shot
                     {
                         Pos = from, Start = from, Dir = d,
@@ -245,6 +248,15 @@ namespace WildWasteland.Modules.Guns
         private static readonly Dictionary<Fsm, bool> _notGun = new Dictionary<Fsm, bool>();
         private static GameObject _player;
 
+        // Unit disk: 50% is uniform by area; 0% weights the rim, 100% weights the centre.
+        internal static Vector2 SpreadOffset(float accuracy)
+        {
+            float exponent = 0.5f * Mathf.Pow(2f, (Mathf.Clamp(accuracy, 0f, 100f) - 50f) / 50f);
+            float radius = Mathf.Pow(UnityEngine.Random.value, exponent);
+            float angle = UnityEngine.Random.value * Mathf.PI * 2f;
+            return new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+        }
+
         // ---------- target velocity (for the lead) ----------
         // The player: sampled every frame by Tick and smoothed over ~0.1 s (works however the game moves them, on foot or in a car).
         // Other targets (NPC vs NPC): their Rigidbody, which the Movement FSM drives with SetVelocity.
@@ -309,7 +321,11 @@ namespace WildWasteland.Modules.Guns
                 for (int p = 0; p < gun.Pellets; p++)
                 {
                     Vector3 l = local;
-                    if (p > 0) l = new Vector3(UnityEngine.Random.Range(-gun.PelletSpread, gun.PelletSpread), UnityEngine.Random.Range(-gun.PelletSpread, gun.PelletSpread), 1f);
+                    if (gun.Kind == Kind.Shotgun)
+                    {
+                        Vector2 offset = SpreadOffset(GunsModule.Accuracy(true)) * gun.PelletSpread;
+                        l = new Vector3(offset.x, offset.y, 1f);
+                    }
                     Vector3 dir = __instance.space == Space.Self ? ft.TransformDirection(l) : l;
                     dir.Normalize();
                     // aim where the camera ray points, fly from the muzzle
@@ -328,6 +344,8 @@ namespace WildWasteland.Modules.Guns
                     if (_shots.Count >= GunsModule.MaxTracers.Value) { Snapshot(); s.Speed = s.Range * 2f; Step(ref s, 1f); }
                     else _shots.Add(s);
                 }
+                if (gun.Kind == Kind.Shotgun && Core.Log.Verbose)
+                    GunsModule.Verbose("Shotgun spread: circular, " + gun.Pellets + " pellets, player accuracy " + GunsModule.Accuracy(true).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "%");
                 Bridge.Shot(_player, muzzle, (int)gun.Kind, true);
                 __instance.Finish();         // vanilla: no hit -> FINISHED -> wait -> next shot, same rhythm
                 return false;

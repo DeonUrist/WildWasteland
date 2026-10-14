@@ -20,27 +20,27 @@ Not separable inside a module (no toggle): motorcycles (bike templates + ES3 pre
 
 ### 1.1 F6 sections (main cfg, Apocasetter page "Wild Wasteland")
 
-Order on the page: `[General]` (Apocasetter), `[Keys]` (all hotkeys of all modules), then one block per module, `[Debug]` last. 136 entries in total (3 Core + 133 modules).
+Order on the page: `[General]` (Apocasetter), `[Keys]` (all hotkeys of all modules), then one block per module, `[Debug]` last. 139 entries in total (3 Core + 136 modules).
 
 | Module | Sections | Entries | Keys in `[Keys]` |
 |---|---|---|---|
 | PlayerBody | `[PlayerBody]`, `[PlayerBody / Climbing]`, `[PlayerBody / Camera culling]`, `[PlayerBody / Vehicles]` | 25 incl. Enabled | Observe (third person), Climb (alternative key), Cassette start/stop, Cassette volume down, Cassette volume up |
 | NPC | `[NPC]`, `[NPC / Detection]`, `[NPC / Pathfinding]` | 21 incl. Enabled | NPC shout, NPC shout modifier, NPC test web |
-| Guns | `[Guns]`, `[Guns / Projectiles]`, `[Guns / Ranges]`, `[Guns / Ammo]`, `[Guns / Bosses]` | 25 incl. Enabled | Guns: unload fallback key |
+| Guns | `[Guns]`, `[Guns / Projectiles]`, `[Guns / Ranges]`, `[Guns / Ammo]`, `[Guns / Bosses]` | 28 incl. Enabled | Guns: unload fallback key |
 | HUD | `[HUD]` | 8 incl. Enabled | - |
 | Patrols | `[Patrols]`, `[Patrols / Spawning]`, `[Patrols / World traffic]`, `[Patrols / Merchants]`, `[Patrols / Combat]`, `[Patrols / Balance]`, `[Patrols / War Rig]` | 41 incl. Enabled | Patrol editor, Template recorder, Bus passenger pose editor, Merchant item editor |
 | Core | `[General] Apocasetter`, `[Keys] Tool window` (F7), `[Debug] VerboseLog` | 3 | Tool window |
 
 The full entry lists with meanings are in the wiki (`Guides/F6-Settings.md`) and in each module's wiki page.
 
-### 1.2 F7 pages (tools.cfg: `BepInEx\config\WildWasteland\tools.cfg`, 543 entries)
+### 1.2 F7 pages (tools.cfg: `BepInEx\config\WildWasteland\tools.cfg`, 545 entries)
 
 | Module | Group | Pages | tools.cfg sections |
 |---|---|---|---|
 | Core | Wild Wasteland; Debug & performance | Modules; Performance, Harmony patches, Core settings | `[Core]` (Frame budget (ms)) |
 | PlayerBody | Player body & animation | Animation framework, Body & model, Camera, Climbing, Weapon pose editor, Car seat poses, First person, Animation tuning, Vehicles & ModAPI | `PlayerBody / Editors`, `/ Camera`, `/ First person`, `/ Car seat`, `/ Camera culling`, `/ Climbing`, `/ Animation`, `/ Animation (fallback clips)`, `/ Model`, `/ ModAPI` (68) |
 | NPC | NPC AI & navigation | AI overview, Detection, Navigation & baking, Brain & combat, Idle & movement, Animals, Hazards (nests, webs, storms), Debug | `NPC / Detection`, `/ Senses`, `/ Nav`, `/ Brain`, `/ NpcAim`, `/ Idle`, `/ Movement`, `/ Behaviour`, `/ Burrow`, `/ Hunt`, `/ Ambush`, `/ Pounce`, `/ Dogs`, `/ Nests`, `/ Webs`, `/ Debug` (179) |
-| Guns | Weapons & HUD | Tracers & projectiles, NPC aim, Ammo & magazines, Armor & overflow, Bosses & orbs | `Guns / Tracers`, `/ Ballistics`, `/ NPC aim`, `/ Melee`, `/ Ammo` (28) |
+| Guns | Weapons & HUD | Tracers & projectiles, NPC aim, Ammo & magazines, Armor & overflow, Bosses & orbs | `Guns / Tracers`, `/ Ballistics`, `/ NPC aim`, `/ Melee`, `/ Ammo` (30) |
 | HUD | Weapons & HUD | HUD | `HUD / Hit feedback`, `/ Crosshair`, `/ Headshot sound` (11) |
 | Patrols | Patrols & vehicles; Seat & turret poses; Merchants | Patrol editor, Template recorder, World traffic, AI overlay & debug spawns, Driving AI tuning, Combat tuning, Spawning & cleanup, War Rig; Turret spot editor, Bus passenger pose editor, Driver & passenger poses, Raider arm & weapon poses, Turret rider pose; Merchant item placement, Merchants | `Patrols / Debug`, `/ Traffic tuning`, `/ Audio`, `/ Combat tuning`, `/ Turret pose`, `/ Driving`, `/ AI`, `/ Loot`, `/ Spawner`, `/ Cleanup`, `/ Pose`, `/ Pose.<Human>` x7 (~256) |
 
@@ -50,7 +50,7 @@ Modules never reference each other's types. Every dependency below goes through 
 
 | Provider | Service | Was (standalone API) | Consumers |
 |---|---|---|---|
-| PlayerBody | `Services.Animation` (`IAnimationApi`, `IAnimatedCharacter`) | `Apocaplayer.ModAPI` / `ModAPI.Character` (+ Apocapatrol's `Rider.Clip` reflection) | NPC (ApBody: gunmen animations, probes every 5 s until Ready; Senses: `PlayerShout` supplies the selected character's yell), Patrols (PlayerAnims: human turrets; `GetClip` for riders) |
+| PlayerBody | `Services.Animation` (`IAnimationApi`, `IAnimatedCharacter`) | `Apocaplayer.ModAPI` / `ModAPI.Character` (+ Apocapatrol's `Rider.Clip` reflection) | NPC (ApBody: gunmen animations, probes every 5 s until Ready; Senses: `PlayerShout` supplies the selected character's yell), Patrols (PlayerAnims: human turrets; `GetClip` for riders), Guns (`PlayerThirdPerson` prevents first-person ironsight wheel zoom from changing third-person zoom; false when PlayerBody is off) |
 | NPC | `Services.Npc` (`INpcApi` + `Structures(list)`) | `NPCAI.Api` v1 + `NPCAI.Nav._structures` reflection | Guns (Bridge: `Shot`, `Hurt`, `SpreadFactor`; built-in spread fallback), Patrols (SimpleBanditBridge; TrafficLocations: camp maps) |
 | Guns | `Services.Guns` (`IGunsApi` + `HandlesFittedWheelMelee`) | `Gunplay.Api` + the `Apocapatrol.MeleeWheels.RaiderHandles` Harmony redirect | NPC (WeaponRanges, VanillaEvents: `ProjectilesEnabled` decides vanilla-observer vs projectile mode), Patrols (MeleeWheels stands down when `HandlesFittedWheelMelee`) |
 | HUD | `Services.Hud` (`IHitFeedback`) | `GunplayHUD.Api` (reflection from Gunplay) | Guns (PlayerHit / PartHit; sets `ExternalReporter = ProjectilesEnabled` every frame and on toggle; HUD seeds it in Init) |

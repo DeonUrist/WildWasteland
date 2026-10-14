@@ -16,6 +16,7 @@ namespace WildWasteland.Modules.PlayerBody
         public int ApiVersion { get { return ModAPI.ApiVersion; } }
         public string Version { get { return ModAPI.PluginVersion; } }
         public bool Ready { get { return ModAPI.Ready; } }
+        public bool PlayerThirdPerson { get { return ThirdPerson.On && !ThirdPerson.Peek; } }
         public AudioClip PlayerShout { get { return FemalePain.PlayerShout; } }
         public bool TryPlayerJumpHead(GameObject player, out Vector3 position) { return BodyRunner.TryPlayerJumpHead(player, out position); }
         public string[] ClipNames() { return ModAPI.ClipNames(); }

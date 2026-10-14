@@ -237,6 +237,7 @@ namespace WildWasteland.Modules.PlayerBody
         private static Vector3 _vPos, _vEye; private static Quaternion _vRot = Quaternion.identity; private static float _vFov = 60f, _gameFov = 60f;
         private static Transform _vCar; private static bool _vCutaway;
         private static bool _projSet; private static int _zoomLogs; private static string _xhairWhat = ""; private static float _xhairDist;
+        private static bool _transparentProjection;
         public static Matrix4x4 Projection(Camera cam, float fov) { return Matrix4x4.Perspective(fov, cam.aspect, cam.nearClipPlane, cam.farClipPlane); }
         private static void ComputeView(Camera cam)
         {
@@ -342,10 +343,14 @@ namespace WildWasteland.Modules.PlayerBody
             // camera's field of view (the right-click zoom's FOV didn't reach the picture, the crosshair assumed it did and drifted toward her)
             if (Mathf.Abs(_vFov - _gameFov) > 1e-3f)
             {
+                if (!_projSet) _transparentProjection = cam.useJitteredProjectionMatrixForTransparentRendering;
+                // Transparent fire must use this zoom projection too, rather than the game's non-jittered projection.
+                cam.useJitteredProjectionMatrixForTransparentRendering = true;
                 cam.projectionMatrix = Projection(cam, _vFov); _projSet = true;
+                if (_zoomLogs < 3 && AimZoom && _zoomK >= 1f) PlayerBodyModule.Info("Aim transparent projection: original=" + _transparentProjection + ", zoom projection=" + cam.useJitteredProjectionMatrixForTransparentRendering + ", raw m11=" + cam.nonJitteredProjectionMatrix.m11.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) + ", zoom m11=" + cam.projectionMatrix.m11.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture));
                 if (_zoomLogs < 3 && AimZoom && _zoomK >= 1f) { _zoomLogs++; PlayerBodyModule.Info("Aim zoom check: game FOV " + _gameFov.ToString("0.0") + " -> view FOV " + _vFov.ToString("0.0") + ", camera FOV now " + cam.fieldOfView.ToString("0.0") + ", physical camera " + cam.usePhysicalProperties + ", crosshair on " + _xhairWhat + " at " + _xhairDist.ToString("0.0") + " m, screen " + CrosshairScreen.ToString("F0")); }
             }
-            else if (_projSet) { cam.ResetProjectionMatrix(); _projSet = false; }
+            else if (_projSet) { cam.useJitteredProjectionMatrixForTransparentRendering = _transparentProjection; cam.ResetProjectionMatrix(); _projSet = false; }
             ViewFov = _vFov;
             Vector3 pos = _vPos; var viewRot = _vRot; Transform car = _vCar; bool cutaway = _vCutaway;
             ViewPos = pos; ViewRot = viewRot; HasView = true;
@@ -483,7 +488,7 @@ namespace WildWasteland.Modules.PlayerBody
         {
             if (_hooked && Game.Cam != null) { Game.Cam.ResetWorldToCameraMatrix(); Game.Cam.ResetCullingMatrix(); }
             if (_fovSet && Game.Cam != null) { Game.Cam.fieldOfView = _gameFov; _fovSet = false; }   // the game's own FOV back for the next frame
-            if (_projSet && Game.Cam != null) { Game.Cam.ResetProjectionMatrix(); _projSet = false; }
+            if (_projSet && Game.Cam != null) { Game.Cam.useJitteredProjectionMatrixForTransparentRendering = _transparentProjection; Game.Cam.ResetProjectionMatrix(); _projSet = false; }
         }
 
         private static void HideViewModel()
@@ -514,7 +519,7 @@ namespace WildWasteland.Modules.PlayerBody
             On = false; Peek = false; Orbiting = false; _orbitOn = false; CarShift = false; HasView = false; AimZoom = false; _zoomK = 0f;
             _deathView = false;
             if (_fovSet && Game.Cam != null) { Game.Cam.fieldOfView = _gameFov; _fovSet = false; }
-            if (_projSet && Game.Cam != null) { Game.Cam.ResetProjectionMatrix(); _projSet = false; }
+            if (_projSet && Game.Cam != null) { Game.Cam.useJitteredProjectionMatrixForTransparentRendering = _transparentProjection; Game.Cam.ResetProjectionMatrix(); _projSet = false; }
             ShowViewModel();
             if (_hooked) { Camera.onPreCull -= PreCull; _hooked = false; if (Game.Cam != null) Game.Cam.ResetCullingMatrix(); }
             if (Game.Cam != null) Game.Cam.ResetWorldToCameraMatrix();
