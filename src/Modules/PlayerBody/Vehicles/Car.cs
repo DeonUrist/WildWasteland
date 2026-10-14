@@ -116,8 +116,8 @@ namespace WildWasteland.Modules.PlayerBody
             if (key == KeyCode.None) return false;
             if (Input.GetKeyDown(key)) return true;
             // Unity reports the physical = key for + on the main keyboard.
-            if (key == KeyCode.Equals || key == KeyCode.Plus) return Input.GetKeyDown(KeyCode.Equals) || Input.GetKeyDown(KeyCode.Plus) || Input.GetKeyDown(KeyCode.KeypadPlus);
-            if (key == KeyCode.Minus) return Input.GetKeyDown(KeyCode.KeypadMinus);
+            if (key == KeyCode.Equals || key == KeyCode.Plus) return GameBindings.KeyDown(KeyCode.Equals) || GameBindings.KeyDown(KeyCode.Plus) || GameBindings.KeyDown(KeyCode.KeypadPlus);
+            if (key == KeyCode.Minus) return GameBindings.KeyDown(KeyCode.KeypadMinus);
             return false;
         }
         private static bool PressedAction(string action, KeyCode fallback)

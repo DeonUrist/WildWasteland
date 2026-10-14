@@ -330,6 +330,7 @@ namespace WildWasteland.Modules.Guns
                 }
             }
             Tracers.OrbSpawned(__instance, made);
+            Tracers.BoltCorpseSpawned(__instance, made);
         }
 
         // ---------------------------------------------------------------- F7

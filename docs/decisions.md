@@ -6,6 +6,15 @@ Format:
 ## YYYY-MM-DD - title
 Decision. Why. What it rules out.
 
+## 2026-10-15 - RC1 defaults reflect installed configuration
+
+Denis requested review of all installed internal and F6 Wild Wasteland settings, saving current choices as defaults, then committing/pushing all local changes and releasing RC1. The audit in `docs/defaults-rc1.md` covers 691 active entries across the public cfg, settings.cfg and tools.cfg; 161 legacy orphan entries are excluded. Ten bind defaults change. Denis explicitly excludes toggle aiming, so ToggleIronsights remains false by default; existing saved values are preserved. The release is a GitHub prerelease titled 0.1.4 RC1, tagged v0.1.4 with numeric Plugin.VERSION 0.1.4 for BepInEx. In-game verification and profiling remain with Denis; board/wiki statuses stay Testing. The package includes all five installed numbered loading screens and their tip catalog.
+
+## 2026-10-14 - CleanHUD is independent of Combat HUD
+CleanHUD 1.5.1 (`119a2f8`) is ported into module `CleanHUD`, immediately after `HUD` in registration order. Combat HUD continues to own crosshairs and hit feedback; CleanHUD owns vitals, weapon/quick slots, strip compass, message log and title/pause menus. The standalone CleanHUD GUID is a soft dependency and conflict, never another plugin class. F7 Game / HUD exposes its player controls; the cheat-menu switch stays in Debug. Its public compass types retain class names under the documented `.Api` namespace; standalone `CleanHUD.Api` consumers require migration, no compatibility shim is registered.
+
+DLL key scanning is background-only without joins; scene FSM/key discovery and modded icon CPU work use 500 microsecond scheduler slices. Scene paths, hidden UI, slot FSM variables and unchanged text values are cached. Native images decode once at module startup. Runtime-generated icons appear when their queued render finishes. Slicing cannot preempt a Unity camera render, texture upload or GPU readback; those first-use costs require an in-game measurement. No standalone baseline was available locally, and agents must not run the game.
+
 ## 2026-10-14 - iTween Guard and QuietFsm live in Core
 Denis asked for iTweenGuard 1.0.0 (`d7f5411`) in Core and QuietFsm in Core. `Core.ITweenGuard.Init` (Plugin.Awake, after HealthStacks) patches `iTween.TweenUpdate` through `Core.Patches.Patch(null, ...)`: same logic as the standalone mod, with the private `physics`/`kinematic` fields injected by Harmony instead of reflection; no settings (repairs logged under VerboseLog, first 20). Soft dependency on the standalone GUID; the built-in fix stays off while it is loaded. `Core.QuietFsm` is the Patrols class moved unchanged (log line now `[Core]`, Log.Info under VerboseLog) and installed by Core, so the warnings stay hidden when Patrols is off; the existing tools.cfg switch `Patrols / Debug` "Hide missing-FSM warnings" (default true) still drives `QuietFsm.On` (no config change, no migration). Rules out: a module switch for either fix.
 

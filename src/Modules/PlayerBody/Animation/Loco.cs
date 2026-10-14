@@ -310,9 +310,9 @@ namespace WildWasteland.Modules.PlayerBody
                 if (_aimDirty) { AimLift.Save(); _aimDirty = false; }
                 return;
             }
-            float lift = (Input.GetKey(KeyCode.PageUp) ? 1f : 0f) - (Input.GetKey(KeyCode.PageDown) ? 1f : 0f);
-            float head = (Input.GetKey(KeyCode.End) ? 1f : 0f) - (Input.GetKey(KeyCode.Home) ? 1f : 0f);
-            float fwd = (Input.GetKey(KeyCode.Insert) ? 1f : 0f) - (Input.GetKey(KeyCode.Delete) ? 1f : 0f);
+            float lift = (GameBindings.KeyHeld(KeyCode.PageUp) ? 1f : 0f) - (GameBindings.KeyHeld(KeyCode.PageDown) ? 1f : 0f);
+            float head = (GameBindings.KeyHeld(KeyCode.End) ? 1f : 0f) - (GameBindings.KeyHeld(KeyCode.Home) ? 1f : 0f);
+            float fwd = (GameBindings.KeyHeld(KeyCode.Insert) ? 1f : 0f) - (GameBindings.KeyHeld(KeyCode.Delete) ? 1f : 0f);
             var v = (float[])AimLift.Get(weapon, clip, _aimCrouched).Clone();
             if (lift != 0f || head != 0f || fwd != 0f)
             {
@@ -336,6 +336,41 @@ namespace WildWasteland.Modules.PlayerBody
             }
             GunPose.AimLine = "AIM LIFT " + weapon + " | " + clip + (_aimCrouched ? " CROUCHED" : " STANDING") + ": lift " + v[0].ToString("0.0") + " cm, head down " + v[1].ToString("0") + "°, forward " + v[2].ToString("0.0") + " cm"
                 + (AimLift.Own(weapon, clip, _aimCrouched) ? "" : _aimCrouched && AimLift.Own(weapon, clip, false) ? " (from standing)" : " (default)") + gap + "\nPage Up/Down = lift, Home/End = head, Insert/Delete = forward. Saved in config/WildWasteland/PlayerBody/aim-lift.txt";
+        }
+
+        private readonly float[] _armPose = new float[10];
+        private readonly Dictionary<string, float[]> _armPoseCache = new Dictionary<string, float[]>();
+        private string _armPoseWeapon; private bool _armPoseCrouched; private int _armPoseRevision = -1;
+        private static readonly string[] PoseArmUpper = { "mixamorig:LeftArm", "mixamorig:RightArm" };
+        private static readonly string[] PoseArmLower = { "mixamorig:LeftForeArm", "mixamorig:RightForeArm" };
+        private static readonly string[] PoseArmHand = { "mixamorig:LeftHand", "mixamorig:RightHand" };
+        private void ApplyArmPose(string weapon)
+        {
+            PoseWeights();
+            bool crouched = _previewName != null ? _previewName.Contains("Crouch") : _crouch > 0.5f;
+            AimLift.EditWeapon = GunPose.Editing && ThirdPerson.On ? weapon : null;
+            AimLift.EditClip = DominantPose(); AimLift.EditCrouched = crouched; AimLift.EditFrame = Time.frameCount;
+            Array.Clear(_armPose, 0, _armPose.Length);
+            if (string.IsNullOrEmpty(weapon)) return;
+            if (_armPoseWeapon != weapon || _armPoseCrouched != crouched || _armPoseRevision != AimLift.Revision)
+            {
+                _armPoseCache.Clear(); _armPoseWeapon = weapon; _armPoseCrouched = crouched; _armPoseRevision = AimLift.Revision;
+            }
+            foreach (var pose in _poseWn)
+            {
+                float[] v;
+                if (!_armPoseCache.TryGetValue(pose.Key, out v)) _armPoseCache[pose.Key] = v = AimLift.Get(weapon, pose.Key, crouched);
+                for (int i = 0; i < _armPose.Length; i++) _armPose[i] += v[i + 3] * pose.Value;
+            }
+            for (int arm = 0; arm < 2; arm++)
+            {
+                int i = arm * 5;
+                var d = (_anim.up * _armPose[i] + _anim.right * _armPose[i + 1]) * 0.01f;
+                if (d.sqrMagnitude > 1e-8f) LiftArm(PoseArmUpper[arm], PoseArmLower[arm], PoseArmHand[arm], d);
+                if (Mathf.Abs(_armPose[i + 2]) > 0.01f) Turn(PoseArmUpper[arm], Vector3.right, _armPose[i + 2]);
+                if (Mathf.Abs(_armPose[i + 3]) > 0.01f) Turn(PoseArmUpper[arm], Vector3.up, _armPose[i + 3]);
+                if (Mathf.Abs(_armPose[i + 4]) > 0.01f) Turn(PoseArmUpper[arm], Vector3.forward, _armPose[i + 4]);
+            }
         }
         private float _pumpUntil; private bool _cocking, _pumpStart;
         private int _locoKind;
@@ -775,6 +810,7 @@ namespace WildWasteland.Modules.PlayerBody
             ApplyAimLift(weapon, kind, dt);
             ThrowAim();
             PunchAim();
+            ApplyArmPose(weapon);
             PoseProp(kind, yaw);
             LanceAlign(kind);
         }

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "screens": [
+    {
+      "image": "Screen1.png",
+      "text": "To survive in the wasteland, always pay attention to your surroundings."
+    },
+    {
+      "image": "Screen2.png",
+      "text": "Beware of warboys. They use blast lances and can jump to their death."
+    },
+    {
+      "image": "Screen3.png",
+      "text": "Enemy vehicle patrols roam the wastes. Stay away, fight or flee."
+    },
+    {
+      "image": "Screen4.png",
+      "text": "To stop a travelling Coyotes merchant, honk or yell."
+    },
+    {
+      "image": "Screen5.png",
+      "text": "Beware! In Wild Wasteland, animals and mutants have learnt some new tricks."
+    }
+  ]
+}

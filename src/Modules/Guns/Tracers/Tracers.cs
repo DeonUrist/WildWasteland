@@ -33,6 +33,7 @@ namespace WildWasteland.Modules.Guns
             public float Speed, Range, Damage, Travelled;
             public GameObject Target, ShooterRoot;
             public GameObject Impact;
+            public Transform Visual;
             public string EventName, EventFsm;
             public bool Bolt, Shotgun, Alive;
             public int Layers, DetectLayers;
@@ -64,6 +65,7 @@ namespace WildWasteland.Modules.Guns
         private sealed class ShooterInfo
         {
             public Transform Muzzle, Weapon;
+            public Vector3 MuzzleLocal;
             public GameObject Owner;
             public Kind Kind;
             public bool IsGun;
@@ -85,6 +87,7 @@ namespace WildWasteland.Modules.Guns
         private static readonly List<KeyValuePair<GameObject, Vector3>> _popped = new List<KeyValuePair<GameObject, Vector3>>();
         private static int _poppedFrame;
         private static readonly HashSet<GameObject> _forceFree = new HashSet<GameObject>();   // popped wheels: freed by hand if CheckTag doesn't
+        private static int _playerMuzzleLogs;
 
         // ---------- the hook ----------
         // Harmony prefix on Micosmo.SensorToolkit.PlayMaker.SensorGetDetectionRayHit.OnEnter. false = vanilla skipped.
@@ -119,7 +122,7 @@ namespace WildWasteland.Modules.Guns
                 if (cap0 != null && GunsModule.AimAtBody) aim = cap0.transform.TransformPoint(cap0.center);
                 else aim = (head != null ? head : target).transform.position;
                 Transform muzzle = MuzzleOf(info, owner);
-                Vector3 from = muzzle != null ? muzzle.position : fsm.GetOwnerDefaultTarget(__instance.gameObject).transform.position;
+                Vector3 from = muzzle != null ? muzzle.TransformPoint(info.MuzzleLocal) : fsm.GetOwnerDefaultTarget(__instance.gameObject).transform.position;
                 float speed0 = info.Kind == Kind.Crossbow ? GunsModule.BoltSpeed.Value : GunsModule.BulletSpeed.Value;
                 // lead a moving target ([NpcAim] LeadTargets): where it will be when the bullet arrives, as well as this NPC can guess
                 if (GunsModule.Lead)
@@ -173,7 +176,8 @@ namespace WildWasteland.Modules.Guns
                         Layers = info.ObstructLayers | info.DetectLayers,
                         DetectLayers = info.DetectLayers,
                     };
-                    if (_shots.Count >= GunsModule.MaxTracers.Value) { Snapshot(); s.Speed = s.Range * 2f; Step(ref s, 1f); }   // over the cap: hitscan
+                    LaunchBolt(ref s);
+                    if (_shots.Count >= GunsModule.MaxTracers.Value) { Snapshot(); s.Speed = s.Range * 2f; Step(ref s, 1f); if (s.Visual != null) UnityEngine.Object.Destroy(s.Visual.gameObject); }   // over the cap: hitscan
                     else _shots.Add(s);
                 }
 
@@ -190,6 +194,7 @@ namespace WildWasteland.Modules.Guns
 
         public static void OnSceneLoaded()
         {
+            ClearBolts();
             _shots.Clear();
             _shooters.Clear();
             _counts.Clear();
@@ -201,6 +206,7 @@ namespace WildWasteland.Modules.Guns
             _notGun.Clear();
             _heads.Clear();
             _player = null;
+            _playerMuzzleLogs = 0;
             _playerTracked = false;
             _orbs.Clear();
             _pushes.Clear();
@@ -319,6 +325,12 @@ namespace WildWasteland.Modules.Guns
 
                 Vector3 muzzle = gun.Muzzle != null && gun.Muzzle.gameObject.activeInHierarchy ? gun.Muzzle.position
                                : origin + ft.forward * 0.4f - ft.up * 0.15f;
+                Vector3 bodyMuzzle;
+                if (Services.Animation != null && Services.Animation.TryPlayerWeaponMuzzle(out bodyMuzzle))
+                {
+                    muzzle = bodyMuzzle;
+                    if (Core.Log.Verbose && _playerMuzzleLogs++ < 3) GunsModule.Verbose("Player shot origin: visible body muzzle " + muzzle);
+                }
                 for (int p = 0; p < gun.Pellets; p++)
                 {
                     Vector3 l = local;
@@ -342,7 +354,8 @@ namespace WildWasteland.Modules.Guns
                         Layers = gun.Layers, Gun = gun, Player = _player,
                         ShooterRoot = ft.root.gameObject,
                     };
-                    if (_shots.Count >= GunsModule.MaxTracers.Value) { Snapshot(); s.Speed = s.Range * 2f; Step(ref s, 1f); }
+                    LaunchBolt(ref s);
+                    if (_shots.Count >= GunsModule.MaxTracers.Value) { Snapshot(); s.Speed = s.Range * 2f; Step(ref s, 1f); if (s.Visual != null) UnityEngine.Object.Destroy(s.Visual.gameObject); }
                     else _shots.Add(s);
                 }
                 if (gun.Kind == Kind.Shotgun && Core.Log.Verbose)
@@ -402,6 +415,9 @@ namespace WildWasteland.Modules.Guns
                 }
             }
             gun.Kind = shotgun ? Kind.Shotgun : Classify(go.name);
+            if (gun.Kind == Kind.Crossbow) gun.DamageMultiplier = 2.5f;
+            else if (go.name.StartsWith("redmark_m11", StringComparison.OrdinalIgnoreCase)) gun.DamageMultiplier = 100f / 90f;
+            if (gun.Kind == Kind.Crossbow) CacheBoltModel(go.transform);
             if (gun.Kind == Kind.Shotgun && !shotgun) gun.Kind = Kind.Rifle;      // a "rochester" without pellets is not a shotgun
             if (Core.Log.Verbose) GunsModule.Verbose("Tracers: player gun " + go.name + " = " + gun.Kind + (shotgun ? ", " + gun.Pellets + " pellets" : "") + (gun.Muzzle != null ? "" : ", no muzzle point"));
             return gun;
@@ -429,7 +445,7 @@ namespace WildWasteland.Modules.Guns
         // (the NPC head capsules, the player's head sphere) - vanilla raycasts hit those (QueriesHitTriggers), FireDamageCollider
         // and other triggers are not bodies. Cached per collider.
         private static readonly Dictionary<int, bool> _counts = new Dictionary<int, bool>();
-        private static bool Counts(Collider c)
+        internal static bool Counts(Collider c)
         {
             if (!c.isTrigger) return true;
             bool ok;
@@ -663,6 +679,17 @@ namespace WildWasteland.Modules.Guns
             if (info.Weapon == null) return info;    // a monster: vanilla
             info.IsGun = true;
             info.Kind = Classify(info.Weapon.name);
+            if (info.Kind == Kind.Crossbow)
+            {
+                CacheBoltModel(info.Weapon);
+                foreach (var mf in info.Weapon.GetComponentsInChildren<MeshFilter>(true))
+                {
+                    if (mf.name != "arrow" || mf.sharedMesh == null) continue;
+                    var b = mf.sharedMesh.bounds; info.Muzzle = mf.transform; info.MuzzleLocal = new Vector3(b.center.x, b.center.y, b.max.z);
+                    if (Core.Log.Verbose) GunsModule.Verbose("NPC crossbow shot origin: native arrow tip on " + owner.name);
+                    break;
+                }
+            }
 
             // the vanilla attack state: impact prefab, damage, event
             var st = fsm.GetState("attack");
@@ -1122,6 +1149,7 @@ namespace WildWasteland.Modules.Guns
         public static void Tick()
         {
             float dt = Time.deltaTime;
+            TickBolts();
             Snapshot();
             if (GunsModule.MeleeOnWheels.Value)                          // (WW) [Guns] MeleeOnWheels
                 try { SwingAtFittedWheels(); } catch (Exception e) { Core.Log.Error("[Guns] Tracers melee (fitted wheels)", e); PlayerRig.Reset(); }
@@ -1134,7 +1162,8 @@ namespace WildWasteland.Modules.Guns
                 var s = _shots[i];
                 try { Step(ref s, dt); }
                 catch (Exception e) { s.Alive = false; Core.Log.Error("[Guns] Tracers: bullet dropped", e); }
-                if (s.Alive) _shots[i] = s; else _shots.RemoveAt(i);
+                if (s.Alive) { MoveBolt(ref s); _shots[i] = s; }
+                else { if (s.Visual != null) UnityEngine.Object.Destroy(s.Visual.gameObject); _shots.RemoveAt(i); }
             }
             if (Time.unscaledTime >= _nextSweep) { _nextSweep = Time.unscaledTime + 30f; Sweep(); }
             if (_pushes.Count > 0)
@@ -1230,6 +1259,7 @@ namespace WildWasteland.Modules.Guns
                     float pd = s.Travelled + h.distance;
                     float pf = Falloff(ref s, pd) * s.DmgMult * s.Gun.DamageMultiplier;
                     if (Penetrates(ref s, col, h, (s.Gun.Damage != null ? s.Gun.Damage.Value : 0f) * pf)) continue;
+                    if (s.Bolt) LandBolt(ref s, h.point, h.normal, tr, col is TerrainCollider || Creature(tr) != null || IsCorpse(col.gameObject));
                     PlayerHit(ref s, h, pf);
                     MetalSparks(col, h.point, h.normal);
                     HitWorld(ref s, col, h.point, (s.Gun.Damage != null ? s.Gun.Damage.Value : 0f) * pf);   // vehicle part rules
@@ -1243,6 +1273,7 @@ namespace WildWasteland.Modules.Guns
                 float dist = s.Travelled + h.distance;
                 float falloff = Falloff(ref s, dist) * s.DmgMult;
                 if (!onTarget && Penetrates(ref s, col, h, s.Damage * falloff)) continue;
+                if (s.Bolt) LandBolt(ref s, h.point, h.normal, tr, col is TerrainCollider || Creature(tr) != null || IsCorpse(col.gameObject));
                 if (onTarget) HitTarget(ref s, h.point, s.Damage * falloff, col.isTrigger ? col.gameObject : s.Target, dist);   // a head trigger: its own Bodypart (x2)
                 else if (s.Impact != null && IsCorpse(col.gameObject))     // (1.5.2) an NPC's bullet in a corpse: the shooter's own blood impact, not dust
                 {
@@ -1259,6 +1290,7 @@ namespace WildWasteland.Modules.Guns
                 float dist = s.Travelled + vt;
                 float falloff = Falloff(ref s, dist) * s.DmgMult;
                 float mult = vhead ? _headMult : 1f;
+                if (s.Bolt) LandBolt(ref s, s.Pos + s.Dir * vt, -s.Dir, vhead && s.Head != null ? s.Head.transform : s.Target.transform, true);
                 if (vhead && Core.Log.Verbose) GunsModule.Verbose("Tracers: headshot on " + s.Target.name + " at " + dist.ToString("0.0") + " m");
                 HitTarget(ref s, s.Pos + s.Dir * vt, s.Damage * falloff * mult, vhead && s.Head != null ? s.Head : s.Target, dist);
                 s.Pos += s.Dir * vt;
@@ -1555,6 +1587,7 @@ namespace WildWasteland.Modules.Guns
             var part = OwningPart(col.transform);
             if (part == null) return false;
             Mat m = MatOf(part.name);
+            if (s.Bolt && m != Mat.Glass) return false;
             if (m == Mat.None) return false;
             float[] t = m == Mat.Glass ? PassGlass : m == Mat.Grid ? PassGrid : m == Mat.Sheet ? PassSheet : PassArmour;
             int ki = (int)s.Kind; if (ki < 0 || ki >= t.Length) ki = 0;
@@ -1692,6 +1725,7 @@ namespace WildWasteland.Modules.Guns
                 bool tracers = GunsModule.TracersDraw.Value, mine = GunsModule.PlayerGunTracers.Value;
                 foreach (var s in _shots)
                 {
+                    if (s.Bolt) continue;
                     if (!tracers && !mine && !s.Bolt) continue;
                     if (!s.Bolt && (!tracers || (s.Gun != null && !mine))) continue;      // [Gunplay] Tracers / PlayerGunTracers (bolts always show)
                     float len = Mathf.Min(s.Bolt ? bl : tl, s.Travelled);

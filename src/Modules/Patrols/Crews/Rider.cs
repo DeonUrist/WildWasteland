@@ -287,7 +287,7 @@ namespace WildWasteland.Modules.Patrols
 
         // "Witness me!" - Sounds/witness-me.wav (16-bit PCM, normalised to the game's human_hurt voice: -23.8 LUFS, peak -5.6 dBTP) as a
         // 3D voice on the rider
-        private static AudioClip _scream; private static bool _screamLooked;
+        private static readonly List<AudioClip> _screams = new List<AudioClip>(4); private static bool _screamLooked;
         // plays the scream; returns its length (1.5 s when the wav is missing: the rider still pauses before leaping)
         internal static float Scream(Transform at)
         {
@@ -296,20 +296,27 @@ namespace WildWasteland.Modules.Patrols
                 if (!_screamLooked)
                 {
                     _screamLooked = true;
-                    var path = System.IO.Path.Combine(PatrolsModule.DataDir, "Sounds", "witness-me.wav");
-                    _scream = Wav.Load(path, "witness-me", 1.8f);   // +5 dB over the normalised file (peak about -0.5 dBFS)
-                    if (_scream == null) Core.Log.Warn("[Patrols] " + "Rider: " + path + " not found or not a PCM wav - the rider leaps silently");
+                    for (int i = 1; i <= 4; i++)
+                    {
+                        string clipName = i == 1 ? "witness-me" : "witness-me" + i;
+                        var path = System.IO.Path.Combine(PatrolsModule.DataDir, "Sounds", clipName + ".wav");
+                        var clip = Wav.Load(path, clipName, 1.8f);   // +5 dB over the normalised file (peak about -0.5 dBFS)
+                        if (clip != null) _screams.Add(clip);
+                        else Core.Log.Warn("[Patrols] " + "Rider: " + path + " not found or not a PCM wav - skipped");
+                    }
                 }
-                if (_scream == null || at == null) return 1.5f;
+                if (_screams.Count == 0 || at == null) return 1.5f;
+                var scream = _screams[UnityEngine.Random.Range(0, _screams.Count)];
                 var go = new GameObject("Apocapatrol.WitnessMe");
                 go.transform.SetParent(at, false); go.transform.localPosition = Vector3.up * 1.6f;
                 var src = go.AddComponent<AudioSource>();
                 // loud and far: full volume within 35 m, still clearly heard at 200+ m (mostly 3D, a little 2D so distance doesn't swallow it)
-                src.clip = _scream; src.spatialBlend = 0.8f; src.rolloffMode = AudioRolloffMode.Logarithmic; src.minDistance = 35f; src.maxDistance = 400f;
+                src.clip = scream; src.spatialBlend = 0.8f; src.rolloffMode = AudioRolloffMode.Logarithmic; src.minDistance = 35f; src.maxDistance = 400f;
                 src.volume = 1f; src.priority = 64; src.dopplerLevel = 0f;
                 src.Play();
-                UnityEngine.Object.Destroy(go, _scream.length + 0.2f);
-                return _scream.length;
+                UnityEngine.Object.Destroy(go, scream.length + 0.2f);
+                if (Core.Log.Verbose) PatrolsModule.Verbose("Rider: scream " + scream.name);
+                return scream.length;
             }
             catch (Exception e) { PatrolsModule.Verbose("Rider: scream: " + e.Message); return 1.5f; }
         }

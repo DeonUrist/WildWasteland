@@ -1,8 +1,8 @@
 # Wild Wasteland
 
-A BepInEx 5 mod for **Apocalypter** that combines five gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
+A BepInEx 5 mod for **Apocalypter** that combines gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
 
-Version **0.1.3** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
+Version **0.1.4 RC1** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
 
 | Module | What it is | Replaces (remove these from `BepInEx\plugins`) |
 |---|---|---|
@@ -10,6 +10,7 @@ Version **0.1.3** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: i
 | NPC AI & navigation (`NPC`) | NPCs that see, hear, search, take cover and pace their bursts; camp maps; idle life; burrowing / ambushing / pouncing creatures, dogs, spider nests, storms | NPC Overhaul (NPCAI) 1.9.15 |
 | Guns, ammo & tracers (`Guns`) | Real bullets with tracers and range falloff, vehicle part damage, NPC aim and lead, melee on wheels and corpses, boss health, per-gun magazines, hold-to-unload, backpack / armor overflow | Gunplay 1.3.0, Apocaunloader |
 | Combat HUD (`HUD`) | Crosshair styles, selection dot, hit marker, damage numbers, headshot sound | Gunplay HUD 1.2.2 |
+| Clean HUD & menus (`CleanHUD`) | Vitals, weapon silhouettes and ammo, quick slots, strip compass, message log, title/pause menus and controls catalog | CleanHUD 1.5.1 |
 | Patrols, traffic & War Rig (`Patrols`) | Raider cars, trucks and bikes with live crews, patrols and convoys, persistent world traffic with faction battles and Coyote merchants, vehicle templates and editors, the War Rig tanker trailer | Apocapatrol 2.14.4, War Rig 1.1.3, Merchant Object Spotter |
 
 While any of those standalone plugins is still installed, the module that replaces it **stays off** (the log says which DLL to remove, and the F7 Modules page shows it) - nothing runs twice, but nothing of that module runs either. Apocaraider (the old monolith) is not detected: remove it by hand.
@@ -29,15 +30,19 @@ While any of those standalone plugins is still installed, the module that replac
    BepInEx\plugins\WildWasteland\Patrols\             templates, textures, sounds, layouts, WarRig\ models
    ```
    If an asset is missing, WW falls back to the old plugin folder (`plugins\Apocaplayer\`, `plugins\NPCAI\Models\`, `plugins\Gunplay\Sounds\`, `plugins\GunplayHUD\Sounds\`, `plugins\Apocapatrol\`, `plugins\WarRig\`) or to a copy built into the DLL, and warns in the log. Patrols copies its old data into its new folder on the first run.
-4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.3]` and a summary `Wild Wasteland 0.1.3 modules:` with every module `on`.
+4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.4]` and a summary `Wild Wasteland 0.1.4 modules:` with every module `on`.
 
 ## Settings: F6 and F7
 
-- **F6 (Apocasetter Mods menu, page "Wild Wasteland")**: the player-facing settings - one `Enabled` switch per module, one on/off toggle per feature, the gameplay values, and all hotkeys in `[Keys]`. File: `BepInEx\config\com.denis.apocalypter.wildwasteland.cfg`. Switching a module off at runtime stops it at once (patches removed, the game's own behaviour returns); on starts it again.
-- **F7 (Wild Wasteland tool window, key rebindable in `[Keys] Tool window`)**: everything technical in one place - the module overview (on/off, errors), performance per job, the Harmony patch list, and per module the live status pages, editors (patrol editor, template recorder, turret spot / bus passenger pose / merchant item editors, weapon pose editor) and every tuning value the old mods kept hidden. File: `BepInEx\config\WildWasteland\tools.cfg`. The window pauses the game; Esc or CLOSE closes it. Editor hotkeys default to **None** - open the editors from F7 (or bind a key in F6).
-- `[Debug] VerboseLog` (F6, off by default) turns on the detailed info logging of every module.
+- **F6 (Apocasetter → Wild Wasteland)** shows `In-Game Settings Button` (default **F3**) and `Enable Debug` (default false). The Apocasetter opt-in remains enabled and hidden. File: `BepInEx\config\com.denis.apocalypter.wildwasteland.cfg`.
+- **Internal SETTINGS menu** (default **F3**, historically called F7) has **Game** (Player, World, HUD), **Modules** (module switches and performance), and **Debug** when enabled in F6. It pauses the game; Esc or CLOSE closes it. Gameplay values and keys live in `BepInEx\config\WildWasteland\settings.cfg`; technical settings live in `tools.cfg`. Debug includes editors and switches; fine tuning stays in the config file.
+- RC1 defaults match Denis's reviewed setup, except **Toggle Ironsights stays off** as requested. CleanHUD needs and HP/armor numbers are on, the crosshair is Vanilla, observing is toggled, camera occlusion is off, and third-person distances are 3.26 m on foot / 5.38 m in cars. Patrols debug spawn controls and traffic debug-map routes are on. Global verbose logging and Enable Debug remain off. The [complete defaults audit](docs/defaults-rc1.md) records all 691 active entries. Existing config values and first-run standalone migration are preserved.
 
 Module data and sidecars: `BepInEx\config\WildWasteland\<Module>\`.
+
+CleanHUD loading screens use `BepInEx\plugins\WildWasteland\LoadingScreens\Screen1.png`, `Screen2.png`, etc. The `screens.json` in the same folder maps each image filename to its tip text, with defaults for Screens 1–5. Available numbered images cycle once per new game/save load or Apocasaver autosave. JSON edits and added/replaced images apply on the next load; unchanged textures remain cached. The persistent screen keeps the CleanHUD font through scene changes, with LOADING (AUTOSAVING during Apocasaver saves) bottom left and a smaller wrapped tip near top left. Clean menus must be enabled. Missing numbered images are skipped.
+
+CleanHUD controls are in **F7 → Game → HUD** (Clean HUD, Clean menus, Needs, HP and armor numbers, Insanity, Scale). Its module switch and job timings are in **F7 → Modules**; EnableCheats is in Debug. Settings live in `config\WildWasteland\settings.cfg`, under `CleanHUD / HUD` and `CleanHUD / Menu`. Missing settings import the standalone choices even on an existing WW install. Layout and the game key cache copy once into `config\WildWasteland\CleanHUD\`; edits to the new layout reload within two seconds. All CleanHUD textures/font assets are embedded, so no asset-folder copy is needed. Disable standalone CleanHUD through Apocasetter and restart to use the built-in module.
 
 ## First run: migration
 

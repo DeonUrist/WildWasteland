@@ -58,6 +58,35 @@ Scenarios (verification/README.md D): S1 idle open world on foot, S2 camp fight 
 
 Pass: every row within the budget and not slower than the standalone sum. Fail: note the job / method here, fix, new build letter, measure again.
 
+## 0.1.3 - CleanHUD integration - 2026-10-14 - measurement pending
+
+Source CleanHUD 1.5.1 `119a2f8`; no standalone capture was available in the local ModProfiler config directory. This is a code audit, not a performance result. Agents cannot launch or profile the game under AGENTS.md.
+
+Named jobs: CleanHUD.HUD and CleanHUD.Menus (LateUpdateLast); HUD attachment (1 s), Layout reload (2 s), Scene key discovery and Weapon icons (500 us cooperative slices). Heavy DLL key scanning runs once in a worker without a main-thread join. HUD number parsing/formatting is cached; weapon descriptions resolve on item changes; root paths, menu CanvasGroups, MODS button, HUD graphics, slot FSMs and Quantity variables are cached. Native icons/font assets preload at module startup. Icon mesh/crop work is sliced and completed textures are cached. Native Unity rendering/readback/upload operations cannot be preempted by the scheduler: measure the first modded icon separately. Canvas batching and the willRenderCanvases callback require ModProfiler as well as F7 counters.
+
+Denis: compare standalone CleanHUD and the port in the same save, 30 s per scenario. Reset F7 Modules/Performance counters, close F7 during capture, reopen to read jobs. Whole-WW targets remain <=0.5 ms average / <=2 ms worst, zero steady-state allocations and no disabled jobs/errors. Leave status Testing until measured.
+
+| Scenario | Standalone CleanHUD avg/max | Integrated CleanHUD avg/max | Whole WW avg/worst | GC allocation | Result |
+|---|---|---|---|---|---|
+| Idle, rotate compass, Needs/Numbers enabled | pending | pending | pending | pending | Testing |
+| Fire/reload/switch weapons/heal/message log | pending | pending | pending | pending | Testing |
+| Driving/origin shift | pending | pending | pending | pending | Testing |
+| Load save, return to title, runtime off/on | pending | pending | pending | pending | Testing |
+| Convoy combat | pending | pending | pending | pending | Testing |
+| First modded weapon icon and cached revisit | pending | pending | pending | pending | Testing |
+
+## 0.1.3 - CleanHUD vehicle status - 2026-10-15 - measurement pending
+
+PlayerBody delegates its existing vehicle status to CleanHUD through Services.VehicleStatus. Three vector graphics are built with the HUD and reused; no new textures, scene scans, jobs or per-frame strings. Volume text/width is updated only when its cached value changes. The group follows Insanity's anchor/scale, packing left of the visible icon or against the right edge when Insanity is hidden. Status expires when PlayerBody stops submitting it (exit, disabled hints or module off), and hides while paused. The legacy display is used when CleanHUD is off/unavailable. Runtime/performance verification remains Denis's task.
+
+## 0.1.3 - persistent CleanHUD loading - 2026-10-15 - measurement pending
+
+Loading UI previously belonged to the scene-bound title menu and its `_starting` flag was reset on scene changes; the game-scene native loading text then became visible. A separate persistent canvas now observes SaveBus and survives that transition until isPlay/native loading completion. One named job, CleanHUD.Loading screen, checks cached native references and updates the animated label only twice per second. Numbered PNGs decode at startup or when changed before the next load; no image decoding/file reads during ordinary play. Tip text is wrapped once per selected image. Unchanged textures and UI are reused, released on module shutdown. YES/NO confirmation text now uses centered label geometry. No new BepInEx entries; the user-requested LoadingScreens/screens.json holds editable tips. Denis verifies new game, Continue, load slot, slow terrain generation, return to title, JSON edits and quit confirmation alignment.
+
+## 0.1.3 - CleanHUD autosave presentation - 2026-10-15 - measurement pending
+
+Apocasaver displays a dynamic clone of native LoadingScreen on a sorting-31000 canvas. The normal-loading observer never saw that clone, and the replacement's sorting 30000 was below it. Two optional reflected presentation postfixes now start/end the existing replacement, with sorting 32000 and cached AUTOSAVING labels. SaveBus completion cannot close the autosave view before Apocasaver finishes disk finalization/cleanup. No extra job or scene scan; exceptions in the display handlers are contained and save logic is untouched. Denis verifies a scheduled autosave/countdown and resume, then a normal load; logs should show Autosave loading screen hooks ready and Autosaving ScreenN.png between native autosave start/finish.
+
 ## Template
 
 ### x.y.z (build letter) - date
@@ -68,3 +97,7 @@ Pass: every row within the budget and not slower than the standalone sum. Fail: 
 | S3 driving through a tile boundary + origin shift | | | | | | | | |
 | S4 load save | | | | | | | | |
 | S5 convoy / many vehicles | | | | | | | | |
+
+## 0.1.4 RC1 — 2026-10-15
+
+Reviewed 691 bound installed config entries; ten defaults changed, ToggleIronsights explicitly remains false. All current local source changes built in Windows Release with Deploy=true: 0 errors, 7 existing warnings. Installed/build/package DLL MD5 8C700DED83EE607C870BEF46172DC2D3. Defaults introduce no jobs or allocations; CleanHUD runtime profiling and in-game verification remain pending with Denis. Release candidate does not promote feature statuses.

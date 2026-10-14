@@ -22,6 +22,7 @@ namespace WildWasteland
     [BepInDependency("com.denis.apocalypter.healthstacks", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.itweenguard", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.gunplayhud", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("com.denis.apocalypter.cleanhud", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.apocapatrol", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.warrig", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.merchantspotter", BepInDependency.DependencyFlags.SoftDependency)]
@@ -35,7 +36,7 @@ namespace WildWasteland
     {
         public const string GUID = "com.denis.apocalypter.wildwasteland";
         public const string NAME = "Wild Wasteland";
-        public const string VERSION = "0.1.3";
+        public const string VERSION = "0.1.4";
 
         public static Plugin Instance;
         public static ConfigFile Main, Settings, Tools;
@@ -68,7 +69,7 @@ namespace WildWasteland
                 string oldKey = Core.Legacy.Get(Path.GetFileName(Main.ConfigFilePath), "Keys", "Tool window");
                 bool hasWindowKey = Core.Legacy.Get(Path.GetFileName(Main.ConfigFilePath), "Keys", "In-Game Settings Button") != null;
                 Main.Bind("General", "Apocasetter", true, "Lists Wild Wasteland in the Apocasetter Mods menu (F6).");
-                ToolWindowKey = Main.Bind("Keys", "In-Game Settings Button", Key.F7,
+                ToolWindowKey = Main.Bind("Keys", "In-Game Settings Button", Key.F3,
                     "Opens Wild Wasteland settings: Game, Modules and, when enabled, Debug.");
                 if (!hasWindowKey && oldKey != null) ToolWindowKey.SetSerializedValue(oldKey);
                 EnableDebug = Main.Bind("General", "Enable Debug", false,
@@ -112,6 +113,7 @@ namespace WildWasteland
             Core.ModuleHost.Add(new Modules.NPC.NpcModule());
             Core.ModuleHost.Add(new Modules.Guns.GunsModule());
             Core.ModuleHost.Add(new Modules.HUD.HudModule());
+            Core.ModuleHost.Add(new Modules.CleanHUD.CleanHudModule());
             Core.ModuleHost.Add(new Modules.Patrols.PatrolsModule());
             Core.ModuleHost.Add(new Modules.POI.PoiModule());
         }

@@ -387,20 +387,40 @@ namespace WildWasteland.Modules.PlayerBody
             // the third-person view exactly as PreCull will draw it this frame
             ComputeView(cam);
             Vector3 pos = _vPos; var viewRot = _vRot; float fov = _vFov;
+            var guns = Core.Services.Guns;
+            Vector3 muzzle = Vector3.zero;
+            bool muzzleRay = guns != null && guns.PlayerProjectilesEnabled && Core.Services.Animation != null && Core.Services.Animation.TryPlayerWeaponMuzzle(out muzzle);
 
             // where the eye ray lands
             Vector3 hitPoint = t.position + t.forward * 1000f;
-            int n = Physics.RaycastNonAlloc(t.position, t.forward, _eyeHits, 150f, GunMask, QueryTriggerInteraction.UseGlobal);
+            int n = Physics.RaycastNonAlloc(t.position, t.forward, _eyeHits, 150f, GunMask, muzzleRay ? QueryTriggerInteraction.Collide : QueryTriggerInteraction.UseGlobal);
             float best = float.MaxValue;
             for (int i = 0; i < n; i++)
             {
                 var c = _eyeHits[i].collider;
-                if (c == null || _eyeHits[i].distance >= best || Mine(c.transform)) continue;
+                if (c == null || _eyeHits[i].distance >= best || Mine(c.transform) || muzzleRay && !guns.BlocksProjectile(c)) continue;
                 best = _eyeHits[i].distance; hitPoint = _eyeHits[i].point;
             }
             _xhairDist = best < float.MaxValue ? best : -1f;
             _xhairWhat = "nothing";
             for (int i = 0; i < n; i++) if (_eyeHits[i].collider != null && _eyeHits[i].distance == best) { _xhairWhat = _eyeHits[i].collider.name + " (layer " + _eyeHits[i].collider.gameObject.layer + ")"; break; }
+            if (muzzleRay)
+            {
+                var d = hitPoint - muzzle; float distance = d.magnitude;
+                if (distance > 0.01f)
+                {
+                    n = Physics.RaycastNonAlloc(muzzle, d / distance, _eyeHits, Mathf.Min(distance, 150f), GunMask, QueryTriggerInteraction.Collide);
+                    best = float.MaxValue;
+                    Collider obstruction = null;
+                    for (int i = 0; i < n; i++)
+                    {
+                        var c = _eyeHits[i].collider;
+                        if (c == null || _eyeHits[i].distance >= best || Mine(c.transform) || !guns.BlocksProjectile(c)) continue;
+                        best = _eyeHits[i].distance; hitPoint = _eyeHits[i].point; obstruction = c;
+                    }
+                    if (obstruction != null) { _xhairDist = best; _xhairWhat = obstruction.name + " (layer " + obstruction.gameObject.layer + ")"; }
+                }
+            }
             var vp = Projection(cam, fov) * Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * Matrix4x4.TRS(pos, viewRot, Vector3.one).inverse;
             Vector4 clip = vp * new Vector4(hitPoint.x, hitPoint.y, hitPoint.z, 1f);
             if (clip.w <= 0.01f) { RestoreCrosshair(); return; }

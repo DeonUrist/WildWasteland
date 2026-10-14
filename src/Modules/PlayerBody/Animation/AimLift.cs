@@ -21,8 +21,9 @@ namespace WildWasteland.Modules.PlayerBody
         // the sights ~8 cm over the grip), the head tilted onto the stock; pistols as they are (PistolFire holds the gun at eye level)
         public static float[] Default(string clip)
         {
-            if (clip != null && clip.StartsWith("Rifle")) return new[] { 15f, 10f, 0f };
-            return new[] { 0f, 0f, 0f };
+            var v = new float[13];
+            if (clip != null && clip.StartsWith("Rifle")) { v[0] = 15f; v[1] = 10f; }
+            return v;
         }
 
         private static readonly Dictionary<string, float[]> _v = new Dictionary<string, float[]>();
@@ -73,7 +74,7 @@ namespace WildWasteland.Modules.PlayerBody
                     int eq = line.IndexOf('='); if (eq <= 0) continue;
                     var p = line.Substring(eq + 1).Split(',');
                     if (p.Length < 3) continue;
-                    var v = new float[3]; bool ok = true;
+                    var v = new float[13]; bool ok = true;
                     for (int i = 0; i < 3; i++) ok &= float.TryParse(p[i].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out v[i]);
                     if (ok) _builtin[line.Substring(0, eq).Trim()] = v;
                 }
@@ -84,6 +85,7 @@ namespace WildWasteland.Modules.PlayerBody
         public static void Load(string dir)
         {
             _file = Path.Combine(dir, "aim-lift.txt");
+            EditWeapon = EditClip = null; EditFrame = -1; _armKeys = null; Revision++;
             _v.Clear();
             if (!File.Exists(_file)) return;
             foreach (var raw in File.ReadAllLines(_file))
@@ -93,8 +95,8 @@ namespace WildWasteland.Modules.PlayerBody
                 int eq = line.IndexOf('='); if (eq <= 0) continue;
                 var p = line.Substring(eq + 1).Split(new[] { ',', ';', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
                 if (p.Length < 3) continue;
-                var v = new float[3]; bool ok = true;
-                for (int i = 0; i < 3; i++) ok &= float.TryParse(p[i], NumberStyles.Float, CultureInfo.InvariantCulture, out v[i]);
+                var v = new float[13]; bool ok = true;
+                for (int i = 0; i < Math.Min(p.Length, v.Length); i++) ok &= float.TryParse(p[i], NumberStyles.Float, CultureInfo.InvariantCulture, out v[i]);
                 if (ok) _v[line.Substring(0, eq).Trim()] = v;
             }
         }
@@ -110,6 +112,7 @@ namespace WildWasteland.Modules.PlayerBody
             var sb = new StringBuilder();
             sb.AppendLine("# Wild Wasteland (PlayerBody) aim lift: weapon|aim clip[@crouch] = lift (cm), head down (degrees), forward (cm). Edited live with WeaponAdjustment on:");
             sb.AppendLine("# Page Up / Page Down = lift, Home / End = head, Insert / Delete = forward (while she aims, or the aim clip picked with numpad 9/3).");
+            sb.AppendLine("# Optional values after forward: left arm up/right (cm), pitch/yaw/roll (degrees), then right arm up/right, pitch/yaw/roll. Missing values are zero; edited with F7 weapon pose buttons.");
             var keys = new List<string>(_v.Keys); keys.Sort(StringComparer.Ordinal);
             foreach (var k in keys) sb.AppendLine(k + " = " + string.Join(", ", Array.ConvertAll(_v[k], x => x.ToString("0.#", CultureInfo.InvariantCulture))));
             File.WriteAllText(_file, sb.ToString());
@@ -128,7 +131,49 @@ namespace WildWasteland.Modules.PlayerBody
             return Default(clip);
         }
         public static bool Own(string weapon, string clip, bool crouched) { string k = weapon + "|" + Key(clip, crouched); return _v.ContainsKey(k) || Builtin(k) != null; }
-        public static void Set(string weapon, string clip, bool crouched, float[] v) { _v[weapon + "|" + Key(clip, crouched)] = v; Dirty = true; }
+        public static void Set(string weapon, string clip, bool crouched, float[] v) { _v[weapon + "|" + Key(clip, crouched)] = v; Dirty = true; Revision++; }
+
+        internal static string EditWeapon, EditClip;
+        internal static int Revision;
+        internal static int EditFrame = -1;
+        internal static bool EditCrouched;
+        internal static bool CanEditArms { get { return PlayerBodyModule.Running && Game.Ready && !Game.Dead && !Game.InCar && GunPose.Editing && ThirdPerson.On && EditFrame >= UnityEngine.Time.frameCount - 1 && GunPose.CurrentFrame >= UnityEngine.Time.frameCount - 1 && !string.IsNullOrEmpty(EditWeapon) && !string.IsNullOrEmpty(EditClip); } }
+        static float[] _armKeys;
+        static int _armKeysRevision;
+        static string _armWeapon, _armClip; static bool _armCrouched;
+        internal static void EndArmKeys() { if (_armKeys != null) SaveIfDirty(); _armKeys = null; }
+        internal static void ArmKeys(bool left, UnityEngine.Vector3 move, UnityEngine.Vector3 rot, float dt)
+        {
+            if (!CanEditArms || move == UnityEngine.Vector3.zero && rot == UnityEngine.Vector3.zero) { EndArmKeys(); return; }
+            if (_armKeys == null || _armWeapon != EditWeapon || _armClip != EditClip || _armCrouched != EditCrouched || _armKeysRevision != Revision)
+            {
+                EndArmKeys(); _armWeapon = EditWeapon; _armClip = EditClip; _armCrouched = EditCrouched;
+                _armKeys = (float[])Get(EditWeapon, EditClip, EditCrouched).Clone(); Set(EditWeapon, EditClip, EditCrouched, _armKeys); _armKeysRevision = Revision;
+            }
+            int i = left ? 3 : 8;
+            _armKeys[i] = UnityEngine.Mathf.Clamp(_armKeys[i] + move.y * dt, -45f, 45f);
+            _armKeys[i + 1] = UnityEngine.Mathf.Clamp(_armKeys[i + 1] + move.x * dt, -45f, 45f);
+            _armKeys[i + 2] = UnityEngine.Mathf.Clamp(_armKeys[i + 2] - rot.x * dt, -90f, 90f);
+            _armKeys[i + 3] = UnityEngine.Mathf.Clamp(_armKeys[i + 3] + rot.y * dt, -90f, 90f);
+            _armKeys[i + 4] = UnityEngine.Mathf.Clamp(_armKeys[i + 4] + rot.z * dt, -90f, 90f);
+            Dirty = true;
+        }
+        internal static void NudgeArm(bool left, int axis, float delta)
+        {
+            if (!CanEditArms) return;
+            var v = (float[])Get(EditWeapon, EditClip, EditCrouched).Clone();
+            int i = 3 + (left ? 0 : 5) + axis;
+            float limit = axis < 2 ? 45f : 90f;
+            v[i] = Math.Max(-limit, Math.Min(limit, v[i] + delta));
+            Set(EditWeapon, EditClip, EditCrouched, v); Save();
+        }
+        internal static void ResetArm(bool left)
+        {
+            if (!CanEditArms) return;
+            var v = (float[])Get(EditWeapon, EditClip, EditCrouched).Clone();
+            Array.Clear(v, 3 + (left ? 0 : 5), 5);
+            Set(EditWeapon, EditClip, EditCrouched, v); Save();
+        }
 
         // ---- two-bone IK: the new elbow position so the hand reaches t, the arm bending in the plane it bends in now
         //   s, e, h = shoulder, elbow, hand positions; returns the elbow (the caller turns the upper arm onto it, then the forearm onto t)

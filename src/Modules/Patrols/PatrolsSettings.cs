@@ -260,7 +260,7 @@ namespace WildWasteland.Modules.Patrols
             Migrate(cfg, BusPassengerPoseEditorEnabled, "Debug", "Bus passenger pose editor");
             MerchantEditorEnabled = cfg.Tool(TDebug, "Merchant item editor", false, "The in-car merchant object editor (numpad). Disable TurretSpotEditor while using it.");
             cfg.Migrate(MerchantEditorEnabled, SpotterCfg, "Debug", "Enabled");
-            AllowDebugSpawns = cfg.Tool(TDebug, "AllowDebugSpawns", false, "Show Spawn Template, S group buttons and SPAWN in the patrol editor");
+            AllowDebugSpawns = cfg.Tool(TDebug, "AllowDebugSpawns", true, "Show Spawn Template, S group buttons and SPAWN in the patrol editor");
             Migrate(cfg, AllowDebugSpawns, "Debug", "AllowDebugSpawns");
             AiOverlay = cfg.Tool(TDebug, "AiOverlay", false, "On-screen line per AI car: state, speed, target angle, steering, feeler distances. With no raider car driving: the time until the next spawn roll");
             Migrate(cfg, AiOverlay, "Debug", "AiOverlay");
@@ -272,7 +272,7 @@ namespace WildWasteland.Modules.Patrols
             Migrate(cfg, ExitSpeedKmh, "Debug", "ExitSpeedKmh");
 
             // world traffic tuning + debug map
-            TrafficDebugMap = cfg.Tool(TTraffic, "DebugMap", false, "Draw traffic routes only on the game's debug map when it is open");
+            TrafficDebugMap = cfg.Tool(TTraffic, "DebugMap", true, "Draw traffic routes only on the game's debug map when it is open");
             Migrate(cfg, TrafficDebugMap, "World traffic prototype", "DebugMap");
             RealPatrolNames = cfg.Tool(TTraffic, "Real patrol names", true, "Use each group's actual name on the game debug map; off labels groups Patrol or Convoy");
             Migrate(cfg, RealPatrolNames, "Experimental", "Real patrol names");

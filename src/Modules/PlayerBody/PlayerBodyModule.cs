@@ -101,7 +101,7 @@ namespace WildWasteland.Modules.PlayerBody
             Character = cfg.Player("", "Character", Gender.Male, "Your character's body: Female or Male (the game's man). Also the first-person arm skin, the driver's seat and the TAB picture.");
             Mig(Character, "General", "Character");
             ThirdPersonOnFoot = cfg.Player("", "ThirdPerson", true, "The game's Change Camera key switches to a camera behind your character, on foot and in cars (replaces the game's own car camera).");
-            ToggleMiddleMouse = cfg.Player("", "ToggleObserving", false, "Third person, observing key ([Keys] Observe). Off: hold the key to orbit the camera around the character; it returns behind the character when you let go. On: a press starts observing and the camera stays where you left it until the next press.");
+            ToggleMiddleMouse = cfg.Player("", "ToggleObserving", true, "Third person, observing key ([Keys] Observe). Off: hold the key to orbit the camera around the character; it returns behind the character when you let go. On: a press starts observing and the camera stays where you left it until the next press.");
             Mig(ToggleMiddleMouse, "Debug", "ToggleMiddleMouse"); Mig(ToggleMiddleMouse, "General", "Toggle Observing");
             DynamicCrosshair = cfg.Player("", "DynamicCrosshair", true, "Third person with a weapon drawn: the crosshair sits where your shots and melee hits really land (the eye ray from the head). Without a weapon, or Off: the crosshair stays centred and the camera turns toward the aim point.");
             Mig(DynamicCrosshair, "CAMERA", "DynamicCrosshair");
@@ -124,7 +124,7 @@ namespace WildWasteland.Modules.PlayerBody
             JumpTriggersClimbing = cfg.Player("Climbing", "JumpTriggersClimbing", true, "The game's Jump key climbs onto a reachable ledge or catches one within arm's reach during a jump. Otherwise it jumps normally.");
             Mig(JumpTriggersClimbing, "climbing", "Jump triggers climbing");
 
-            OcclusionPrototype = cfg.Player("Camera culling", "CameraCulling", true, "Third person: keep the camera distance and make geometry between camera and body semi-transparent (prototype; roofs and vehicles get a larger window; not inside caves). Off = the camera moves in front of obstacles.");
+            OcclusionPrototype = cfg.Player("Camera culling", "CameraCulling", false, "Third person: keep the camera distance and make geometry between camera and body semi-transparent (prototype; roofs and vehicles get a larger window; not inside caves). Off = the camera moves in front of obstacles.");
             Mig(OcclusionPrototype, "CAMERA", "OcclusionPrototype"); Mig(OcclusionPrototype, "General", "3rd person camera culling"); Mig(OcclusionPrototype, "Occlusion", "3rd person camera culling");
             OcclusionInVehicle = cfg.Player("Camera culling", "CameraCullingInVehicles", false, "Third person while driving: also use the camera culling (needs CameraCulling on).");
             Mig(OcclusionInVehicle, "General", "3rd person camera culling in vehicles"); Mig(OcclusionInVehicle, "Occlusion", "3rd person camera culling in vehicles");
@@ -147,6 +147,7 @@ namespace WildWasteland.Modules.PlayerBody
             MigKey(VolumeDownKey, "VEHICLE", "VolumeDownKey");
             VolumeUpKey = cfg.Hotkey("Cassette volume up", Key.Equals, "Driving: cassette volume +0.1 (+ on the main keyboard, also keypad plus). None = no hotkey.");
             MigKey(VolumeUpKey, "VEHICLE", "VolumeUpKey");
+            GunPose.BindEditorKeys(cfg);
 
             // ---- F7 (tools.cfg)
             const string Ed = "Editors", Cam = "Camera", Fp = "First person", Cull = "Camera culling", Seat = "Car seat", Clm = "Climbing",
@@ -154,9 +155,9 @@ namespace WildWasteland.Modules.PlayerBody
             WeaponAdjust = cfg.Tool(Ed, "WeaponAdjustment", false, "Weapon pose editor (third person, weapon drawn): numpad 8/2 6/4 7/1 move the weapon in the hand, 5 move/rotate, 9/3 pick the animation, - / * delete/copy/paste. Aiming: Page Up/Down lift the hands, Home/End tilt the head, Insert/Delete push the hands forward. Saved to config/WildWasteland/PlayerBody/weapon-poses.txt and aim-lift.txt. These keys do nothing while this is off.");
             cfg.Migrate(WeaponAdjust, OldCfg, "Debug", "WeaponAdjustment");
 
-            ThirdDistance = cfg.Tool(Cam, "ThirdPersonDistance", 5.44f, "Third person on foot: camera distance, m (the mouse wheel changes and remembers it).", new AcceptableValueRange<float>(0.8f, 8f));
+            ThirdDistance = cfg.Tool(Cam, "ThirdPersonDistance", 3.26f, "Third person on foot: camera distance, m (the mouse wheel changes and remembers it).", new AcceptableValueRange<float>(0.8f, 8f));
             cfg.Migrate(ThirdDistance, Path.Combine("Apocaplayer", "camera.cfg"), "Camera", "ThirdPersonDistance");
-            ThirdCarDistance = cfg.Tool(Cam, "ThirdPersonCarDistance", 15f, "Third person in a car: camera distance, m (mouse wheel).", new AcceptableValueRange<float>(2f, 15f));
+            ThirdCarDistance = cfg.Tool(Cam, "ThirdPersonCarDistance", 5.38f, "Third person in a car: camera distance, m (mouse wheel).", new AcceptableValueRange<float>(2f, 15f));
             cfg.Migrate(ThirdCarDistance, Path.Combine("Apocaplayer", "camera.cfg"), "Camera", "ThirdPersonCarDistance");
             ThirdHeight = cfg.Tool(Cam, "ThirdHeight", 0.25f, "Third person on foot: camera height above the eyes, m.");
             ThirdShoulder = cfg.Tool(Cam, "ThirdShoulder", 0.45f, "Third person on foot: sideways offset (over the right shoulder), m.");

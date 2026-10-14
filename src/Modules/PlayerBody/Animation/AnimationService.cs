@@ -19,6 +19,12 @@ namespace WildWasteland.Modules.PlayerBody
         public bool PlayerThirdPerson { get { return ThirdPerson.On && !ThirdPerson.Peek; } }
         public AudioClip PlayerShout { get { return FemalePain.PlayerShout; } }
         public bool TryPlayerJumpHead(GameObject player, out Vector3 position) { return BodyRunner.TryPlayerJumpHead(player, out position); }
+        public bool TryPlayerWeaponMuzzle(out Vector3 position)
+        {
+            position = Vector3.zero;
+            var body = BodyRunner.PlayerBody;
+            return PlayerBodyModule.Running && PlayerThirdPerson && !Game.Dead && body != null && body.Alive && body.TryWeaponMuzzle(out position);
+        }
         public string[] ClipNames() { return ModAPI.ClipNames(); }
         public bool IsPlayerClip(string name) { return ModAPI.IsPlayerClip(name); }
         public AnimationClip GetClip(string name) { return ModAPI.GetClip(name); }

@@ -41,6 +41,7 @@ namespace WildWasteland.Modules.PlayerBody
             _dir = PlayerBodyModule.DataDir;
             Directory.CreateDirectory(_dir);
             _builtin.Clear(); _legacy.Clear(); _legacyBase.Clear(); _live = null; _liveKey = null;
+            EditorTarget = 0; _binding = -1;
             _file = Path.Combine(_dir, "weapon-poses.txt");
             _export = Path.Combine(_dir, "BuiltinPoses.generated.cs");
             foreach (var line in BuiltinPoses.Data)
@@ -344,7 +345,7 @@ namespace WildWasteland.Modules.PlayerBody
         // Shift/Ctrl can't be used: with NumLock on, Shift+Numpad 8 arrives as the Up arrow.
         private static bool _rotateMode;
         private static readonly Dictionary<KeyCode, bool> _held = new Dictionary<KeyCode, bool>();
-        private static float[] _clip;
+        private static float[] _clip, _bodyClip;
         private static string _hint = "", _note = "";
 
         public static bool Editing { get { return PlayerBodyModule.WeaponAdjust != null && PlayerBodyModule.WeaponAdjust.Value; } }
@@ -383,14 +384,55 @@ namespace WildWasteland.Modules.PlayerBody
         internal static float[] CurrentShown;
         internal static int CurrentFrame = -1;
         internal static bool RotateMode { get { return _rotateMode; } set { _rotateMode = value; } }
+        internal static int EditorTarget;
+        internal static string TargetName { get { return EditorTarget == 1 ? "LEFT ARM" : EditorTarget == 2 ? "RIGHT ARM" : "WEAPON"; } }
+        static readonly string[] EditorKeyNames = { "Select weapon / arm", "Move / rotate", "Up / pitch up", "Down / pitch down", "Right / yaw right", "Left / yaw left", "Forward / roll right", "Back / roll left" };
+        static readonly ConfigEntry<string>[] _editKeys = new ConfigEntry<string>[8];
+        static readonly string[] _editRaw = new string[8];
+        static readonly KeyCode[] _editCodes = new KeyCode[8];
+        static int _binding = -1;
+        internal static void BindEditorKeys(Core.ModuleConfig cfg)
+        {
+            string[] defaults = { "Keypad0", "Keypad5", "Keypad8", "Keypad2", "Keypad6", "Keypad4", "Keypad7", "Keypad1" };
+            for (int i = 0; i < _editKeys.Length; i++) _editKeys[i] = cfg.Tool("Editors", "Pose key: " + EditorKeyNames[i], defaults[i], "Weapon pose editor only. Bind from its F7 buttons; None disables this key.");
+        }
+        static KeyCode EditorKey(int i)
+        {
+            string raw = _editKeys[i].Value;
+            if (_editRaw[i] != raw) { _editRaw[i] = raw; if (!Enum.TryParse<KeyCode>(raw, true, out _editCodes[i])) _editCodes[i] = KeyCode.None; }
+            return _editCodes[i];
+        }
+        static float EditorAxis(int plus, int minus) { return (GameBindings.KeyHeld(EditorKey(plus)) ? 1f : 0f) - (GameBindings.KeyHeld(EditorKey(minus)) ? 1f : 0f); }
+        internal static void DrawEditorBindings(Core.UI.ToolLayout l)
+        {
+            if (_binding >= 0 && Event.current.type == EventType.KeyDown && Event.current.keyCode != KeyCode.None)
+            {
+                if (Event.current.keyCode != KeyCode.Escape) _editKeys[_binding].Value = Event.current.keyCode == KeyCode.Backspace ? "None" : Event.current.keyCode.ToString();
+                _binding = -1; Event.current.Use();
+            }
+            for (int i = 0; i < _editKeys.Length; i++)
+                if (l.Button(EditorKeyNames[i] + ": " + (_binding == i ? "press a key (Backspace clears)" : _editKeys[i].Value.Replace("Keypad", "Numpad")))) _binding = _binding == i ? -1 : i;
+        }
         internal static int Selected { get { return _sel; } }
         internal static int ClipCount { get { return _list.Count; } }
-        internal static bool HasCopy { get { return _clip != null; } }
+        internal static bool HasCopy { get { return _clip != null && _bodyClip != null; } }
         internal static string StatusText { get { return _status; } }
         internal static string HintText { get { return _hint; } }
         internal static void StepClip(int d) { Flush(); Step(d); }
-        internal static void CopyShown() { if (CurrentShown != null) _clip = (float[])CurrentShown.Clone(); }
-        internal static bool PasteCurrent() { if (_clip == null || string.IsNullOrEmpty(CurrentWeapon)) return false; Flush(); Put(CurrentWeapon, CurrentPose, _clip); Save(); return true; }
+        internal static bool CopyShown()
+        {
+            if (CurrentShown == null || !AimLift.CanEditArms) return false;
+            _clip = (float[])CurrentShown.Clone();
+            _bodyClip = (float[])AimLift.Get(CurrentWeapon, CurrentPose, AimLift.EditCrouched).Clone();
+            return true;
+        }
+        internal static bool PasteCurrent()
+        {
+            if (!HasCopy || !AimLift.CanEditArms) return false;
+            Flush(); AimLift.EndArmKeys(); Put(CurrentWeapon, CurrentPose, _clip);
+            AimLift.Set(CurrentWeapon, CurrentPose, AimLift.EditCrouched, (float[])_bodyClip.Clone());
+            Save(); AimLift.Save(); return true;
+        }
         internal static bool DeleteCurrent() { if (string.IsNullOrEmpty(CurrentWeapon) || string.IsNullOrEmpty(CurrentPose)) return false; Flush(); Put(CurrentWeapon, CurrentPose, null); Save(); return true; }
         internal static void SaveNow() { Flush(); Save(); }
         internal static void ReloadFiles() { _live = null; _liveKey = null; LoadUser(); }
@@ -403,29 +445,32 @@ namespace WildWasteland.Modules.PlayerBody
             move = rot = Vector3.zero;
             _hint = "";
             if (Editing && !string.IsNullOrEmpty(weapon)) { CurrentWeapon = weapon; CurrentPose = pose ?? ""; CurrentShown = shown; CurrentFrame = Time.frameCount; }
-            if (!Editing || string.IsNullOrEmpty(weapon) || Time.timeScale < 0.01f) { Flush(); return false; }
-            if (Pressed(KeyCode.Keypad5, KeyCode.Keypad0, KeyCode.KeypadPeriod, KeyCode.KeypadEnter, KeyCode.Clear)) _rotateMode = !_rotateMode;
+            if (!Editing || string.IsNullOrEmpty(weapon) || Time.timeScale < 0.01f || Core.ApocasetterBridge.InputBlocked || !Application.isFocused) { Flush(); AimLift.EndArmKeys(); return false; }
+            _binding = -1;
+            if (GameBindings.KeyDown(EditorKey(0))) { Flush(); AimLift.EndArmKeys(); EditorTarget = (EditorTarget + 1) % 3; }
+            if (GameBindings.KeyDown(EditorKey(1))) _rotateMode = !_rotateMode;
             if (Pressed(KeyCode.Keypad9)) { Flush(); Step(+1); }
             if (Pressed(KeyCode.Keypad3)) { Flush(); Step(-1); }
             if (Pressed(KeyCode.KeypadMinus)) { Flush(); Put(weapon, pose, null); Save(); }
-            if (Pressed(KeyCode.KeypadDivide)) _clip = (float[])shown.Clone();
-            if (Pressed(KeyCode.KeypadMultiply) && _clip != null) { Flush(); Put(weapon, pose, _clip); Save(); }
-            float a = Axis(KeyCode.Keypad7, KeyCode.Keypad1), b = Axis(KeyCode.Keypad8, KeyCode.Keypad2), c = Axis(KeyCode.Keypad6, KeyCode.Keypad4);
+            if (Pressed(KeyCode.KeypadDivide)) CopyShown();
+            if (Pressed(KeyCode.KeypadMultiply)) PasteCurrent();
+            float a = EditorAxis(6, 7), b = EditorAxis(2, 3), c = EditorAxis(4, 5);
             if (_rotateMode) rot = new Vector3(b, c, a) * 45f;   // pitch (muzzle up), yaw (muzzle right), roll - degrees per second
             else move = new Vector3(c, b, a) * 3f;               // right, up, forward - cm per second
             bool anyKey = a != 0f || b != 0f || c != 0f;
             if (!anyKey) Flush();
             bool own = HasPose(weapon, pose);
-            _hint = (_rotateMode ? "ROTATING " : "MOVING ") + weapon + "   " + (_sel >= 0 ? "SELECTED " + (_sel + 1) + "/" + _list.Count + ": " : "playing: ") + pose + "   [" + _status + "]"
+            _hint = TargetName + "   " + (_rotateMode ? "ROTATING " : "MOVING ") + weapon + "   " + (_sel >= 0 ? "SELECTED " + (_sel + 1) + "/" + _list.Count + ": " : "playing: ") + pose + "   [" + _status + "]"
                   + (own ? "" : HasPose(weapon, _idleName) ? " - shows the " + _idleName + " pose" : HasPose(weapon, "Idle") ? " - shows the old Idle pose" : " - shows the raider grip") + "   pose " + string.Join(", ", Array.ConvertAll(shown, x => x.ToString("0.0", CultureInfo.InvariantCulture))) + "\n"
-                  + "8/2, 6/4, 7/1 = move (or turn).  5 = MOVING / ROTATING.  9/3 = next/previous clip of this weapon (" + _list.Count + "; then back to what she plays).  - = delete.  / = copy pose, * = paste" + (_clip != null ? " (copied)" : "") + ".  Saved in config/WildWasteland/PlayerBody/weapon-poses.txt"
+                  + _editKeys[0].Value.Replace("Keypad", "Numpad") + " = weapon / left arm / right arm; " + _editKeys[1].Value.Replace("Keypad", "Numpad") + " = move / rotate. Directions: " + _editKeys[2].Value + "/" + _editKeys[3].Value + " up/pitch, " + _editKeys[4].Value + "/" + _editKeys[5].Value + " right/yaw, " + _editKeys[6].Value + "/" + _editKeys[7].Value + " forward/roll. 9/3 = clips. - = delete weapon pose. / * = copy/paste weapon, arms and head. Arm edits save on release."
                   + (string.IsNullOrEmpty(_note) ? "" : "\n" + _note) + (string.IsNullOrEmpty(AimLine) ? "" : "\n" + AimLine);
+            if (EditorTarget != 0) { Flush(); AimLift.ArmKeys(EditorTarget == 1, move, rot, Time.unscaledDeltaTime); move = rot = Vector3.zero; return false; }
             return anyKey;
         }
 
         private static float Axis(KeyCode plus, KeyCode minus) { return (Input.GetKey(plus) ? 1f : 0f) - (Input.GetKey(minus) ? 1f : 0f); }
 
-        public static void ClearHint() { _hint = ""; }
+        public static void ClearHint() { _hint = ""; if (!Editing || !ThirdPerson.On || Game.InCar || Game.Dead || string.IsNullOrEmpty(Game.DrawnWeapon)) AimLift.EndArmKeys(); }
 
         private static GUIStyle _hintStyle;   // (WW) one style (was a new GUIStyle per OnGUI call)
         public static void OnGUI()

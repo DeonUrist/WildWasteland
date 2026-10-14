@@ -5,6 +5,7 @@ using UnityEngine;
 using Player = WildWasteland.Modules.PlayerBody.PlayerBodyModule;
 using HudSettings = WildWasteland.Modules.HUD.HudModule;
 using Patrols = WildWasteland.Modules.Patrols.PatrolsModule;
+using CleanHudSettings = WildWasteland.Modules.CleanHUD.CleanHudModule;
 
 namespace WildWasteland.Core.UI
 {
@@ -75,6 +76,12 @@ namespace WildWasteland.Core.UI
             if (_poi != null) Switch(l, "New POI", _poi);
 
             l.Heading("HUD");
+            Switch(l, "Clean HUD", CleanHudSettings.Enabled);
+            Switch(l, "Clean menus", CleanHudSettings.MenuEnabled);
+            Switch(l, "Needs", CleanHudSettings.ShowNeeds);
+            Switch(l, "HP and armor numbers", CleanHudSettings.ShowHealthNumbers);
+            Switch(l, "Insanity", CleanHudSettings.ShowInsanity);
+            l.Entry(CleanHudSettings.Scale);
             CrosshairSelection(l);
             Switch(l, "Grabbing dot", HudSettings.SelectionDot);
             bool damage = HudSettings.HudEnabled.Value && HudSettings.DamageNumbers.Value == 2;
@@ -144,6 +151,9 @@ namespace WildWasteland.Core.UI
 
         static bool DebugSetting(ConfigEntryBase e)
         {
+            if (ReferenceEquals(e, CleanHudSettings.Enabled) || ReferenceEquals(e, CleanHudSettings.MenuEnabled)
+                || ReferenceEquals(e, CleanHudSettings.ShowNeeds) || ReferenceEquals(e, CleanHudSettings.ShowHealthNumbers)
+                || ReferenceEquals(e, CleanHudSettings.ShowInsanity) || ReferenceEquals(e, CleanHudSettings.Scale)) return false;
             if (ReferenceEquals(e, Player.Character) || ReferenceEquals(e, Player.BodyFirstPerson) || ReferenceEquals(e, Player.FullBodyOnlyOnFoot)
                 || ReferenceEquals(e, Player.EmptyHandArms) || ReferenceEquals(e, Player.FirstPersonArmsOnlyOnFoot) || ReferenceEquals(e, Player.OcclusionPrototype)
                 || ReferenceEquals(e, Player.ThirdPersonOnFoot) || ReferenceEquals(e, Player.ClimbingOn) || ReferenceEquals(e, Patrols.FuryRoad)

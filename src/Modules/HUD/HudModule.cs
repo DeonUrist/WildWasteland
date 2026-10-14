@@ -43,7 +43,7 @@ namespace WildWasteland.Modules.HUD
         {
             Instance = this;
             // ---- F6: one toggle per feature first (crosshair style, selection dot, hit feedback group, hit marker, damage numbers, headshot sound)
-            Crosshair = cfg.Player("", "Crosshair", 3, "Weapon crosshair: 0 = none, 1 = vanilla, 2 = two horizontal lines, 3 = dot. Follows the game's weapon and aiming visibility.",
+            Crosshair = cfg.Player("", "Crosshair", 1, "Weapon crosshair: 0 = none, 1 = vanilla, 2 = two horizontal lines, 3 = dot. Follows the game's weapon and aiming visibility.",
                 new AcceptableValueRange<int>(0, 3));
             SelectionDot = cfg.Player("", "SelectionDot", true, "Show the game's selection dot without a weapon. Independent of the weapon crosshair.");
             HudEnabled = cfg.Player("", "HitFeedback", true, "Damage numbers, hit marker and headshot sound for your hits (master switch for HitMarker, FloatingDamage and HeadshotSound). The crosshair settings are independent.");

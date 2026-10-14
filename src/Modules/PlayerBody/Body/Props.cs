@@ -202,6 +202,41 @@ namespace WildWasteland.Modules.PlayerBody
             return copy;
         }
 
+        internal static bool TryMuzzle(GameObject prop, out Transform anchor, out Vector3 local)
+        {
+            anchor = null; local = Vector3.zero;
+            if (prop == null) return false;
+            foreach (var c in prop.GetComponentsInChildren<Transform>(true))
+            {
+                if (c.name == "arrow")
+                {
+                    var mf = c.GetComponent<MeshFilter>();
+                    if (mf != null && mf.sharedMesh != null)
+                    {
+                        var b = mf.sharedMesh.bounds; anchor = c; local = new Vector3(b.center.x, b.center.y, b.max.z); return true;
+                    }
+                }
+                if (anchor == null && c != prop.transform && (c.name.StartsWith("fire_effect", StringComparison.OrdinalIgnoreCase) || c.name.StartsWith("muzzle", StringComparison.OrdinalIgnoreCase))) anchor = c;
+            }
+            if (anchor != null) return true;
+            var dir = Barrel(prop); if (dir == Vector3.zero) return false;
+            bool any = false; var bounds = new Bounds();
+            foreach (var mf in prop.GetComponentsInChildren<MeshFilter>(true))
+            {
+                if (mf.sharedMesh == null) continue;
+                var b = mf.sharedMesh.bounds;
+                for (int i = 0; i < 8; i++)
+                {
+                    var corner = b.center + Vector3.Scale(b.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                    var p = prop.transform.InverseTransformPoint(mf.transform.TransformPoint(corner));
+                    if (!any) { bounds = new Bounds(p, Vector3.zero); any = true; } else bounds.Encapsulate(p);
+                }
+            }
+            if (!any) return false;
+            int axis = Mathf.Abs(dir.x) >= Mathf.Abs(dir.y) && Mathf.Abs(dir.x) >= Mathf.Abs(dir.z) ? 0 : Mathf.Abs(dir.y) >= Mathf.Abs(dir.z) ? 1 : 2;
+            anchor = prop.transform; local = bounds.center; local[axis] = dir[axis] >= 0f ? bounds.max[axis] : bounds.min[axis]; return true;
+        }
+
         // The muzzle direction, or the longest mesh axis toward the end farther from the grip.
         public static Vector3 Barrel(GameObject prop)
         {

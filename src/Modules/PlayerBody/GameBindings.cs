@@ -21,6 +21,8 @@ namespace WildWasteland.Modules.PlayerBody
         }
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         internal static bool KeyDown(KeyCode key) { return key != KeyCode.None && Input.GetKeyDown(key); }
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        internal static bool KeyHeld(KeyCode key) { return key != KeyCode.None && Input.GetKey(key); }
         internal static bool Down(string name, KeyCode fallback)
         {
             var action = Find(name);

@@ -1284,9 +1284,21 @@ namespace WildWasteland.Modules.PlayerBody
 
         // ---------------------------------------------------------------- weapon in hand (third person)
         private bool _propShown, _propShadow;
+        private Transform _propBolt;
+        private Transform _propMuzzle; private Vector3 _propMuzzleLocal;
+        private bool _propIsGun;
+        private HutongGames.PlayMaker.FsmInt _propBoltAmmo;
+        internal bool TryWeaponMuzzle(out Vector3 position)
+        {
+            position = Vector3.zero;
+            if (_prop == null || !_propShown || !_propIsGun || _propMuzzle == null || _propFor != Game.DrawnWeapon) return false;
+            position = _propMuzzle.TransformPoint(_propMuzzleLocal);
+            return true;
+        }
         // the weapon model: drawn in third person; in first person (the game draws its own gun) only its shadow, next to her body's shadow
         private void ShowProp(bool on)
         {
+            if (_propBolt != null && _propBoltAmmo != null && _propBolt.gameObject.activeSelf != (_propBoltAmmo.Value > 0)) _propBolt.gameObject.SetActive(_propBoltAmmo.Value > 0);
             bool shadow = !on && PlayerBodyModule.BodyFirstPerson.Value && (!Game.InCar || PlayerBodyModule.BodyInCar);
             if (_prop == null || _propShown == on && _propShadow == shadow) return;
             _propShown = on; _propShadow = shadow;
@@ -1299,7 +1311,9 @@ namespace WildWasteland.Modules.PlayerBody
             if (weapon == _propFor && (_prop != null || weapon == "" || Time.unscaledTime < _propRetry)) return;   // (2.2.8) no model: tried again every 2 s, not every frame
             _propFor = weapon; _propRetry = Time.unscaledTime + 2f;
             if (_prop != null) { UnityEngine.Object.Destroy(_prop); _prop = null; }
-            if (weapon == "" || Props.KindOf(weapon) == Props.Kind.None) return;   // bare hands ("hands"): no weapon model
+            _propBolt = null; _propBoltAmmo = null; _propMuzzle = null;
+            var kind = Props.KindOf(weapon); _propIsGun = kind == Props.Kind.Rifle || kind == Props.Kind.Pistol;
+            if (weapon == "" || kind == Props.Kind.None) return;   // bare hands ("hands"): no weapon model
             var p = Props.Find(weapon);
             if (p == null) { PlayerBodyModule.Verbose("No third-person model for " + weapon); return; }
             Transform hand;
@@ -1321,7 +1335,15 @@ namespace WildWasteland.Modules.PlayerBody
                 UnityEngine.Object.DestroyImmediate(stand);
             }
             else _prop = Props.Instantiate(p, hand, otherHand);
+            if (weapon.StartsWith("crossbow", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var t in _prop.GetComponentsInChildren<Transform>(true)) if (t.name == "arrow") { _propBolt = t; break; }
+                var w = Game.WeaponsParent != null ? Game.WeaponsParent.Find(weapon) : null;
+                var reload = w != null ? Core.FsmUtil.Find(w.gameObject, "Reload") : null;
+                if (reload != null) _propBoltAmmo = reload.FsmVariables.GetFsmInt("ammo_in_gun");
+            }
             _propBarrel = Props.Barrel(_prop);
+            Props.TryMuzzle(_prop, out _propMuzzle, out _propMuzzleLocal);
             _propPos = _prop.transform.localPosition; _propRot = _prop.transform.localRotation; _propHand = hand;
             _propSince = Time.time; GunPose.Note("");
             _propShown = true; ShowProp(false);

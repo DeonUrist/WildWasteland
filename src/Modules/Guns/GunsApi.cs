@@ -12,6 +12,8 @@ namespace WildWasteland.Modules.Guns
     {
         public int ContractVersion { get { return 1; } }
         public bool ProjectilesEnabled { get { return GunsModule.ProjectilesEnabled; } }
+        public bool PlayerProjectilesEnabled { get { return GunsModule.ProjectilesEnabled && GunsModule.PlayerTracers.Value; } }
+        public bool BlocksProjectile(Collider collider) { return collider != null && Tracers.Counts(collider); }
         public float EffectiveRange(int kind) { return Tracers.RangeOf((Tracers.Kind)kind); }
         public bool TryGetWeaponKind(GameObject owner, out int kind)
         {

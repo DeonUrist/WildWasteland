@@ -19,6 +19,7 @@ namespace WildWasteland.Core
         public static IGunsApi Guns;
         /// <summary>Hit feedback (HUD module, ex GunplayHUD.Api). Null when HUD is off.</summary>
         public static IHitFeedback Hud;
+        public static IVehicleStatusDisplay VehicleStatus;
         private static IPoiApi _poi;
         public static event Action<IPoiApi> PoiChanged;
         public static IPoiApi Poi
@@ -81,6 +82,7 @@ namespace WildWasteland.Core
         bool PlayerThirdPerson { get; }
         AudioClip PlayerShout { get; }
         bool TryPlayerJumpHead(GameObject player, out Vector3 position);
+        bool TryPlayerWeaponMuzzle(out Vector3 position);
         string[] ClipNames();
         bool IsPlayerClip(string name);
         AnimationClip GetClip(string name);
@@ -179,6 +181,8 @@ namespace WildWasteland.Core
         int ContractVersion { get; }
         /// <summary>Gunplay projectiles/tracers replace the vanilla hitscan (NPC vanilla observers stand down).</summary>
         bool ProjectilesEnabled { get; }
+        bool PlayerProjectilesEnabled { get; }
+        bool BlocksProjectile(Collider collider);
         float EffectiveRange(int kind);
         bool TryGetWeaponKind(GameObject owner, out int kind);
         /// <summary>Guns handles melee hits on fitted wheels (Patrols' own melee-wheel code stands down; ex Apocapatrol.MeleeWheels.RaiderHandles).</summary>
@@ -186,6 +190,11 @@ namespace WildWasteland.Core
     }
 
     // ------------------------------------------------------------------ HUD
+
+    public interface IVehicleStatusDisplay
+    {
+        bool TryShow(bool ignitionOff, bool handbrakeOn, bool playing, string volume);
+    }
 
     /// <summary>Mirror of GunplayHUD.Api.</summary>
     public interface IHitFeedback
