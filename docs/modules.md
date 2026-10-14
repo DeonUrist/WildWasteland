@@ -120,7 +120,7 @@ Rules shared by all modules (details per module in the wiki pages and port repor
 | FlyingKlick's Dog Companion | apocalypter.dogcompanion | NPC `DogCompanionCompat` patches its `Dog.*` methods only when loaded (`[NPC] DogCompanionCompat`). |
 | MotorcycleMod | com.denis.apocalypter.motorcyclemod | Patrols patches `MotorcycleMod.Factory.Template()` only when loaded (rear-access prep). |
 | Part Adjustment / Ultimate Tools | com.denis.apocalypter.partadjustment | Shares `GetButtonDown.OnUpdate`; keep WW's prefix cheap. |
-| Apocapocket / Apocainventory | com.denis.apocalypter.apocapocket | PlayerBody's `EquipmentInventory` reads their slots by type name (compiled delegates). If ever absorbed, a Core inventory interface is needed. |
+| Apocapocket / Apocainventory | com.denis.apocalypter.apocapocket | PlayerBody's `EquipmentInventory` reads their slots by type name (compiled delegates). CleanHUD's optional Apocapocket 2.0.10 bridge reads six logical slots and held-item identity, preserves stable display during transactions/saves, and fits 3-6 entries inside its existing slot row. Ordinary item textures are borrowed from Apocapocket; late native widgets are hidden/restored and only CleanHUD-owned transforms are removed from native card shifting. Soft dependency; no new config or save data. Testing; see `notes/compat-Apocapocket-CleanHUD.md`. If ever absorbed, a Core inventory interface is needed. |
 
 ## 4. Remaining candidate source mods (snapshot of V:\Repos\Apocalypter, 2026-10-13)
 

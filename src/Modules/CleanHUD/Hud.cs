@@ -4,6 +4,7 @@ using System.Globalization;
 using ApiCompass = WildWasteland.Modules.CleanHUD.Api.Compass;
 using UnityEngine;
 using UnityEngine.UI;
+using InsaneSystems.InputManager;
 
 namespace WildWasteland.Modules.CleanHUD
 {
@@ -23,9 +24,11 @@ namespace WildWasteland.Modules.CleanHUD
         private static readonly Color TickColor = new Color(240 / 255f, 234 / 255f, 218 / 255f, .85f);
         private static Color C(int r, int g, int b, float a) { return new Color(r / 255f, g / 255f, b / 255f, a); }
 
-        private static readonly float[] SlotX = { 0, 86, 172, 344, 516 };
-        private static readonly float[] SlotW = { 64, 64, 150, 150, 150 };
-        private static readonly string[] SlotKey = { "F1", "F2", "1", "2", "3" };
+        private static readonly float[] SlotX = { 0, 86, 172, 344, 516, 688, 860, 1032 };
+        private static readonly float[] SlotW = { 64, 64, 150, 150, 150, 150, 150, 150 };
+        private static readonly string[] SlotKey = { "F1", "F2", "1", "2", "3", "4", "5", "6" };
+        private static readonly string[] SlotAction = { "Use Bandage", "Use First Aid", "Weapon 1", "Weapon 2", "Weapon 3", "Item 4", "Item 5", "Item 6" };
+        private static readonly KeyCode[] DefaultSlotKeys = { KeyCode.F1, KeyCode.F2, KeyCode.Alpha1, KeyCode.Alpha2, KeyCode.Alpha3, KeyCode.Alpha4, KeyCode.Alpha5, KeyCode.Alpha6 };
         private static readonly Dictionary<string, Vector2> GroupSize = new Dictionary<string, Vector2> {
             { "compass", new Vector2(1100, 96) }, { "vitals", new Vector2(452, 126) }, { "weapon", new Vector2(356, 156) }, { "slots", new Vector2(666, 96) },
             { "insanity", new Vector2(180, 60) }, { "log", MessageLog.Size } };
@@ -85,12 +88,19 @@ namespace WildWasteland.Modules.CleanHUD
         private GameObject _lastWeapon;
         private string _lastMag, _lastRes, _lastCal;
         // slots
-        private readonly RawImage[] _slotIcon = new RawImage[5];
+        private readonly RawImage[] _slotIcon = new RawImage[8];
         private readonly Text[] _slotCnt = new Text[2];
-        private readonly Image[] _keyBack = new Image[5];
-        private readonly Text[] _keyText = new Text[5];
-        private readonly CanvasGroup[] _keyGroup = new CanvasGroup[5];
-        private readonly GameObject[] _slotItem = new GameObject[3];
+        private readonly Image[] _keyBack = new Image[8];
+        private readonly Text[] _keyText = new Text[8];
+        private readonly CanvasGroup[] _keyGroup = new CanvasGroup[8];
+        private readonly RectTransform[,] _keyEdges = new RectTransform[8, 4];
+        private readonly KeyCode[] _slotKeys = (KeyCode[])DefaultSlotKeys.Clone(), _shownKeys = new KeyCode[8];
+        private readonly GameObject[] _slotItem = new GameObject[6];
+        private readonly bool[] _ordinary = new bool[6];
+        private readonly Texture[] _slotTexture = new Texture[6];
+        private readonly int[] _iconAttempts = new int[6];
+        private int _lastSlotCount;
+        private float _nextItemIcon;
         private int _lastSel = -2;
         // compass
         private RectTransform _cmp;
@@ -109,6 +119,7 @@ namespace WildWasteland.Modules.CleanHUD
             _src = src; _layoutFile = layout;
             _font = FindFont(src);
             _root = new GameObject("CleanHUD", typeof(RectTransform));
+            _src.HudRoot = _root.transform;
             _root.transform.SetParent(src.Canvas.transform, false);
             if (src.DesignUI != null) _root.transform.SetSiblingIndex(src.DesignUI.GetSiblingIndex() + 1);
             var rt = (RectTransform)_root.transform;
@@ -317,7 +328,7 @@ namespace WildWasteland.Modules.CleanHUD
         private void BuildSlots()
         {
             var g = _groups["slots"];
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 8; i++)
             {
                 float x = SlotX[i], w = SlotW[i];
                 RawImage ic;
@@ -340,9 +351,13 @@ namespace WildWasteland.Modules.CleanHUD
                 float kx = (w - kw) / 2f;
                 _keyBack[i] = Img(key, "back", kx, 0, kw, 34, KeyBack);
                 Frame(key, kx, 0, kw, 34, 2f, Gold);
+                _keyEdges[i, 0] = (RectTransform)key.Find("t"); _keyEdges[i, 1] = (RectTransform)key.Find("b");
+                _keyEdges[i, 2] = (RectTransform)key.Find("l"); _keyEdges[i, 3] = (RectTransform)key.Find("r");
                 kt.transform.SetAsLastSibling();
                 Place((RectTransform)kt.transform, kx, 0, kw, 34);
                 _keyText[i] = kt;
+                _shownKeys[i] = DefaultSlotKeys[i];
+                if (i >= 5) { key.gameObject.SetActive(false); ic.enabled = false; }
             }
         }
 
@@ -434,7 +449,8 @@ namespace WildWasteland.Modules.CleanHUD
             _wIcon.color = l.IconTint;
             for (int i = 0; i < 2; i++) _slotIcon[i].color = l.IconTint;
             _lastSel = -2; _weaponDirty = true; _lastCal = null; _lastMag = null; _lastRes = null; _grenLast = int.MinValue;
-            for (int i = 0; i < 3; i++) _slotItem[i] = null;
+            for (int i = 0; i < 6; i++) { _slotItem[i] = null; _slotTexture[i] = null; _iconAttempts[i] = 0; }
+            _lastSlotCount = 0;
             _caret.enabled = l.HeadingCaret;
         }
 
@@ -443,7 +459,7 @@ namespace WildWasteland.Modules.CleanHUD
         internal void Tick()
         {
             if (_iconRevision != Assets.IconRevision) { _iconRevision = Assets.IconRevision; _lastSel = -2; _weaponDirty = true; }
-            if (Time.unscaledTime >= _nextScan) { _nextScan = Time.unscaledTime + 1f; _src.Refresh(); }
+            if (Time.unscaledTime >= _nextScan) { _nextScan = Time.unscaledTime + 1f; _src.Refresh(); RefreshSlotKeys(); }
             bool visible = _src.Visible;
             if (_root.activeSelf != visible) _root.SetActive(visible);
             MessageHook.Active = visible;
@@ -459,6 +475,7 @@ namespace WildWasteland.Modules.CleanHUD
             }
             try { TickVitals(); } catch (Exception e) { CleanHudModule.Throttled("vitals", e); }
             TickVehicleStatus();
+            _src.Pocket.Read();
             int sel = _src.Selected;
             try { TickSlots(l, sel); } catch (Exception e) { CleanHudModule.Throttled("slots", e); }
             try { TickWeapon(sel); } catch (Exception e) { CleanHudModule.Throttled("weapon", e); }
@@ -517,24 +534,37 @@ namespace WildWasteland.Modules.CleanHUD
                 if (_charges[i] != n) { _charges[i] = n; _slotCnt[i].text = n.ToString(CultureInfo.InvariantCulture); }
                 var c = l.IconTint; c.a = n > 0 ? 1f : .3f; _slotIcon[i].color = c;
             }
-            bool changed = sel != _lastSel;
-            for (int k = 0; k < 3; k++)
+            int count = _src.SlotCount;
+            bool geometry = count != _lastSlotCount, changed = sel != _lastSel || geometry;
+            bool retry = Time.unscaledTime >= _nextItemIcon && Core.GameRefs.InGame;
+            if (retry) _nextItemIcon = Time.unscaledTime + .5f;
+            for (int k = 0; k < 6; k++)
             {
-                var item = _src.Item(k);
-                if (item != _slotItem[k]) { _slotItem[k] = item; changed = true; }
+                var item = k < count ? _src.Item(k) : null; bool ordinary = _src.Ordinary(k);
+                bool content = !ReferenceEquals(item, _slotItem[k]) || ordinary != _ordinary[k];
+                if (content) { _slotItem[k] = item; _ordinary[k] = ordinary; _slotTexture[k] = null; _iconAttempts[k] = 0; changed = true; _weaponDirty = true; }
+                if (item != null && (!ordinary && changed || ordinary && _slotTexture[k] == null && _iconAttempts[k] < 20 && (content || retry)))
+                {
+                    var tex = ordinary ? ApocapocketInventory.ItemIcon(item) : Assets.WeaponIcon(item);
+                    if (ordinary) _iconAttempts[k]++;
+                    if (tex != _slotTexture[k]) { _slotTexture[k] = tex; changed = true; _weaponDirty = true; }
+                }
             }
+            for (int i = 0; i < count + 2; i++) if (geometry || _shownKeys[i] != _slotKeys[i])
+            { LayoutSlotKey(i, count); changed = true; }
             if (!changed) return;
-            _lastSel = sel;
-            for (int k = 0; k < 3; k++)
+            _lastSel = sel; _lastSlotCount = count;
+            for (int k = 0; k < 6; k++)
             {
-                int i = k + 2; var item = _slotItem[k]; bool on = sel == k && item != null;
+                int i = k + 2; var item = _slotItem[k]; bool on = sel == k && (item != null || _src.Pocket.Active);
                 var ri = _slotIcon[i];
-                var tex = item != null ? Assets.WeaponIcon(item) : null;
-                ri.enabled = tex != null;
+                _keyGroup[i].gameObject.SetActive(k < count);
+                var tex = _slotTexture[k];
+                ri.enabled = k < count && tex != null;
                 if (tex != null)
                 {
                     ri.texture = tex;
-                    Fit(ri.rectTransform, tex, SlotX[i] + 11f, 4f, SlotW[i] - 22f, 44f, false); // 128x44 box, centred where the 150x52 one was
+                    Fit(ri.rectTransform, tex, SlotLeft(i, count) + 11f, 4f, SlotWidth(i, count) - 22f, 44f, false);
                     var col = on ? l.IconTint : (l.InactiveTint ? l.IconTint : DimWhite);
                     col.a = on ? 1f : .62f * .55f;
                     ri.color = col;
@@ -543,6 +573,31 @@ namespace WildWasteland.Modules.CleanHUD
                 _keyBack[i].color = on ? Gold : KeyBack;
                 _keyText[i].color = on ? KeyDark : Gold;
             }
+        }
+
+        private static float SlotLeft(int i, int count) { return i < 2 ? SlotX[i] : 172f + (i - 2) * 516f / count; }
+        private static float SlotWidth(int i, int count) { return i < 2 ? SlotW[i] : 516f / count - 22f; }
+        private void RefreshSlotKeys()
+        {
+            var st = InputStorage.Singleton;
+            for (int i = 0; i < 8; i++)
+            {
+                _slotKeys[i] = DefaultSlotKeys[i];
+                if (st == null || st.Keys == null) continue;
+                foreach (var a in st.Keys) if (a != null && a.Name == SlotAction[i]) { _slotKeys[i] = a.Key; break; }
+            }
+        }
+        private void LayoutSlotKey(int i, int count)
+        {
+            float w = SlotWidth(i, count); var kt = _keyText[i];
+            _shownKeys[i] = _slotKeys[i]; kt.text = KeyCatalog.KeyText(_slotKeys[i]); kt.fontSize = 20;
+            float desired = Mathf.Max(34f, Mathf.Ceil(kt.preferredWidth) + 16f);
+            if (desired > w) kt.fontSize = Mathf.Max(8, Mathf.FloorToInt(20f * (w - 16f) / Mathf.Max(1f, kt.preferredWidth)));
+            float kw = Mathf.Min(w, Mathf.Max(34f, Mathf.Ceil(kt.preferredWidth) + 16f)), x = (w - kw) / 2f;
+            Place((RectTransform)_keyGroup[i].transform, SlotLeft(i, count), 62, w, 34);
+            Place(_keyBack[i].rectTransform, x, 0, kw, 34); Place(kt.rectTransform, x, 0, kw, 34);
+            Place(_keyEdges[i, 0], x, 0, kw, 2); Place(_keyEdges[i, 1], x, 32, kw, 2);
+            Place(_keyEdges[i, 2], x, 2, 2, 30); Place(_keyEdges[i, 3], x + kw - 2, 2, 2, 30);
         }
 
         // Fit a texture into a box keeping its aspect; centred, or right-aligned when rightAlign.
@@ -560,9 +615,9 @@ namespace WildWasteland.Modules.CleanHUD
             if (!ReferenceEquals(item, _lastWeapon) || _weaponDirty)
             {
                 _lastWeapon = item; _weaponDirty = false; _lastMag = null; _lastRes = null;
-                _weaponInfo = item != null ? Assets.Describe(item, Bindings.ItemName(item)) : null;
+                _weaponInfo = item == null ? null : _src.Ordinary(sel) ? new WeaponInfo("", "ITEM", "item") : Assets.Describe(item, Bindings.ItemName(item));
                 // bare hands (holstered, or an empty slot drawn) = fist
-                var tex = item != null ? Assets.WeaponIcon(item) : Glyph("fist") as Texture2D;
+                var tex = item == null ? Glyph("fist") : _src.Ordinary(sel) ? _slotTexture[sel] : Assets.WeaponIcon(item);
                 _wIcon.enabled = tex != null;
                 if (tex != null) { _wIcon.texture = tex; Fit(_wIcon.rectTransform, tex, 132, 18, 200, 64, true); }
             }

@@ -20,6 +20,11 @@ namespace WildWasteland.Modules.CleanHUD
         internal Transform PlayerCamera;
         private readonly Dictionary<Graphic, float> _hidden = new Dictionary<Graphic, float>();
         private bool _hiddenCaptured;
+        private int _pocketUiRevision = -1;
+        internal Transform HudRoot;
+        internal readonly ApocapocketInventory Pocket = new ApocapocketInventory();
+        internal int SlotCount { get { return Pocket.Active ? Pocket.Count : 3; } }
+        internal bool Ordinary(int slot) { return Pocket.Active && slot >= 0 && slot < 6 && Pocket.Ordinary[slot]; }
         private readonly List<Graphic> _graphics = new List<Graphic>();
         private readonly PlayMakerFSM[] _slotFsms = new PlayMakerFSM[3];
         private readonly FsmGameObject[] _slotVars = new FsmGameObject[3];
@@ -84,8 +89,9 @@ namespace WildWasteland.Modules.CleanHUD
                 _slotFsms[i] = Fsm(SlotHolders[i].gameObject, "SlotEmptyFull");
                 if (_slotFsms[i] != null) _slotVars[i] = _slotFsms[i].FsmVariables.FindFsmGameObject("item");
             }
-            if (_hiddenCaptured) return;
+            if (_hiddenCaptured && _pocketUiRevision == ApocapocketInventory.UiRevision) return;
             _hiddenCaptured = true;
+            _pocketUiRevision = ApocapocketInventory.UiRevision;
             foreach (var path in HiddenRoots)
             {
                 var t = Canvas.transform.Find(path); if (t == null) continue;
@@ -96,12 +102,15 @@ namespace WildWasteland.Modules.CleanHUD
                     if (!_hidden.ContainsKey(g)) _hidden.Add(g, g.canvasRenderer.GetAlpha());
                 }
             }
+            ApocapocketInventory.CaptureUi(this, HudRoot);
         }
+
+        internal void CaptureExtra(Graphic g) { float a; if (!_hidden.TryGetValue(g, out a) || a == 0f) { a = g.canvasRenderer.GetAlpha(); _hidden[g] = a == 0f ? 1f : a; } }
 
         private static string PathOf(Transform t) { string p = t.name; while (t.parent != null) { t = t.parent; p = t.name + "/" + p; } return p; }
 
         internal void Hide() { foreach (var pair in _hidden) if (pair.Key != null && pair.Key.canvasRenderer.GetAlpha() != 0f) pair.Key.canvasRenderer.SetAlpha(0f); }
-        internal void RefreshHiddenIfNeeded() { if (!_hiddenCaptured) Refresh(); }
+        internal void RefreshHiddenIfNeeded() { if (!_hiddenCaptured || _pocketUiRevision != ApocapocketInventory.UiRevision) Refresh(); }
         internal void Restore() { foreach (var pair in _hidden) if (pair.Key != null) pair.Key.canvasRenderer.SetAlpha(pair.Value); }
 
         internal bool Visible
@@ -116,6 +125,7 @@ namespace WildWasteland.Modules.CleanHUD
 
         internal GameObject Item(int slot)
         {
+            if (Pocket.Active) return slot >= 0 && slot < 6 ? Pocket.Items[slot] : null;
             if (slot < 0 || slot >= 3 || SlotHolders[slot] == null) return null;
             var f = _slotFsms[slot];
             if (f != null && f.ActiveStateName == "empty") return null;
@@ -132,6 +142,7 @@ namespace WildWasteland.Modules.CleanHUD
         {
             get
             {
+                if (Pocket.Active) return Pocket.Selected;
                 if (Weapons == null) return -1;
                 var s = Weapons.ActiveStateName;
                 if (s == "Slot 1") return 0;

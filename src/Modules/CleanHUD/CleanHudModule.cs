@@ -69,6 +69,7 @@ namespace WildWasteland.Modules.CleanHUD
         public override void Init()
         {
             Running = true; _retry = 0; _throttle.Clear();
+            ApocapocketInventory.Install(this);
             MessageHook.Clear(); Bindings.Clear(); Menu.BlockCancelFrame = -1;
             var dir = Core.Assets.ModuleConfigDir(Id);
             foreach (string name in new[] { "layout.json", "game_keys.txt" })
@@ -158,6 +159,7 @@ namespace WildWasteland.Modules.CleanHUD
             LocationMarkers.Shutdown();
             if (_menu != null) _menu.Teardown(); _menu = null;
             ApocasaverLoading.Clear();
+            ApocapocketInventory.Clear();
             if (_loadingScreen != null) { SaveBus.StateChanged -= _loadingScreen.StateChanged; _loadingScreen.Dispose(); _loadingScreen = null; }
             MessageHook.Clear(); Bindings.Clear(); Menu.BlockCancelFrame = -1;
             SceneCache.Clear(); Assets.Dispose(); Menu.DisposeAssets(); GlyphFont.Reset();

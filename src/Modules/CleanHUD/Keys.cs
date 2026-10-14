@@ -74,6 +74,7 @@ namespace WildWasteland.Modules.CleanHUD
         }
         private static string GameName(string name)
         {
+            var pocket = ApocapocketInventory.ActionLabel(name); if (pocket != null) return pocket;
             string s;
             if (Names.TryGetValue(name, out s)) return s;
             if (name.StartsWith("Adjust-", StringComparison.OrdinalIgnoreCase)) name = name.Substring(7);

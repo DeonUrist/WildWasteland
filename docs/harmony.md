@@ -106,6 +106,7 @@ No module-only patches (its single target is the shared `SetFsmFloat.OnEnter` pr
 |---|---|---|---|---|
 | `UiTextSetText.OnEnter` | postfix | `MessageHook.Postfix` | `!Active`, null Text, everyFrame; HUD canvas only, timed-state classification cached by FsmState | per UI text state entry |
 | `Apocasaver.AutosavePresentation.Begin` / `.End` (optional, reflected third-party UI methods) | postfix | `ApocasaverLoading.AfterBegin` / `.AfterEnd` | Cached loading screen provider null; display only, exceptions contained | per autosave presentation begin/end |
+| `Apocapocket.ExtraSlots.BuildUi` (optional, reflected third-party UI method) | postfix | `ApocapocketInventory.AfterBuildUi` | Bridge absent / first cloned icon absent; increments a revision for one-time alpha capture and exclusion of CleanHUD-owned transforms from native card shifting | per native pocket UI creation |
 
 Shared `GetButtonDown.OnUpdate` prefix: `CancelHook.Prefix`, registered after HUD and before Patrols. Early-out on module/menu off or `BlockCancelFrame < Time.frameCount`; skips only Cancel while a CleanHUD sub-screen, key capture or dialog is open. Apocasetter remains the input blocker. No separate Harmony instance or runner. `Canvas.willRenderCanvases` keeps replaced native graphics hidden; removed on disposal.
 
