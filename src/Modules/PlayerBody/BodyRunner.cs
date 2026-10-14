@@ -101,7 +101,6 @@ namespace WildWasteland.Modules.PlayerBody
             {
                 try { Perf.Frame(); } catch (Exception e) { PlayerBodyModule.Warn("Perf: " + e.Message); }
                 if (!Game.Ready) { RustlinerDoors.Restore(); OcclusionCutaway.Stop(); if (_body != null) DestroyBody(); return; }   // (2.2.6) the cutaway taken down in menus / loading too
-                RustlinerDoors.Tick();
                 if (!Game.Dead) { _lastVelocity = Game.Velocity; _lastCar = Game.InCar ? Game.CarRoot : null; }
                 if (PlayerBodyModule.FemaleArms.Value && PlayerBodyModule.Female) Arms.Tick(); else Arms.Restore();
                 ThirdPerson.Tick();

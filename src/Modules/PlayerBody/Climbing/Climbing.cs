@@ -15,6 +15,7 @@ namespace WildWasteland.Modules.PlayerBody
         const float FinishFraction = .65f;
         int jumpAttemptFrame = -1;
         bool jumpConsumed;
+        float jumpProbeUntil, nextJumpProbe;
         // (WW) the settings are PlayerBodyModule entries: [PlayerBody / Climbing] Climbing, JumpTriggersClimbing (F6), [Keys] Climb,
         // and the tuning in F7 (tools.cfg [PlayerBody / Climbing]); migrated from Apocaplayer [climbing]/[Debug] and Apocaclimber's cfg
         static ConfigEntry<bool> enabledMod { get { return PlayerBodyModule.ClimbingOn; } }
@@ -82,34 +83,30 @@ namespace WildWasteland.Modules.PlayerBody
 
         internal bool TryJumpClimb()
         {
-            if (!jumpTriggers.Value || !GameBindings.Down("Jump", KeyCode.Space)) return false;
+            if (!jumpTriggers.Value || !GameBindings.Down("Jump", KeyCode.Space) || !enabledMod.Value
+                || !ModAPI.PlayerCanTraverse || Cursor.visible) return false;
             if (climbing) return true;
             // A failed early Update probe must not block the Jump FSM's later
             // probe: movement/grounding may have updated in between those calls.
+            if (jumpAttemptFrame != Time.frameCount)
+            { jumpProbeUntil = Time.time + 2f; nextJumpProbe = Time.time + .05f; }
             jumpAttemptFrame = Time.frameCount;
             jumpConsumed = TryStart(true);
             return jumpConsumed;
         }
 
-        bool TryStart(bool pushing)
+        bool TryStart(bool allowAirborne)
         {
             if (climbing || !PlayerBodyModule.Running || !enabledMod.Value || waist == null || high == null
                 || Time.unscaledTime < cooldown || !ModAPI.PlayerCanTraverse || Cursor.visible) return false;
-            if (pushing)
-            {
-                var vertical = Game.MovementFsm != null ? Game.MovementFsm.FsmVariables.FindFsmFloat("AxisVertical") : null;
-                float input = vertical != null ? vertical.Value : 0;
-                try { input = Mathf.Max(input, InsaneSystems.InputManager.InputController.GetKeyAxisActionValue("Vertical")); } catch { }
-                if (input <= .1f) return false;
-            }
             var player = ModAPI.PlayerRoot;
             var rb = player != null ? player.GetComponent<Rigidbody>() : null;
             if (rb == null) return false;
             if (body != rb) { body = rb; geometry = new ClimbGeometry(rb); }
             var camera = Game.PlayerCamera;
             var forward = camera != null ? camera.forward : player.transform.forward;
-            if (!geometry.Find(forward, minHeight.Value, Mathf.Max(minHeight.Value, maxHeight.Value), reach.Value, out target))
-            { Reject(geometry.Rejection); return false; }
+            if (!geometry.Find(forward, minHeight.Value, Mathf.Max(minHeight.Value, maxHeight.Value), reach.Value, allowAirborne, out target))
+            { if (LastReject != geometry.Rejection) Reject(geometry.Rejection); return false; }
             Begin();
             return climbing;
         }
@@ -135,6 +132,9 @@ namespace WildWasteland.Modules.PlayerBody
                     return;
                 }
                 if (jumpTriggers.Value && GameBindings.Down("Jump", KeyCode.Space)) TryJumpClimb();
+                if (!climbing && jumpTriggers.Value && Time.time < jumpProbeUntil && Time.time >= nextJumpProbe && body != null
+                    && (Game.JumpState == "Jump" || Game.JumpState == "Falling" || Mathf.Abs(body.velocity.y) > .6f))
+                { nextJumpProbe = Time.time + .05f; TryStart(true); }
                 if (!climbing && GameBindings.KeyDown(PlayerBodyModule.ClimbKeyCode)) TryStart(false);
             }
             catch (Exception e) { Finish(false, "Exception"); PlayerBodyModule.Error(e); }
@@ -142,7 +142,7 @@ namespace WildWasteland.Modules.PlayerBody
 
         void Begin()
         {
-            highClimb = target.Rise > waistLimit.Value;
+            highClimb = target.Rise > waistLimit.Value && !target.LowCatch;
             var clip = highClimb ? high : waist;
             animation = ModAPI.BeginPlayerTraversal(clip, target.Facing);
             if (animation == null) { Reject("Apocaplayer could not take control of the body animation"); return; }
@@ -150,7 +150,7 @@ namespace WildWasteland.Modules.PlayerBody
             animation.FollowHeadInFirstPerson = true;
             oldKinematic = body.isKinematic; oldGravity = body.useGravity; oldInterpolation = body.interpolation;
             // Set climbing before any mutation so exceptions restore every saved state.
-            climbing = true; elapsed = 0; playbackSpeed = speed.Value;
+            climbing = true; jumpProbeUntil = 0; elapsed = 0; playbackSpeed = speed.Value;
             // Both source clips finish their ascent before the final standing tail.
             // Give movement back at 65%; the pose blends out without holding physics.
             duration = clip.length * FinishFraction / playbackSpeed; lastSafe = body.position;
@@ -219,7 +219,7 @@ namespace WildWasteland.Modules.PlayerBody
 
         internal void Stop() { Finish(false, "Runner disabled"); }
         internal void Reset()
-        { Stop(); body = null; geometry = null; cooldown = 0; jumpAttemptFrame = -1; jumpConsumed = false; }
+        { Stop(); body = null; geometry = null; cooldown = jumpProbeUntil = nextJumpProbe = 0; jumpAttemptFrame = -1; jumpConsumed = false; }
         
     }
 }

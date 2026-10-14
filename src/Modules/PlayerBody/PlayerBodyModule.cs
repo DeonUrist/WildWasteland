@@ -116,7 +116,7 @@ namespace WildWasteland.Modules.PlayerBody
 
             ClimbingOn = cfg.Player("Climbing", "Climbing", true, "Climb onto reachable solid ledges on foot.");
             cfg.Migrate(ClimbingOn, ClimberCfg, "General", "Enabled"); Mig(ClimbingOn, "climbing", "Enabled");
-            JumpTriggersClimbing = cfg.Player("Climbing", "JumpTriggersClimbing", true, "The game's Jump key climbs when pushing forward into a reachable ledge. Otherwise it jumps normally.");
+            JumpTriggersClimbing = cfg.Player("Climbing", "JumpTriggersClimbing", true, "The game's Jump key climbs onto a reachable ledge or catches one within arm's reach during a jump. Otherwise it jumps normally.");
             Mig(JumpTriggersClimbing, "climbing", "Jump triggers climbing");
             AutomaticStepUp = cfg.Player("Climbing", "AutomaticStepUp", true, "Automatically step onto low solid obstacles up to 35 cm while moving on foot. Off while jumping, prone or driving.");
             Mig(AutomaticStepUp, "General", "AutomaticStepUp"); Mig(AutomaticStepUp, "climbing", "AutomaticStepUp");
@@ -131,7 +131,7 @@ namespace WildWasteland.Modules.PlayerBody
             VehicleHotkeyHint = cfg.Player("Vehicles", "VehicleHotkeyHint", true, "Show the vehicle hotkeys on the left while driving. Hiding the hints keeps the keys working.");
             Mig(VehicleHotkeyHint, "VEHICLE", "VehicleHotkeyHint");
             IgnitionControlOn = cfg.Player("Vehicles", "IgnitionKey", true, "Adds an \"Ignition\" row to the game's Controls screen (default E): each press performs one ignition/start panel click (ignition on, crank, then stop on standard cars).");
-            RustlinerDoorways = cfg.Player("Vehicles", "RustlinerDoorways", true, "Walk through the Rustliner bus doorways without catching on the door frames (only the player's capsule ignores the frames while in a doorway).");
+            RustlinerDoorways = cfg.Player("Vehicles", "RustlinerDoorways", false, "Currently inactive: the Rustliner doorway fix has been withdrawn pending a different implementation. This setting has no effect.");
             LanceIgnoresOwnCar = cfg.Player("Vehicles", "LanceIgnoresOwnCar", true, "A blast lance thrown from the driver's seat flies out of your own car instead of blowing up on it.");
 
             // ---- [Keys]: gameplay keys keep Apocaplayer's defaults (polled in context: third person, climbing, driving)

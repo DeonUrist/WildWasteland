@@ -8,6 +8,7 @@ namespace WildWasteland.Modules.PlayerBody
         public Vector3 Start, Lift, End;
         public Quaternion Facing;
         public float Rise;
+        public bool LowCatch;
     }
 
     // Shared by the mod and the Unity physics verification project.
@@ -73,7 +74,7 @@ namespace WildWasteland.Modules.PlayerBody
 
         bool Reject(string reason) { Rejection = reason; return false; }
 
-        public bool Find(Vector3 forward, float minHeight, float maxHeight, float reach, out ClimbTarget target)
+        public bool Find(Vector3 forward, float minHeight, float maxHeight, float reach, bool allowAirborne, out ClimbTarget target)
         {
             target = default(ClimbTarget);
             Rejection = "";
@@ -90,7 +91,9 @@ namespace WildWasteland.Modules.PlayerBody
             // Probe the sole centre so pushing into a wall does not lose grounding.
             int count = Physics.RaycastNonAlloc(feet + Vector3.up * .15f, Vector3.down, hits,
                 .35f, ~0, QueryTriggerInteraction.Ignore);
-            if (!Nearest(count, out ground) || ground.normal.y < .65f || body.velocity.y > .6f) return Reject("Must stand on ground");
+            bool grounded = Nearest(count, out ground) && ground.normal.y >= .65f && body.velocity.y <= .6f;
+            if (!grounded && !allowAirborne) return Reject("Must stand on ground");
+            if (!grounded) reach = Mathf.Min(reach, radius + .05f);
             RaycastHit face;
             face = default(RaycastHit);
             // Check slightly ahead at multiple heights: a car body may begin above
@@ -120,8 +123,12 @@ namespace WildWasteland.Modules.PlayerBody
                 var end = landing.point + (body.position - feet) + Vector3.up * .025f;
                 var lift = new Vector3(body.position.x, end.y, body.position.z);
                 if (!Clear(body.position, lift) || !Clear(lift, end)) { last = "Climb path or landing has no body clearance"; continue; }
+                Transform chest;
+                bool lowCatch = !grounded && BodyRunner.PlayerBody != null
+                    && BodyRunner.PlayerBody.Bones.TryGetValue("mixamorig:Spine2", out chest) && chest != null
+                    && landing.point.y <= chest.position.y + body.position.y - body.transform.position.y;
                 target = new ClimbTarget { Surface = landing.collider, Start = body.position, Lift = lift, End = end,
-                    Rise = rise, Facing = Quaternion.LookRotation(forward, Vector3.up) };
+                    Rise = rise, LowCatch = lowCatch, Facing = Quaternion.LookRotation(forward, Vector3.up) };
                 return true;
             }
             return Reject(last);
