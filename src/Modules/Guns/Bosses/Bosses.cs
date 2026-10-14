@@ -18,12 +18,13 @@ namespace WildWasteland.Modules.Guns
 
         private static readonly Dictionary<string, float> Base = new Dictionary<string, float> { { "Duke_Ironjaw", 1500f }, { "Buzzgut", 600f } };
         private static readonly Dictionary<int, Boss> _bosses = new Dictionary<int, Boss>();
+        private static readonly Dictionary<int, GameObject> _detected = new Dictionary<int, GameObject>();
         private static readonly HashSet<int> _raised = new HashSet<int>();
         private static readonly List<int> _dead = new List<int>();
         private static float _next, _nextScan;
         private static int _scanBurst;
 
-        public static void OnSceneLoaded() { _raised.Clear(); _bosses.Clear(); _next = 0f; _nextScan = Time.unscaledTime + 2f; _scanBurst = 4; }
+        public static void OnSceneLoaded() { _raised.Clear(); _bosses.Clear(); _detected.Clear(); _next = 0f; _nextScan = Time.unscaledTime + 2f; _scanBurst = 4; }
 
         private static string Clean(string name) { int cut = name.IndexOf('('); return cut > 0 ? name.Substring(0, cut) : name; }
 
@@ -50,6 +51,21 @@ namespace WildWasteland.Modules.Guns
             if (Base.TryGetValue(name, out b)) Add(owner, name, b);
         }
 
+        internal static bool BeforeGetDetections(Micosmo.SensorToolkit.PlayMaker.SensorGetDetections action)
+        {
+            if (!GunsModule.BossHealth.Value) return true;
+            var fsm = action.Fsm;
+            if (fsm == null || fsm.Name != "Detection") return true;
+            var owner = fsm.GameObject;
+            if (owner == null) return true;
+            int id = owner.GetInstanceID();
+            GameObject seen;
+            if (_detected.TryGetValue(id, out seen) && seen == owner) return true;
+            _detected[id] = owner;
+            Registered(owner);
+            return true;
+        }
+
         // from the CreateObject postfix: prefab name already known (cached), the instance is what was made
         internal static void Spawned(GameObject made, string prefabName)
         {
@@ -66,6 +82,9 @@ namespace WildWasteland.Modules.Guns
 
         private static void Scan()
         {
+            _dead.Clear();
+            foreach (var kv in _detected) if (kv.Value == null) _dead.Add(kv.Key);
+            foreach (var id in _dead) _detected.Remove(id);
             foreach (var f in UnityEngine.Object.FindObjectsOfType<PlayMakerFSM>())
             {
                 if (f == null || f.FsmName != "BossUI") continue;

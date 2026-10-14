@@ -198,8 +198,10 @@ namespace WildWasteland.Modules.Guns
 
             // shared targets: Core dispatchers (module init order NPC -> Guns keeps NPCAI's shot counting before the projectile prefix)
             Hooks.SensorRayHitEnter.Prefix(this, Tracers.BeforeRayHit);
+            Hooks.SensorDetectionsDo.Prefix(this, Bosses.BeforeGetDetections);
             Hooks.RaycastEnter.Prefix(this, Tracers.BeforeRaycast);
             Hooks.SetFsmFloatEnter.Postfix(this, Tracers.AfterSetFsmFloat);
+            Hooks.CreateObjectEnter.Prefix(this, Tracers.BeforeMeleeEffect);
             Hooks.CreateObjectEnter.Postfix(this, AfterCreateObject);
             Hooks.GetButtonDownUpdate.Prefix(this, GetButtonDown_Patch.Prefix);
             Hooks.ActivateGameObjectEnter.Prefix(this, MagazineDrawPatch.Prefix);
@@ -315,10 +317,15 @@ namespace WildWasteland.Modules.Guns
             var prefab = __instance.gameObject.Value;
             if (prefab != null && made != null && BossHealth.Value)
             {
-                string boss;
-                int id = prefab.GetInstanceID();
-                if (!_creates.TryGetValue(id, out boss)) { boss = Bosses.BossName(prefab.name); _creates[id] = boss; }
-                if (boss != null) Bosses.Spawned(made, boss);
+                // ItemSpawner uses the same variable for the prefab and the created instance.
+                if (ReferenceEquals(prefab, made)) Bosses.Registered(made);
+                else
+                {
+                    string boss;
+                    int id = prefab.GetInstanceID();
+                    if (!_creates.TryGetValue(id, out boss)) { boss = Bosses.BossName(prefab.name); _creates[id] = boss; }
+                    if (boss != null) Bosses.Spawned(made, boss);
+                }
             }
             Tracers.OrbSpawned(__instance, made);
         }
