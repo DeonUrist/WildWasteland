@@ -55,6 +55,7 @@ namespace WildWasteland.Modules.Patrols
             try { InitInner(); }
             catch { Shutdown(); throw; }   // a failed start leaves nothing running (ModuleHost then removes hooks / jobs / patches)
             Running = true;   // last: per-object loops only run once everything is in place
+            Services.FollowerVehicles = new QuestFollowers();
         }
 
         void InitInner()
@@ -101,6 +102,7 @@ namespace WildWasteland.Modules.Patrols
         public override void Shutdown()
         {
             Running = false;
+            if (Services.FollowerVehicles is QuestFollowers) Services.FollowerVehicles = null;
             TrafficCompass.Clear();
             if (_onSaveState != null) { SaveBus.StateChanged -= _onSaveState; _onSaveState = null; }
             Try("persistence flush", PatrolPersistence.Uninstall);

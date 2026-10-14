@@ -22,6 +22,7 @@ namespace WildWasteland.Modules.CleanHUD
         private Hud _hud;
         private Menu _menu;
         private LoadingScreen _loadingScreen;
+        private QuestMap _questMap;
         private float _retry;
         private Job _attach;
         internal static bool Running;
@@ -88,12 +89,17 @@ namespace WildWasteland.Modules.CleanHUD
             SaveBus.StateChanged += _loadingScreen.StateChanged;
             Services.VehicleStatus = this;
             Services.Compass = this;
+            _questMap = new QuestMap(); Services.Map = _questMap;
+            TalkDialogue.Install(this);
             Core.Patches.Patch(this, AccessTools.Method(typeof(UiTextSetText), "OnEnter"), postfix: AccessTools.Method(typeof(MessageHook), "Postfix"));
             Hooks.GetButtonDownUpdate.Prefix(this, CancelHook.Prefix);
             Scheduler.Sliced(this, "Scene key discovery", 500, SceneCache.Step);
             Scheduler.Sliced(this, "Weapon icons", 500, Assets.RenderStep);
             Scheduler.Interval(this, "Layout reload", 2f, PollLayout);
             Scheduler.Interval(this, "Location markers", .5f, LocationMarkers.Tick);
+            Scheduler.Interval(this, "Quest map lookup", 1f, _questMap.FindMap);
+            Scheduler.EveryFrame(this, "Quest map markers", _questMap.Tick, Phase.LateUpdateLast);
+            Scheduler.EveryFrame(this, "Dialogue window", TalkDialogue.Tick, Phase.LateUpdateLast);
             _attach = Scheduler.Interval(this, "HUD attachment", 1f, AttachHud, Phase.LateUpdateLast);
             _attach.RunNow();
             Scheduler.EveryFrame(this, "HUD", TickHud, Phase.LateUpdateLast);
@@ -145,6 +151,7 @@ namespace WildWasteland.Modules.CleanHUD
         public override void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             LocationMarkers.Clear();
+            if (_questMap != null) _questMap.SceneLoaded(); TalkDialogue.Hide();
             Release(); _menu.Teardown(); SceneCache.Reset(); MessageHook.Clear(); Bindings.Clear(); Assets.SceneLoaded();
             _loadingScreen.SceneLoaded();
             _retry = 0; _attach.RunNow();
@@ -154,6 +161,9 @@ namespace WildWasteland.Modules.CleanHUD
         public override void Shutdown()
         {
             Running = false; Release();
+            TalkDialogue.Dispose();
+            if (ReferenceEquals(Services.Map, _questMap)) Services.Map = null;
+            if (_questMap != null) _questMap.Dispose(); _questMap = null;
             if (ReferenceEquals(Services.VehicleStatus, this)) Services.VehicleStatus = null;
             if (ReferenceEquals(Services.Compass, this)) Services.Compass = null;
             LocationMarkers.Shutdown();

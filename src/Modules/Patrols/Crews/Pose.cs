@@ -16,6 +16,7 @@ namespace WildWasteland.Modules.Patrols
         private ArmPoseProfile _armPose;
         private readonly List<WeaponRoot> _weapons = new List<WeaponRoot>();
         private bool _aimActive;
+        internal bool AnimatedFollower;
         private Vector3 _aimPoint;
         private float _aimYaw, _aimPitch;
         private bool _lockSeatRotation;
@@ -214,6 +215,7 @@ namespace WildWasteland.Modules.Patrols
                 Swing(_rUpLeg, -thigh, right); Swing(_rUpLeg, -PatrolsModule.PoseRightLegCloser.Value, up); Swing(_rLeg, knee, right);
             }
 
+            if (AnimatedFollower) goto AimFollower;
             if(bus!=null&&(!_aimActive||editing))
             {
                 BusJoint(_lArm,_lForeArm,bus.left[2],right,up);BusJoint(_lForeArm,_lHand,bus.left[3],right,up);BusJoint(_lHand,_lForeArm,bus.left[4],right,up,true);
@@ -239,6 +241,7 @@ namespace WildWasteland.Modules.Patrols
             }
 
             // Arms remain permanently in the driver pose. Rotate that fixed upper-body pose through the spine only.
+            AimFollower:
             float wantedYaw = 0f, wantedPitch = 0f;
             if (_aimActive && !editing && _spine2 != null)
             {

@@ -48,6 +48,8 @@ namespace WildWasteland.Modules.NPC
         internal sealed class Npc
         {
             public GameObject Owner; public Transform T; public Rigidbody Rb; public Collider Col;
+            public bool FollowerDriven;
+            public float FollowerReloadUntil;
             public PlayMakerFSM Attack, Movement;
             public FsmGameObject Target;              // Detection.detectedObj
             public bool Ranged; public WeaponRanges.Kind Kind; public PlayMakerFSM MovementFsm; public float MadeAt, NextRangedCheck;
@@ -97,6 +99,15 @@ namespace WildWasteland.Modules.NPC
         }
 
         private static readonly Dictionary<int, Npc> _npcs = new Dictionary<int, Npc>();
+        internal static void SetFollowerDriven(GameObject npc, bool enabled, float reloadUntil)
+        {
+            Npc n;
+            if (npc == null || !_npcs.TryGetValue(npc.GetInstanceID(), out n)) return;
+            if (enabled && !n.FollowerDriven && n.Mode != Mode.Off) SetMode(n, Mode.Off, "quest follower");
+            n.FollowerDriven = enabled;
+            n.FollowerReloadUntil = reloadUntil;
+            if (!enabled) { n.Shots = 0; n.Reloading = false; n.ReloadShown = false; }
+        }
         private static readonly HashSet<int> _ignored = new HashSet<int>();
         private static readonly List<int> _dead = new List<int>();
         private static float _nextCount, _interval = 0.1f;
@@ -183,6 +194,7 @@ namespace WildWasteland.Modules.NPC
             {
                 var n = kv.Value;
                 if (n.Owner == null) continue;
+                if (n.FollowerDriven) continue;
                 // #63: a seated simple convoy bandit is skipped here, before Drive() could suspend its body; one registered in the moment it was
                 // spawned (before Patrols seated it) kept the player animation framework on, which then animated the car's motion as a run
                 if(SimpleBandits.Has(n.Owner)&&!SimpleBandits.Fighting(n.Owner)){if(n.Body!=null&&!ApBody.Suspended(n.Body))ApBody.Suspend(n.Body,true);continue;}
@@ -1261,9 +1273,9 @@ namespace WildWasteland.Modules.NPC
         // Aim, before a burst: true = hold fire (reloading, or empty and not yet standing still enough to reload)
         internal static bool NeedsReload(GameObject owner)
         {
-            if (!NpcModule.Magazines.Value) return false;
             var n = Get(owner);
-            if (n == null) return false;
+            if (n != null && n.FollowerDriven) return Time.time < n.FollowerReloadUntil;
+            if (!NpcModule.Magazines.Value || n == null) return false;
             if (n.Weapon == null)
             {
                 // no rig (Apocaplayer absent): the gun is looked up here, once per burst until found

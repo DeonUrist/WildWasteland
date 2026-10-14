@@ -501,7 +501,7 @@ namespace WildWasteland.Modules.CleanHUD
         }
         private static Sprite _plate;
         internal static void DisposeAssets() { if (_plate != null) UnityEngine.Object.Destroy(_plate); _plate = null; }
-        private static Sprite PlateSprite()
+        internal static Sprite PlateSprite()
         {
             if (_plate != null) return _plate;
             var t = Assets.Tex("panel_menu"); if (t == null) return null;

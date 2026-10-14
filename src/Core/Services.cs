@@ -21,6 +21,8 @@ namespace WildWasteland.Core
         public static IHitFeedback Hud;
         public static IVehicleStatusDisplay VehicleStatus;
         public static ICompassMarkers Compass;
+        public static IMapMarkers Map;
+        public static IFollowerVehicles FollowerVehicles;
         private static IPoiApi _poi;
         public static event Action<IPoiApi> PoiChanged;
         public static IPoiApi Poi
@@ -179,6 +181,7 @@ namespace WildWasteland.Core
         void Hurt(GameObject victim, GameObject attacker);
         float SpreadFactor(float distance);
         void Inform(GameObject npc, GameObject target);
+        void SetFollowerDriven(GameObject npc, bool enabled, float reloadUntil = 0f);
         /// <summary>Fills <paramref name="into"/> (cleared first) with the current nav structures.</summary>
         void Structures(List<NavStructure> into);
     }
@@ -200,6 +203,22 @@ namespace WildWasteland.Core
     }
 
     // ------------------------------------------------------------------ HUD
+
+    public interface IMapMarkers
+    {
+        int Add(string owner, Func<Vector3> position, string icon, Color color, string label);
+        bool Exists(int id);
+        void Remove(int id);
+        void RemoveAll(string owner);
+    }
+
+    public interface IFollowerVehicles
+    {
+        // Legacy Quests binds these types by reflection; the provider owns the mapping.
+        Type ResolveType(string name);
+        void Animated(GameObject npc, bool enabled);
+        void Combat(GameObject npc, GameObject target, float blockedUntil);
+    }
 
     public interface IVehicleStatusDisplay
     {

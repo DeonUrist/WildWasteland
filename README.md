@@ -2,7 +2,7 @@
 
 A BepInEx 5 mod for **Apocalypter** that combines gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
 
-Version **0.1.6 RC3** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
+Version **0.1.7 RC4** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
 
 | Module | What it is | Replaces (remove these from `BepInEx\plugins`) |
 |---|---|---|
@@ -30,7 +30,7 @@ While any of those standalone plugins is still installed, the module that replac
    BepInEx\plugins\WildWasteland\Patrols\             templates, textures, sounds, layouts, WarRig\ models
    ```
    If an asset is missing, WW falls back to the old plugin folder (`plugins\Apocaplayer\`, `plugins\NPCAI\Models\`, `plugins\Gunplay\Sounds\`, `plugins\GunplayHUD\Sounds\`, `plugins\Apocapatrol\`, `plugins\WarRig\`) or to a copy built into the DLL, and warns in the log. Patrols copies its old data into its new folder on the first run.
-4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.6]` and a summary `Wild Wasteland 0.1.6 modules:` with every module `on`.
+4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.7]` and a summary `Wild Wasteland 0.1.7 modules:` with every module `on`.
 
 ## Settings: F6 and F7
 
@@ -45,6 +45,8 @@ CleanHUD loading screens use `BepInEx\plugins\WildWasteland\LoadingScreens\Scree
 CleanHUD controls are in **F7 → Game → HUD** (Clean HUD, Clean menus, Needs, HP and armor numbers, Insanity, Scale). Its module switch and job timings are in **F7 → Modules**; EnableCheats is in Debug. Settings live in `config\WildWasteland\settings.cfg`, under `CleanHUD / HUD` and `CleanHUD / Menu`. Missing settings import the standalone choices even on an existing WW install. Layout and the game key cache copy once into `config\WildWasteland\CleanHUD\`; edits to the new layout reload within two seconds. All CleanHUD textures/font assets are embedded, so no asset-folder copy is needed. Disable standalone CleanHUD through Apocasetter and restart to use the built-in module.
 
 RC3 adds optional CleanHUD compatibility with **Apocapocket 2.0.10**, which stays a separate plugin and is not included in this archive. CleanHUD shows its three to six logical slots, highlights extra-slot weapons correctly, displays ordinary item icons, and updates key badges after rebinding. Backpack capacity controls the number of shown slots. The row retains its existing placement and scale; switching CleanHUD off restores the native pocket UI. No new config entries or save data. Verification remains Testing; see [test steps](notes/compat-Apocapocket-CleanHUD.md).
+
+RC4 adds optional compatibility with **Apocatalker 2.0.0** and **Apocalypter Quests 1.8.0**. Keep those two mods installed, including their dialogue, quest, faction, theme and voice files; they are not bundled or replaced. WW schedules their callbacks and slices world discovery, renders CleanHUD dialogue with the original window as its fallback, adds native map/compass quest markers and connects hired followers to WW animations, reload holds and passenger combat. Immersive Map remains supported when installed. `[QuestsCompat] Enabled` defaults true in settings.cfg. Original ES3 key `ApocalypterQuests` and Talk's shared/manual story profiles are preserved. Features remain Testing; see [compatibility and test steps](notes/compat-Talk-Quests.md). If native plugin components were destroyed during a scene change, restart the game to compare fully standalone behaviour after disabling the bridge.
 
 ## First run: migration
 

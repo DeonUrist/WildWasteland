@@ -2,6 +2,14 @@
 
 Short records of choices that later sessions must not silently undo. Newest first.
 
+## 2026-10-15 - Compatibility for installed Talk and Quests on RC3
+
+Denis requested compatibility for loaded Apocatalker 2.0.0 and Apocalypter Quests 1.8.0 instead of the planned port. This explicitly permits observing/routing their callbacks; the general standalone conflict policy still applies to absorbed mods. Keep their DLLs, ES3 `ApocalypterQuests` data and Talk's global/manual StoryProfile flag files unchanged. Quests' original SaveBook runs after the native save flush through SaveBus. Keep its Immersive Map integration when installed, and additionally mirror markers through CleanHUD's native map and compass. CleanHUD renders a dialogue window forwarding original choices/callbacks, with the original window restored when CleanHUD is off. Quests keeps follower movement, hiring and ammo timing; WW supplies humanoid animations/reloads, an NPC steering handoff and explicit passenger target/reload gating. Target the latest published RC, 0.1.6 RC3; no version bump or release publication was requested. Details and manual verification: notes/compat-Talk-Quests.md.
+
+## 2026-10-15 - Publish Talk/Quests compatibility as RC4
+
+After the local compatibility build against RC3, Denis requested push and release. Publish a new 0.1.7 RC4 prerelease (numeric Plugin.VERSION 0.1.7, tag v0.1.7), preserving RC3 as a rollback. Include the full RC3 asset set and compatibility documentation; keep the optional Talk/Quests DLLs separate. Feature status remains Testing and the Apocasetter index is unchanged.
+
 Format:
 ## YYYY-MM-DD - title
 Decision. Why. What it rules out.

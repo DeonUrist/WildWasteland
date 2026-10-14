@@ -14,6 +14,7 @@ namespace WildWasteland.Core.UI
         float _time;
         CursorLockMode _lock;
         bool _visible, _blocked;
+        bool _pause;
         public bool Open { get; private set; }
         public static bool Busy { get { return _owner != null; } }
         public static EditorSession Owner { get { return _owner; } }
@@ -21,16 +22,19 @@ namespace WildWasteland.Core.UI
         public static void CancelAll() { Generation++; if (_owner != null) _owner.Close(true); }
 
         public bool Acquire()
+        { return Acquire(true); }
+        public bool Acquire(bool pause)
         {
             if (Busy || Time.timeScale <= 0 || ApocasetterBridge.InputBlocked) return false;
             _owner = this; Open = true; _time = Time.timeScale; _lock = Cursor.lockState; _visible = Cursor.visible;
+            _pause = pause;
             _blocked = ApocasetterBridge.SetInputBlock(true);
-            Time.timeScale = 0; Maintain(); return true;
+            if (_pause) Time.timeScale = 0; Maintain(); return true;
         }
         public void Maintain()
         {
             if (!Open) return;
-            Time.timeScale = 0; Cursor.lockState = CursorLockMode.None; Cursor.visible = true;
+            if (_pause) Time.timeScale = 0; Cursor.lockState = CursorLockMode.None; Cursor.visible = true;
         }
         public void Close(bool immediate = false)
         {

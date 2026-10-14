@@ -36,6 +36,9 @@ namespace WildWasteland.Modules.Patrols
         // and a target on the edge of the arc used to restart it every frame
         private const float FireCheckSeconds = 0.5f;
         private float _nextFireCheck; private bool _canFire;
+        private bool _questFollower; private GameObject _questTarget; private float _questBlockedUntil;
+        internal void QuestTarget(GameObject target, float blockedUntil)
+        { _questFollower = true; _questTarget = target; _questBlockedUntil = blockedUntil; }
 
         internal static bool IsRangedHuman(GameObject who) { return IsRanged(who); }
 
@@ -260,7 +263,7 @@ namespace WildWasteland.Modules.Patrols
                 return;
             }
 
-            GameObject target = _car.GetComponent<PatrolMarker>()!=null?TrafficFactions.ForCar(_car):FindVanillaTarget();
+            GameObject target = _questFollower ? _questTarget : _car.GetComponent<PatrolMarker>()!=null?TrafficFactions.ForCar(_car):FindVanillaTarget();
             if(_targetVars!=null)for(int i=0;i<_targetVars.Length;i++)_targetVars[i].Value=target;
             if (_turret && target != null && PlayerRef.GodMode) target = null;   // a human turret leaves a god-mode player alone
             Vector3 aimPoint = Vector3.zero;
@@ -279,6 +282,7 @@ namespace WildWasteland.Modules.Patrols
                 }
                 _canFire = ok;
             }
+            if (_questFollower && Time.time < _questBlockedUntil) _canFire = false;
             bool inArc = _canFire;   // held for the interval (the aim itself still follows the target every frame)
 
             if (_driverMode)

@@ -70,6 +70,8 @@ State at 0.1.0: five modules are in (PlayerBody, NPC, Guns, HUD, Patrols - see `
 
 ## 3. Ground rules (same as every Apocalypter repo)
 
+- Talk/Quests compatibility (2026-10-15, Testing): explicitly requested as a bridge for loaded Apocatalker 2.0.0 / Apocalypter Quests 1.8.0, not a port or conflict. `QuestsCompat` schedules their original methods and substitutes a sliced FSM cache; never ship or edit their DLLs. Quests' plugin singleton is `Plugin.I` (not `Instance`). Preserve ES3 key `ApocalypterQuests`, the original backup reader/writer and Talk's global/manual StoryProfile flags. SaveBook runs through SaveBus.AfterSave after the native flush. The optional CleanHUD dialogue mirror forwards the source buttons (including AQ quest buttons); disabling CleanHUD restores its original window. Patrols supplies the provider-owned legacy type map and explicit follower target; NPC yields movement/animation and honours the Quests reload deadline. Without that explicit target, a PassengerGuard may select vanilla player variables rather than the hired follower's enemy. Standalone Talk input/death hooks remain owned by those mods.
+
 - **Check HEAD first.** Several sessions work in parallel. Before editing: `git log --oneline | head`, take sources from the current HEAD, re-check right before committing.
 - **Port, don't link.** Copy code from a source mod into `src/Modules/<Name>/` and record the source commit in `docs/modules.md`. Never edit a source mod's repo from a WW task, never reference its DLL.
 - Commit only when Denis asks; never push or release unless asked. Commit messages end with the Co-Authored-By / Claude-Session lines.

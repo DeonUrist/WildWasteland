@@ -50,6 +50,12 @@ namespace WildWasteland.Modules.NPC
         private sealed class Spot { public Transform T; public bool Coyotes; }
 
         private static readonly Dictionary<int, Ctl> _ctl = new Dictionary<int, Ctl>();
+        internal static void SetFollowerDriven(GameObject npc, bool enabled)
+        {
+            Ctl c;
+            if (npc != null && _ctl.TryGetValue(npc.GetInstanceID(), out c))
+            { if (enabled && !c.Excluded) Stop(c, true); c.Excluded = enabled; }
+        }
         private static readonly Dictionary<int, Spot> _spawnOf = new Dictionary<int, Spot>();        // NPC instance id -> its spawn point
         private static readonly Dictionary<int, List<Spot>> _spots = new Dictionary<int, List<Spot>>();   // structure root id -> spawn points
         private static readonly HashSet<int> _claimed = new HashSet<int>();                          // spawn point ids already someone's home

@@ -131,3 +131,22 @@ Other mods patch these too; if a future module needs them, add a dispatcher: `Ro
 ### POI (#81)
 
 No Harmony patches and no scheduler jobs. Subscribes to native TerrainTile.OnBeforeTilePrepare, OnTileFinalized, OnTileApplied and OnTileMoved; removes subscriptions and restores graph links/nodes on shutdown. Site components only handle trigger/enable events. Patrols supplies vehicle assembly through Services.Poi; it retains the existing temporary build coroutine and native vehicle/NPC behavior.
+
+### Optional Talk/Quests compatibility (0.1.6 RC3, Testing)
+
+All targets below are optional external DLL methods, installed only for Talk 2.0.0 / Quests 1.8.0. No additional global Unity Input or PlayMaker action patch is installed. Native Talk input patches and Quests' CreateObject death postfix remain with their original owners.
+
+| Owner | Target | Kind / handler | Frequency / filter |
+|---|---|---|---|
+| QuestsCompat | Talk.Plugin.Update / LateUpdate; Quests.Plugin.Update / LateUpdate / OnGUI | Prefix ScheduledOnly; original runs once from its corresponding scheduler job | Per Unity callback / scheduler invocation; static dispatch flag |
+| QuestsCompat | Talk.Plugin.Open / Close | BeforeOpen, AfterOpen / AfterClose: shared modal session preserving PauseWhileTalking | Per conversation; game/modal gate |
+| QuestsCompat | Talk.Plugin.GetCam | Prefix TalkCamera; cached Core camera | Per talk camera request |
+| QuestsCompat | Quests.Plugin.Tick / TrackSaveLoad | TickOnly / SkipWatcher; 0.5 s scheduler job and SaveBus replace native polling | Per callback; static dispatch flag |
+| QuestsCompat | Quests.MapLink.get_Available / Sync / Reset | MapAvailable postfix / ForwardMap prefix / ClearMarkers postfix | Approximately 1 s; native Immersive Map Sync runs only when its API is resolved |
+| QuestsCompat | Quests.Game.FindItems; FindPeople / FindEnemies / FindBodies / LiveNames / FindNpcNames | Transpilers replace only FsmList getter with published item/people cache | Per world query; discovery uses a 500 us scheduler slice |
+| QuestsCompat | Hire.MissingMods / GetPlugin / FindApi / Inform / SetExcluded | Prefixes route provider availability, optional legacy lookup, NPC target and steering handoff | On hire / target / exclusion changes |
+| QuestsCompat | Hire.Mount / AttachGuard / LendArmPose / TeachAll / PatrolShootDistance | LegacyTypes transpiler; provider resolves original Apocapatrol type names | On mount/setup or range refresh |
+| QuestsCompat | Hire.FootShoot / PlayShotAnim / WatchShots; CountShot | AnimationCalls transpiler suppresses native Animator.Play only while WW owns this animator; Shot postfix drives shot/reload clips | Per shot / shot observation |
+| QuestsCompat | Hire.FeedTarget / HoldFire | Prefixes feed explicit follower target and reload hold to Patrols | Per mounted follower update |
+| CleanHUD | Talk.DialogueUI.ShowDialogue / AppendChatLine / SetChoices | Changed postfix; invalidates mirrored chat | Per dialogue change; no reflection in Tick |
+| QuestsCompat | Talk.Plugin.OnDestroy; TalkApi.LoadFile / Reload; Quests.Hooks.OpenPostfix / ClosePostfix / CreateObjectPostfix; Hire.GetPlugin | KeepDialogueModel prefix / PluginLifetime transpilers: retain managed plugin-backed callbacks across native component destruction, while keeping Unity null semantics for world objects | On destruction / API calls / source hooks; BaseUnityPlugin-only identity substitution |

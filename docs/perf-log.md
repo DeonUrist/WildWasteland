@@ -20,6 +20,10 @@ Not measured by the scheduler (shows up only in ModProfiler as part of the `Wild
 
 ModProfiler attributes by assembly: in the live HUD all of WW is one row (`WildWasteland.dll`, Runner Update/LateUpdate/FixedUpdate/OnGUI + every coroutine `MoveNext` + every patch body). A **Focus** capture on any WW method instruments every method of the assembly and gives per-method rows (jobs are named static/instance methods, not lambdas, for this reason). ModProfiler's own prefix+finalizer on every WW patch body adds overhead on the hot PlayMaker dispatchers: measure with and without it.
 
+## 0.1.6 RC3 compatibility build - 2026-10-15 - NOT YET MEASURED
+
+Optional QuestsCompat routes Talk/Quests Update, LateUpdate and GUI through named scheduler jobs, separates Quests Tick into a 0.5 s job, and replaces its save watcher with SaveBus. Item/people candidate discovery is a 500 us sliced job; the original queries still read live quantities/health/positions. Typed delegates replace compatibility hot-path reflection. CleanHUD dialogue rebuilds on source content/choice changes; map lookup runs once per second while markers exist, and projection runs only while the native map is open. Native global input/death hooks and source voice/spawn work remain unchanged. The scheduler measures source method duration too; it cannot preempt an individual source callback. No baseline or measured speedup is claimed. Denis should compare five active quests, takeover walkers and an armed hired passenger, following notes/compat-Talk-Quests.md.
+
 ## 0.1.0 (build a) - 2026-10-13 - NOT YET MEASURED
 
 No game in the cloud: nothing below is a measurement. The five ports compiled (`build.sh` 0 errors) and passed the integration review and the config harness; the first in-game run (Denis) fills the table.
