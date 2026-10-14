@@ -49,6 +49,7 @@ State at 0.1.0: five modules are in (PlayerBody, NPC, Guns, HUD, Patrols - see `
 - `docs/modules.md` (which mechanics are in, from which commit, services, migrations), `docs/harmony.md` (patch inventory), `docs/decisions.md`, `docs/perf-log.md`, `docs/PORTING.md`, `docs/WIKI-FORMAT.md`, `verification/README.md`.
 - The port reports and the integration review of 0.1.0 (`notes/port-<Id>.md`, `notes/review-integration.md` in the working folder of the porting sessions) explain why the code looks the way it does.
 - Existing local FSM dumps for read-only research are in `V:\Repos\Apocalypter\_tools\wiki\sources\fsm_detail.txt` (action parameters) and `fsm_dump.txt` (states/actions). The `claude/` project docs are not present in this checkout.
+- Native debug-map visibility is `__GameManager__` FSM `MapCheat` enabled and in state `on`; also require Menu `play` for overlays. The Menu `pause` state enables the ESC canvas without closing `MapCheatUI`, so `RawImage_Map.activeInHierarchy` alone draws over ESC.
 
 ## 3. Ground rules (same as every Apocalypter repo)
 

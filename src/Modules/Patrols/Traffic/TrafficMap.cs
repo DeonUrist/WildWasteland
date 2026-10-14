@@ -5,8 +5,14 @@ namespace WildWasteland.Modules.Patrols
     {
         private Camera _gameMap;
         private RectTransform _gameMapImage;
+        private PlayMakerFSM _mapCheat;
         private float _nextMapScan,_gameInkAt;
         private readonly TrafficMapInk _gameInk=new TrafficMapInk();
+        private struct MapLabel { internal Rect rect; internal Color color; internal string text; }
+        private readonly System.Collections.Generic.List<MapLabel> _mapLabels=new System.Collections.Generic.List<MapLabel>();
+        private readonly System.Collections.Generic.List<Rect> _mapBattles=new System.Collections.Generic.List<Rect>();
+        private Vector2 _gameInkSize;
+        private bool _inkNames,_inkHide;
         private readonly Vector3[] _mapCorners=new Vector3[4];
         private Texture2D _skull;
         private Vector3 OffscreenTrafficPoint(Vector3 center,Vector3 direction)
@@ -43,38 +49,48 @@ namespace WildWasteland.Modules.Patrols
         // WW: was OnGUI (Gui job)
         internal void Gui()
         {
-            if(!PatrolsModule.WorldTrafficEnabled.Value||!PatrolsModule.TrafficDebugMap.Value||Event.current.type!=EventType.Repaint)return;
-            if((_gameMap==null||_gameMapImage==null)&&Time.unscaledTime>=_nextMapScan)
+            if(Event.current.type!=EventType.Repaint)return;
+            if(!PatrolsModule.WorldTrafficEnabled.Value||!PatrolsModule.TrafficDebugMap.Value||!Core.GameRefs.InGame)
+            {_gameInkAt=0f;return;}
+            if((_gameMap==null||_gameMapImage==null||_mapCheat==null)&&Time.unscaledTime>=_nextMapScan)
             {
                 _nextMapScan=Time.unscaledTime+5f;
                 var camera=GameObject.Find("MapCheat_Camera");_gameMap=camera!=null?camera.GetComponent<Camera>():null;
                 var image=GameObject.Find("RawImage_Map");_gameMapImage=image!=null?image.GetComponent<RectTransform>():null;
+                _mapCheat=Core.FsmUtil.Find(Core.GameRefs.GameManager,"MapCheat");
             }
-            if(_gameMap==null||_gameMapImage==null||!_gameMapImage.gameObject.activeInHierarchy)return;
+            if(_mapCheat==null||!_mapCheat.isActiveAndEnabled||_mapCheat.ActiveStateName!="on"||_gameMap==null||_gameMapImage==null||!_gameMapImage.gameObject.activeInHierarchy)
+            {_gameInkAt=0f;return;}
             _gameMapImage.GetWorldCorners(_mapCorners);
             var rect=new Rect(_mapCorners[0].x,Screen.height-_mapCorners[1].y,_mapCorners[2].x-_mapCorners[0].x,_mapCorners[1].y-_mapCorners[0].y);
             if(rect.width<1f||rect.height<1f)return;
             var old=GUI.color;GUI.BeginGroup(rect);
-            if(Time.unscaledTime>=_gameInkAt)
+            if(Time.unscaledTime>=_gameInkAt||_gameInkSize!=rect.size||_inkNames!=PatrolsModule.RealPatrolNames.Value||_inkHide!=PatrolsModule.HideRouteType.Value)
             {
-                _gameInkAt=Time.unscaledTime+0.4f;
+                _gameInkAt=Time.unscaledTime+1f;_gameInkSize=rect.size;
+                _inkNames=PatrolsModule.RealPatrolNames.Value;_inkHide=PatrolsModule.HideRouteType.Value;
                 var canvas=new Rect(0,0,Mathf.Min(512f,rect.width),Mathf.Min(512f,rect.height));
                 _gameInk.Begin(Mathf.RoundToInt(canvas.width),Mathf.RoundToInt(canvas.height));
                 foreach(var journey in _journeys)for(int i=1;i<journey.route.Length;i++)
                     _gameInk.Segment(MapPoint(journey.route[i-1],canvas),MapPoint(journey.route[i],canvas),RouteColor(journey));
                 _gameInk.End();
+                _mapLabels.Clear();_mapBattles.Clear();
+                foreach(var journey in _journeys)
+                CacheMapLabel(journey.position,rect,RouteColor(journey),MapName(journey));
+                foreach(var camp in TrafficLocations.Known.Values)if(camp.cleared)
+                CacheMapLabel(camp.center,rect,Color.gray,camp.name+" [Cleared]");
+                foreach(var battle in _battles)
+                {var p=MapPoint(battle.position,rect);_mapBattles.Add(new Rect(p.x-9f,p.y-9f,18f,18f));}
+                foreach(var merchant in MerchantHost.All)if(merchant!=null&&!Owns(merchant.GetComponent<PatrolMarker>()))
+                CacheMapLabel(TrafficSpace.World(merchant.transform.position),rect,_inkHide?Color.gray:Color.yellow,_inkHide?"Distant traffic":_inkNames?merchant.Data?.group??"Coyote merchant":"Merchant");
             }
             GUI.color=Color.white;GUI.DrawTexture(new Rect(0,0,rect.width,rect.height),_gameInk.Texture);
-            foreach(var journey in _journeys)
-            {var p=MapPoint(journey.position,rect);GUI.color=RouteColor(journey);GUI.Label(new Rect(p.x,p.y,180f,22f),MapName(journey));}
-            foreach(var camp in TrafficLocations.Known.Values)if(camp.cleared)
-            {var p=MapPoint(camp.center,rect);GUI.color=Color.gray;GUI.Label(new Rect(p.x,p.y,180f,22f),camp.name+" [Cleared]");}
-            foreach(var battle in _battles)
-            {var p=MapPoint(battle.position,rect);GUI.color=Color.white;GUI.DrawTexture(new Rect(p.x-9f,p.y-9f,18f,18f),Skull());}
-            foreach(var merchant in MerchantHost.All)if(merchant!=null&&!Owns(merchant.GetComponent<PatrolMarker>()))
-            {var p=MapPoint(TrafficSpace.World(merchant.transform.position),rect);GUI.color=PatrolsModule.HideRouteType.Value?Color.gray:Color.yellow;GUI.Label(new Rect(p.x,p.y,180f,22f),PatrolsModule.HideRouteType.Value?"Distant traffic":PatrolsModule.RealPatrolNames.Value?merchant.Data?.group??"Coyote merchant":"Merchant");}
+            foreach(var label in _mapLabels){GUI.color=label.color;GUI.Label(label.rect,label.text);}
+            GUI.color=Color.white;foreach(var battle in _mapBattles)GUI.DrawTexture(battle,Skull());
             GUI.EndGroup();GUI.color=old;
         }
+        private void CacheMapLabel(Vector3 world,Rect rect,Color color,string text)
+        {var p=MapPoint(world,rect);_mapLabels.Add(new MapLabel{rect=new Rect(p.x,p.y,180f,22f),color=color,text=text});}
         private Vector2 MapPoint(Vector3 world,Rect rect)
         {var p=_gameMap.WorldToViewportPoint(TrafficSpace.Scene(world));return new Vector2(p.x*rect.width,(1f-p.y)*rect.height);}
         internal static string MapName(TrafficJourney journey)
