@@ -12,6 +12,7 @@ namespace WildWasteland.Modules.Patrols
         public bool mappedEntrance;
         public bool cleared;
         public string faction="Scrapyard";
+        public float patrolCallAt=-1f;
     }
 
     [Serializable] public sealed class TrafficPoi
@@ -45,6 +46,7 @@ namespace WildWasteland.Modules.Patrols
         public string faction="Scrapyard",battle="";
         public string id, name, source, destination;
         public bool convoy, arrived, roaming,merchant,freeRoute;
+        public bool reinforcement;
         public float waitSeconds;
         internal bool TerrainRoute;
         public Vector3 position;

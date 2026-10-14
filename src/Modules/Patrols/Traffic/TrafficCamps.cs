@@ -12,6 +12,8 @@ namespace WildWasteland.Modules.Patrols
         internal string Camp;
         internal FsmFloat Health;
         internal bool Dead,Lost,WasAlive;
+        internal bool CallRolled;
+        internal FsmGameObject Target;
         private void Start(){if(Health!=null&&Health.Value>0f)WasAlive=true;}
         private void OnDestroy(){Dead=WasAlive&&Health!=null&&Health.Value<=0f;Lost=!Dead;TrafficCamps.Check(Camp);}
     }
@@ -73,20 +75,35 @@ namespace WildWasteland.Modules.Patrols
             if(!TrafficLocations.Known.TryGetValue(id,out var camp)||camp.cleared||!Loaded(id))return;
             foreach(var pair in Candidates)
             {
-                if(pair.Key==null||pair.Value.Value<=0f||pair.Key.GetComponent<CampResident>()!=null)continue;
+                if(pair.Key==null||pair.Value.Value<=0f)continue;
                 var p=TrafficSpace.World(pair.Key.transform.position);
                 if(Mathf.Abs(p.x-camp.center.x)>camp.size.x*0.5f+35f||Mathf.Abs(p.z-camp.center.z)>camp.size.z*0.5f+35f)continue;
                 Bind(id,pair.Key,pair.Value);
             }
+            if(PatrolsModule.ConvoyEnabled.Value)
+                foreach(var resident in Sites[id].Residents)
+                {
+                    if(resident==null||resident.CallRolled||resident.Health==null||resident.Health.Value<=0f||resident.tag!=camp.faction)continue;
+                    var target=resident.Target!=null?resident.Target.Value:null;var player=PlayerRef.Player;var car=PlayerRef.PlayerCar;
+                    if(target==null)continue;
+                    bool playerTarget=player!=null&&(target.transform.IsChildOf(player)||(car!=null&&target.transform.IsChildOf(car.transform)));
+                    var attacker=target.GetComponentInParent<TrafficActor>();
+                    if(playerTarget?PlayerRef.GodMode||!TrafficFactions.PlayerHostile(camp.faction):attacker==null||!TrafficFactions.Opposed(camp.faction,attacker.Faction))continue;
+                    resident.CallRolled=true;bool success=UnityEngine.Random.value<.1f;
+                    if(Core.Log.Verbose)PatrolsModule.Verbose("Patrol call roll: "+resident.name+" at "+id+" "+(success?"passed":"failed"));
+                    if(success)WorldTraffic.CallPatrol(camp);
+                }
             Check(id);
         }
         internal static void Bind(string id,GameObject npc,FsmFloat health=null)
         {
-            if(npc==null||!Sites.TryGetValue(id,out var site)||npc.GetComponent<CampResident>()!=null)return;
+            if(npc==null||!Sites.TryGetValue(id,out var site))return;
+            var existing=npc.GetComponent<CampResident>();if(existing!=null){if(existing.Camp==id&&!site.Residents.Contains(existing))site.Residents.Add(existing);return;}
             if(health==null)
             {Fs.Clear();npc.GetComponents(Fs);foreach(var f in Fs)if(f!=null&&f.FsmName=="Health"){health=f.FsmVariables.GetFsmFloat("Health");break;}}
             if(health==null)return;
             var tag=npc.AddComponent<CampResident>();tag.Camp=id;tag.Health=health;tag.WasAlive=health.Value>0f;site.Residents.Add(tag);
+            Fs.Clear();npc.GetComponents(Fs);foreach(var f in Fs)if(f!=null&&f.FsmName=="Detection"){tag.Target=f.FsmVariables.FindFsmGameObject("detectedObj");break;}
         }
         internal static bool Check(string id)
         {
@@ -100,7 +117,7 @@ namespace WildWasteland.Modules.Patrols
                 if(!resident.WasAlive)return false;
                 if(!resident.Dead&&(resident.Health==null||resident.Health.Value>0f))return false;
             }
-            camp.cleared=true;TrafficLocations.Changed();PatrolsModule.Verbose("Camp cleared: "+camp.name+" "+camp.id);return true;
+            camp.cleared=true;camp.patrolCallAt=-1f;TrafficLocations.Changed();PatrolsModule.Verbose("Camp cleared: "+camp.name+" "+camp.id);return true;
         }
         private static class SpawnHook
         {

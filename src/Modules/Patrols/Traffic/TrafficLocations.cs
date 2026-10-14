@@ -36,6 +36,12 @@ namespace WildWasteland.Modules.Patrols
         internal static TrafficBase[] NearbyBases(Vector3 player,float range)
         {return Known.Values.Where(c=>c.faction!="Coyotes"&&!c.cleared&&TrafficCamps.Loaded(c.id)&&FlatDistance(c.center,player)<=range).ToArray();}
         internal static Bounds[] Blocks() => Known.Values.Select(c=>new Bounds(new Vector3(c.center.x,0f,c.center.z),new Vector3(c.size.x+16f,10000f,c.size.z+16f))).ToArray();
+        internal static bool Contains(TrafficBase camp,Vector3 point,float margin=35f)
+        {return Mathf.Abs(point.x-camp.center.x)<=camp.size.x/2f+margin&&Mathf.Abs(point.z-camp.center.z)<=camp.size.z/2f+margin;}
+        internal static bool PlayerAt(TrafficBase camp)
+        {var player=PlayerRef.Player;return player!=null&&Contains(camp,TrafficSpace.World(player.position));}
+        internal static bool PatrolSpawnAllowed(Vector3 point)
+        {foreach(var camp in Known.Values)if(PlayerAt(camp)&&Contains(camp,point,60f))return false;return true;}
         private const BindingFlags Flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
 
         internal static void Reset()
@@ -132,7 +138,7 @@ namespace WildWasteland.Modules.Patrols
                     if (first) { box = collider.bounds; first = false; } else box.Encapsulate(collider.bounds);
                 }
             }
-            location = new TrafficBase { id = id, name = TemplateExporter.PrefabName(root.name),cleared=location!=null&&location.cleared,faction=CoyoteCamp(root.name)?"Coyotes":"Scrapyard" };
+            location = new TrafficBase { id = id, name = TemplateExporter.PrefabName(root.name),cleared=location!=null&&location.cleared,patrolCallAt=location!=null?location.patrolCallAt:-1f,faction=CoyoteCamp(root.name)?"Coyotes":"Scrapyard" };
             location.center = box.center; location.center.y = root.position.y;
             location.size = box.size;
             Vector3 interior = location.center;
