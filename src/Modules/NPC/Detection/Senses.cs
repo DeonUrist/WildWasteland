@@ -63,6 +63,7 @@ namespace WildWasteland.Modules.NPC
             public PlayMakerFSM Detection, Attack; public FsmGameObject DetectedVar;
             public string Tag; public HashSet<string> Hostile; public bool Human;
             public bool Travel;           // (1.4.0) a hunter travelling underground (Burrow): its senses pause, nobody can see it
+            public bool Spider, Lit, CaveWeb; public float CaveLight = 1f, NextCaveLight; public GameObject LightSource;
             public float AmbushDist; public int Cone; public bool Burrowed;      // (1.3.0) vision group (0 human, 1 insect, 2 beast, 3 brute, 4 boss, 5 burrower); a burrowed creature sees all around
             public HashSet<string> BaseHostile; public PlayMakerFSM PlayerIsEnemy;   // the prefab's own enemies, and its faction-relation FSM (Coyotes)
             public State State; public GameObject Target; public Ghost Ghost; public Src GhostPrio;
@@ -111,6 +112,7 @@ namespace WildWasteland.Modules.NPC
             _ghosts.Clear(); _agents.Clear(); _ignored.Clear(); _hpOf.Clear(); _prefabOf.Clear(); _presentTags.Clear(); Nwh.Clear();
             _player = null; _playerHead = null; _playerCar = null; _flashlight = null; _inCarFsm = null; _grabFsm = null; _thrown = null;
             Storm.Reset();
+            ResetSpiderLights();
             _hornFsm = null; _azure = null; _nextAzureFind = 0f;
             Persist.ResetForScene();
         }
@@ -132,7 +134,7 @@ namespace WildWasteland.Modules.NPC
                     if (a.Owner == null) { if (a.Ghost != null) { a.Ghost.Holders.Remove(a); } if (a.FlankObj != null) UnityEngine.Object.Destroy(a.FlankObj); _dead.Add(kv.Key); }
                     else
                     {
-                        if(SimpleBandits.Has(a.Owner)){if(on&&!a.SensorsOff)Sensors(a,false);continue;}
+                        if(SimpleBandits.Has(a.Owner)){if(on&&!a.SensorsOff)Sensors(a,false);_presentTags.Add(a.Tag);continue;}
                         if (!on && a.SensorsOff) Sensors(a, true);
                         else if (on && !a.SensorsOff) Sensors(a, false);        // switched back on: the game's sensors go quiet again
                         if (a.PlayerIsEnemy != null||a.Owner.CompareTag("Coyotes")) Relation(a, true);
@@ -154,6 +156,7 @@ namespace WildWasteland.Modules.NPC
                     if ((g.Holders.Count == 0 && !Persist.Restoring) || now - g.Moved > 600f) KillGhost(i);
                 }
                 FindPlayer();
+                if (on && _player != null) RefreshSpiderLights();
             }
             // (WW) the save / load watcher is SaveBus.StateChanged (OnSaveLoadState), the Apocapatrol crew hooks are Core.Services events
             // (NpcModule), the shout key is a Core.Hotkeys binding (ShoutPressed)
@@ -177,7 +180,7 @@ namespace WildWasteland.Modules.NPC
         // ---------- sight ----------
         private static void Look(Agent a, float interval, float now)
         {
-            if(SimpleBandits.Has(a.Owner)){SimpleLook(a,now);return;}
+            if(a.Tag=="MutantSanity"||SimpleBandits.Has(a.Owner)){SimpleLook(a,now);return;}
             // shoved by a tornado: it forgets what it was doing unless it sees the player right now (sight still works, hearing doesn't)
             if (a.Blown && a.State != State.Idle && !(a.State == State.Combat && a.Target == _player && a.UnseenFor < 0.5f))
             {
@@ -197,17 +200,17 @@ namespace WildWasteland.Modules.NPC
             }
             if ((a.State == State.Combat || a.State == State.Hide) && a.Target == null) { a.State = State.Idle; Log(a, "target gone"); }
             if (a.Flanking && a.State == State.Investigate && (a.FlankPos - a.T.position).sqrMagnitude <= 9f) EndFlank(a);   // at the flank point: on to the ghost itself
+            if (a.Spider) SpiderLook(a, now);
 
             // candidates: the player (if this faction hunts players) and every other NPC of a hostile faction
             float d2max = NpcModule.SightRange.Value * NpcModule.SightRange.Value;
             Vector3 eye = Eye(a);
             GameObject best = null; float bestD = float.MaxValue;
-            bool currentVisible = false;
             if (a.Hostile.Contains("Player") && _player != null && (_player.transform.position - a.T.position).sqrMagnitude <= d2max)
             {
-                if (Visible(a, eye, _player, true, _playerInStorm)) { best = _player; bestD = (_player.transform.position - a.T.position).sqrMagnitude; if (a.Target == _player) currentVisible = true; }
+                if (Visible(a, eye, _player, true, _playerInStorm)) { best = _player; bestD = (_player.transform.position - a.T.position).sqrMagnitude; }
             }
-            if (!currentVisible && !a.Blown && HostileNpcAround(a))
+            if (!a.Blown && HostileNpcAround(a))
             {
                 Vector3 ap = a.T.position;
                 foreach (var kv in _agents)
@@ -215,9 +218,8 @@ namespace WildWasteland.Modules.NPC
                     var b = kv.Value;
                     if (b == a || !a.Hostile.Contains(b.Tag) || b.Owner == null) continue;
                     float d2 = (b.T.position - ap).sqrMagnitude;
-                    if (d2 > d2max || (d2 >= bestD && b.Owner != a.Target)) continue;
+                    if (d2 > d2max || d2 >= bestD) continue;
                     if (!Visible(a, eye, b.Owner, false, b.InStorm)) continue;
-                    if (b.Owner == a.Target) { best = b.Owner; currentVisible = true; break; }
                     if (d2 < bestD) { best = b.Owner; bestD = d2; }
                 }
             }
@@ -236,7 +238,8 @@ namespace WildWasteland.Modules.NPC
                     need *= 2f - LightLevel();
                     // (1.3.2) an ambusher lying in wait (a burrowed scorpion) watches you come and only engages inside its ambush distance
                     bool holding = false;
-                    if (a.AmbushDist > 0f) { Vector3 fl = best.transform.position - a.T.position; fl.y = 0f; holding = fl.sqrMagnitude > a.AmbushDist * a.AmbushDist; }
+                    if (a.AmbushDist > 0f && (!a.Spider || SpiderDark(a))) { Vector3 fl = best.transform.position - a.T.position; fl.y = 0f; holding = fl.sqrMagnitude > a.AmbushDist * a.AmbushDist; }
+                    if (a.CaveWeb) { need = 0f; holding = false; }
                     if (a.SeenFor >= need && !holding) Engage(a, best);
                 }
             }
@@ -284,6 +287,12 @@ namespace WildWasteland.Modules.NPC
             Vector3 flat = tp - a.T.position; flat.y = 0f;
             float d = flat.magnitude;
             float range = isPlayer && FlashlightOn() ? NpcModule.SightRange.Value : SightRange();
+            if (a.Spider)
+            {
+                float light = LightLevel() * Mathf.Min(a.CaveLight, SpiderTargetLight(target));
+                range = Mathf.Lerp(NpcModule.DarkSightRange.Value, NpcModule.SightRange.Value, light);
+                if (a.Lit || (isPlayer && FlashlightOn())) range = NpcModule.SightRange.Value;
+            }
             if (a.InStorm || targetInStorm) range *= Storm.SightFactor;     // sand in the air between them
             // (1.3.3) a burrowed creature (only its tail shows) is noticed by other NPCs only from close by
             // (1.4.0) looked up only while any NPC is burrowed or travelling (no cost otherwise); a travelling one is not seen at all
@@ -296,6 +305,7 @@ namespace WildWasteland.Modules.NPC
                     if (tb.Burrowed) range = Mathf.Min(range, NpcModule.BurrowSeenFrom.Value);
                 }
             }
+            if (a.CaveWeb) { if ((tp - a.T.position).sqrMagnitude > 9f) return false; range = Mathf.Max(range, 3f); }
             if (d > range) return false;
             if (Vector3.Angle(a.T.forward, flat) > Mathf.Clamp(ConeOf(a), 10f, 360f) * 0.5f) return false;
             Transform troot = target.transform.root;
@@ -324,7 +334,7 @@ namespace WildWasteland.Modules.NPC
         // (1.3.0) the arc of vision: humans and zombies [Detection] SightCone (Apocasetter); insects, beasts, brutes, bosses, burrowers have their own
         internal static float ConeOf(Agent a)
         {
-            if (a.Burrowed) return 360f;
+            if (a.Burrowed || a.Spider) return 360f;
             switch (a.Cone)
             {
                 case 1: return NpcModule.SightConeInsects.Value;
@@ -495,6 +505,7 @@ namespace WildWasteland.Modules.NPC
         // ---------- knowledge ----------
         private static void Engage(Agent a, GameObject target)
         {
+            if (a.Spider) a.AmbushDist = 0f;
             if ((a.State == State.Combat || a.State == State.Hide) && a.Target == target) return;
             if (a.State == State.Hide) { a.Target = target; a.UnseenFor = 0f; return; }   // in cover: it knows its target, stays put
             Release(a);
@@ -630,7 +641,7 @@ namespace WildWasteland.Modules.NPC
         // check a shout about the player; the player now shoots elsewhere: that is where the player is). Never while it sees its target.
         private static bool Assign(Agent a, Ghost g, Src prio, float now)
         {
-            if(SimpleBandits.Has(a.Owner))return false;
+            if(a.Tag=="MutantSanity"||SimpleBandits.Has(a.Owner))return false;
             if (g == null || a.State == State.Combat || a.State == State.Hide || g.Retired || a.AmbushDist > 0f) return false;      // (1.3.2) an ambusher in wait ignores sounds
             float doneAt;
             if (a.Done.TryGetValue(g.Id, out doneAt) && g.Moved <= doneAt + 0.01f) return false;   // been there, nothing new about it
@@ -770,7 +781,7 @@ namespace WildWasteland.Modules.NPC
             {
                 _responders.Clear();
                 float near2 = NpcModule.GunshotNearRange.Value * NpcModule.GunshotNearRange.Value, r2a = radius * radius;
-                foreach (var kv in _agents) { var a = kv.Value; if (a.Owner != null && !SimpleBandits.Has(a.Owner) && a.T.parent == null && (a.T.position - pos).sqrMagnitude <= r2a && (filter == null || filter(a))) _responders.Add(a); }
+                foreach (var kv in _agents) { var a = kv.Value; if (a.Owner != null && !a.Spider && !SimpleBandits.Has(a.Owner) && a.T.parent == null && (a.T.position - pos).sqrMagnitude <= r2a && (filter == null || filter(a))) _responders.Add(a); }
                 if (_responders.Count > NpcModule.GunshotResponders.Value)
                 {
                     _responders.Sort((x, y) => (x.T.position - pos).sqrMagnitude.CompareTo((y.T.position - pos).sqrMagnitude));
@@ -800,9 +811,11 @@ namespace WildWasteland.Modules.NPC
                 if (d2 > r2) continue;
                 if (stormy && (srcStorm || a.InStorm) && d2 > rs2) continue;
                 if (filter != null && !filter(a)) continue;
-                if (allowed != null && !allowed.Contains(a)) continue;
+                if (allowed != null && !a.Spider && !allowed.Contains(a)) continue;
                 if (aboutPlayer && !a.Hostile.Contains("Player")) continue;
                 if (a.Blown) continue;                                      // the tornado's roar: hears nothing
+                if (aboutPlayer && OutsideCaveWeb(a)) { Log(a, "ignores noise: player outside cave and beyond 3 m"); continue; }
+                if (a.Spider && (src == Src.Gunshot || src == Src.Shout)) a.AmbushDist = 0f;
                 Ghost g = shared;
                 if (g == null) { g = GetOrMake(src, at(a), source, about, 0f, 1f, now); g.Subject = subject; }
                 if (Assign(a, g, src, now)) { told++; if (told1 != null) told1(a); }
@@ -1333,6 +1346,7 @@ namespace WildWasteland.Modules.NPC
 
         private static GameObject Known(Agent a)
         {
+            if(a.Tag=="MutantSanity"&&(a.State!=State.Combat||a.Target!=_player))SimpleLook(a,Time.time);
             switch (a.State)
             {
                 case State.Combat:
@@ -1489,6 +1503,9 @@ namespace WildWasteland.Modules.NPC
             foreach (var f in owner.GetComponents<PlayMakerFSM>()) if (f != null && f.FsmName == "PlayerIsEnemy") { a.PlayerIsEnemy = f; break; }
             Relation(a, false);
             a.Human = IsHuman(a.Tag);
+            string prefab = PrefabOf(owner);
+            a.Spider = prefab == "Spider_Small" || prefab == "Spider_Big";
+            if (a.Spider) _hasSpiders = true;
             a.Cone = ConeGroupOf(owner);
             a.Tracker = IsTracker(PrefabOf(owner));
             foreach (var t in owner.GetComponentsInChildren<Transform>(true))
@@ -1565,6 +1582,7 @@ namespace WildWasteland.Modules.NPC
         private static HashSet<string> HostileTags(GameObject owner)
         {
             var set = new HashSet<string>();
+            if(owner.CompareTag("MutantSanity")){set.Add("Player");return set;}
             try
             {
                 foreach (var b in owner.GetComponentsInChildren<Behaviour>(true))
@@ -1896,6 +1914,7 @@ namespace WildWasteland.Modules.NPC
                         try
                         {
                             var st = (State)int.Parse(p[2]);
+                            if (a.Spider && st != State.Idle) a.AmbushDist = 0f;
                             a.LastSeen = new Vector3(float.Parse(p[7], ci), float.Parse(p[8], ci), float.Parse(p[9], ci));
                             GameObject target = p[3] == "Player" ? _player : (p[3] == "-" ? null : (byName.ContainsKey(p[3]) ? byName[p[3]].Owner : null));
                             int gid = int.Parse(p[4]); Ghost g; ghostById.TryGetValue(gid, out g);

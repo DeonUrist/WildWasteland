@@ -26,11 +26,13 @@ namespace WildWasteland.Modules.NPC
         private static void SimpleLook(Agent a,float now)
         {
             a.NextLook=now+0.8f+a.Stagger;
-            if(!SimpleBandits.Fighting(a.Owner))return;
-            var target=SimpleBandits.Goal(a.Owner);
+            bool sanity=a.Tag=="MutantSanity";
+            if(!sanity&&!SimpleBandits.Fighting(a.Owner))return;
+            var target=sanity?PlayerObj:SimpleBandits.Goal(a.Owner);
             if(target==null){Release(a);a.State=State.Idle;a.Target=null;if(a.DetectedVar!=null)a.DetectedVar.Value=null;return;}
-            // Dismount is the combat handoff. Keep the real player; no sight acquisition, ghosts, search or forgetting.
-            if(a.Ghost!=null||a.State!=State.Combat||a.Target!=target)Release(a);
+            // Combat dismounts and insanity enemies keep their real target; no sight acquisition, ghosts, search or forgetting.
+            if(a.Ghost!=null||a.State!=State.Combat||a.Target!=target)
+            {Release(a);if(sanity)Log(a,"pursues the player (insanity)");}
             a.State=State.Combat;a.Target=target;a.UnseenFor=0f;a.LastSeen=target.transform.position;
             if(a.DetectedVar!=null)a.DetectedVar.Value=target;
         }

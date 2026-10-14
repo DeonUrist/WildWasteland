@@ -15,6 +15,7 @@ From 0.1.0 on, almost every task is "fix issue #N" from the board (https://githu
 ### 0.2 Find the cause before changing code
 - Read the issue and its comments, the code path, and Denis's log `E:\SteamLibrary\steamapps\common\Apocalypter\BepInEx\LogOutput.log` if you can reach it.
 - If the cause is not proven by code + log, do not guess: ask Denis for a log with the right switches on (F6 → Wild Wasteland → Debug → `VerboseLog`; module log switches in F7, e.g. NPC AI & navigation → Debug → `BrainLog`), and say exactly what to do in game to reproduce.
+- NPC detection traces need F7 → NPC AI & navigation → Debug → `VerboseLog` (also “Verbose NPC log” on AI overview). `SensesLog` and `BrainLog` are aliases of this entry; global F6 `VerboseLog` alone does not enable those traces.
 - One fix per round. If Denis reports that a fix did not help, revert it before trying the next idea; never stack guesses (lesson from #63: three rounds, the first two aimed at the wrong cause).
 - Use the mechanism the codebase already uses for the same situation. No workarounds that hide a symptom. If the only fix is a workaround or changes another module's behaviour, describe the options and let Denis choose.
 

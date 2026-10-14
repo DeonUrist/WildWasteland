@@ -55,6 +55,7 @@ namespace WildWasteland.Modules.Guns
             public Transform Muzzle;
             public int Pellets = 1;
             public float PelletSpread;
+            public float RangeMultiplier = 1f, DamageMultiplier = 1f;
             public FsmFloat Damage;          // the hit state's Bodypart.Damage value (per bullet / pellet)
             public int Layers;
             public FsmStateAction[] GetLayer, ActorHit, Hit;
@@ -203,7 +204,7 @@ namespace WildWasteland.Modules.Guns
             _playerTracked = false;
             _orbs.Clear();
             _pushes.Clear();
-            _popped.Clear(); _forceFree.Clear(); _meleeWheels.Clear(); _isMelee.Clear(); _corpseHitAt.Clear();
+            _popped.Clear(); _forceFree.Clear(); _meleeWheels.Clear(); _isMelee.Clear();
             // (WW) also the fitted-wheel swing state (was kept across scenes; keyed by destroyed objects' ids)
             _wSwing = null; _wDone = false; _wPrev.Clear(); _wDamage.Clear(); _wAttack.Clear();
         }
@@ -313,7 +314,7 @@ namespace WildWasteland.Modules.Guns
                 Transform ft = from.transform;
                 Vector3 origin = ft.position + (__instance.fromPosition != null && !__instance.fromPosition.IsNone ? __instance.fromPosition.Value : Vector3.zero);
                 Vector3 local = __instance.direction != null && !__instance.direction.IsNone ? __instance.direction.Value : Vector3.forward;
-                float range = RangeOf(gun.Kind);
+                float range = RangeOf(gun.Kind) * gun.RangeMultiplier;
                 if (_player == null) _player = GameRefs.Player;
 
                 Vector3 muzzle = gun.Muzzle != null && gun.Muzzle.gameObject.activeInHierarchy ? gun.Muzzle.position
@@ -393,6 +394,12 @@ namespace WildWasteland.Modules.Guns
                 var fire = fsm.GetState("fire");
                 gun.PelletSpread = 0.02f;
                 if (fire != null) foreach (var a in fire.Actions) { var rf = a as RandomFloat; if (rf != null && rf.max != null) { gun.PelletSpread = Mathf.Abs(rf.max.Value); break; } }
+                if (go.name.StartsWith("rochester_m24", StringComparison.OrdinalIgnoreCase) || go.name.StartsWith("slamberg_500", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (go.name.IndexOf("_chopped", StringComparison.OrdinalIgnoreCase) >= 0)
+                    { gun.Pellets = 9; gun.PelletSpread = 0.03f; gun.DamageMultiplier = 1.5f; }
+                    else gun.RangeMultiplier = 2f;
+                }
             }
             gun.Kind = shotgun ? Kind.Shotgun : Classify(go.name);
             if (gun.Kind == Kind.Shotgun && !shotgun) gun.Kind = Kind.Rifle;      // a "rochester" without pellets is not a shotgun
@@ -786,9 +793,8 @@ namespace WildWasteland.Modules.Guns
         // the hit effect in their own "getLayer" state: GetLayer(hitObj) == 10 (Actor) -> "actorHitSound" (knife_hit + BloodHit_Effect),
         // anything else -> Crash-02 + MeleeHit_Effect (brown dust). A corpse's limbs are on Default, so a corpse got dust like the guns did
         // before 1.5.2. Postfix on GetLayer.OnEnter (DoGetLayer could be inlined): in that state, on a corpse, the stored layer becomes 10 -
-        // the FSM's own blood path runs. A blade (name in hidden [Tracers] StabWeapons) then stabs with Sounds/knifestab.wav instead of
-        // knife_hit: postfix on SetAudioClip.OnEnter in "actorHitSound" of the same FSM within the same moment.
-        private static readonly Dictionary<int, float> _corpseHitAt = new Dictionary<int, float>();   // Attack FSM id -> when it hit a corpse
+        // the FSM's own blood path runs. A blade (name in hidden [Tracers] StabWeapons) stabs living actors and corpses with Sounds/knifestab.wav
+        // instead of knife_hit: postfix on SetAudioClip.OnEnter in "actorHitSound" of the player's melee FSM.
         private static AudioClip _stab; private static bool _stabTried;
 
         internal static bool IsPlayerMelee(GameObject weapon)
@@ -816,7 +822,6 @@ namespace WildWasteland.Modules.Guns
                 var hit = __instance.gameObject != null ? __instance.gameObject.Value : null;
                 if (hit == null || !IsCorpse(hit)) return;
                 __instance.storeResult.Value = 10;                       // the FSM goes on to actorHitSound: knife_hit + BloodHit_Effect
-                _corpseHitAt[fsm.GameObject.GetInstanceID()] = Time.time;
                 if (Core.Log.Verbose) Core.Log.Info("[Guns] Hit: " + fsm.GameObject.name + " (melee) -> corpse " + hit.transform.root.name + "/" + hit.name + ": blood" + (IsBlade(fsm.GameObject.name) ? ", stab sound" : ""));
             }
             catch (Exception e) { Core.Log.Error("[Guns] Tracers melee corpse", e); }
@@ -824,21 +829,21 @@ namespace WildWasteland.Modules.Guns
 
         public static void AfterSetAudioClip(SetAudioClip __instance)
         {
-            if (_corpseHitAt.Count == 0) return;                         // (WW) cheap first filter: no corpse stab pending
+            if (!GunsModule.TracersEnabled.Value) return;
             try
             {
                 var fsm = __instance.Fsm;
-                if (fsm == null || fsm.Name != "Attack" || __instance.State == null || __instance.State.Name != "actorHitSound" || fsm.GameObject == null) return;
-                float at;
-                int id = fsm.GameObject.GetInstanceID();
-                if (!_corpseHitAt.TryGetValue(id, out at)) return;
-                _corpseHitAt.Remove(id);
-                if (Time.time - at > 0.25f || !IsBlade(fsm.GameObject.name)) return;
+                if (fsm == null || fsm.Name.Length != 6 || fsm.Name != "Attack" || __instance.State == null || __instance.State.Name != "actorHitSound" || fsm.GameObject == null) return;
+                if (!IsPlayerMelee(fsm.GameObject) || !IsBlade(fsm.GameObject.name)) return;
                 var clip = StabClip();
                 if (clip == null) return;
                 var go = fsm.GetOwnerDefaultTarget(__instance.gameObject);
                 var src = go != null ? go.GetComponent<AudioSource>() : null;
-                if (src != null) src.clip = clip;                        // the hit state's AudioPlay plays it (pitch 0.5-1.5, volume 0.5 as vanilla)
+                if (src != null)
+                {
+                    src.clip = clip;                                    // the hit state's AudioPlay plays it (pitch 0.5-1.5, volume 0.5 as vanilla)
+                    if (Core.Log.Verbose) Core.Log.Info("[Guns] Hit: " + fsm.GameObject.name + " (melee): stab sound");
+                }
             }
             catch (Exception e) { Core.Log.Error("[Guns] Tracers stab sound", e); }
         }
@@ -870,7 +875,7 @@ namespace WildWasteland.Modules.Guns
                     string old = System.IO.Path.Combine(Assets.LegacyPluginDir("Gunplay"), rel);
                     if (System.IO.File.Exists(old)) path = old;
                 }
-                if (!System.IO.File.Exists(path)) { Core.Log.Warn("[Guns] Tracers: no stab sound at " + path + " - corpses get the game's knife sound"); return null; }
+                if (!System.IO.File.Exists(path)) { Core.Log.Warn("[Guns] Tracers: no stab sound at " + path + " - blades get the game's knife sound"); return null; }
                 int ch, rate;
                 float[] smp = Wav.Read(System.IO.File.ReadAllBytes(path), out ch, out rate);
                 _stab = AudioClip.Create("knifestab", Math.Max(1, smp.Length / ch), ch, rate, false);
@@ -1201,7 +1206,7 @@ namespace WildWasteland.Modules.Guns
                 {
                     if (Ignored(tr, s.ShooterRoot != null ? s.ShooterRoot.transform : null, s.Player)) continue;
                     float pd = s.Travelled + h.distance;
-                    float pf = Falloff(ref s, pd) * s.DmgMult;
+                    float pf = Falloff(ref s, pd) * s.DmgMult * s.Gun.DamageMultiplier;
                     if (Penetrates(ref s, col, h, (s.Gun.Damage != null ? s.Gun.Damage.Value : 0f) * pf)) continue;
                     PlayerHit(ref s, h, pf);
                     MetalSparks(col, h.point, h.normal);

@@ -292,6 +292,7 @@ namespace WildWasteland.Modules.NPC
 
         private static void Free(Nest n, bool drop)
         {
+            foreach (var s in n.Sitters) if (s.A != null) s.A.CaveWeb = false;
             if (drop) foreach (var s in n.Sitters) Drop(s, null);
             n.Sitters.Clear();
             foreach (var w in n.Hanging) Webs.Kill(w);
@@ -563,6 +564,7 @@ namespace WildWasteland.Modules.NPC
             Vector3 pos = w.Center + up * 0.02f;
             a.T.SetPositionAndRotation(pos, rot); rb.position = pos; rb.rotation = rot;
             n.Sitters.Add(s);
+            a.CaveWeb = n.Cave;
             a.AmbushDist = Mathf.Max(0.3f, NpcModule.NestSitterReach.Value);      // (1.7.5) in its web it strikes only at what comes within 1 m
             if (NpcModule.NestLog.Value) NpcModule.Log.LogInfo("Nests: " + a.Owner.name + " sits in a web at " + n.Name);
         }
@@ -584,6 +586,7 @@ namespace WildWasteland.Modules.NPC
         // off the web: upright again, facing what it goes for, and falls to the ground under the web
         private static void Drop(Sit s, GameObject player)
         {
+            if (s.A != null) s.A.CaveWeb = false;
             if (s.A == null || s.A.Owner == null) return;
             Vector3 f = s.A.Target != null ? s.A.Target.transform.position - s.A.T.position : (player != null ? player.transform.position - s.A.T.position : s.A.T.forward);
             f.y = 0f; if (f.sqrMagnitude < 0.01f) f = Vector3.forward;

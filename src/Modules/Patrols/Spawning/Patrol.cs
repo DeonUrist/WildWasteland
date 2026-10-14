@@ -168,6 +168,13 @@ namespace WildWasteland.Modules.Patrols
                     trailerBody = Prefabs.Exact(tpl.Trailer.Body);
                     if (trailerBody == null || !TrailerSupport.IsTrailer(trailerBody) || FindChild(body.transform, "hitch") == null || FindChild(trailerBody.transform, "attacher") == null)
                     { Core.Log.Warn("[Patrols] " + "Cannot build " + tpl.Name + ": trailer prefab or towing hitch is missing"); yield break; }
+                    if (WarRig.WorldSpawning.IsTemplate(trailerBody))
+                    {
+                        var hitchOffset = body.transform.InverseTransformPoint(FindChild(body.transform, "hitch").position);
+                        var attacherOffset = trailerBody.transform.InverseTransformPoint(FindChild(trailerBody.transform, "attacher").position);
+                        if (!WarRig.WorldSpawning.CanSpawnAt(pos + rot * (hitchOffset - attacherOffset), rot))
+                        { Core.Log.Info("[Patrols] War Rig patrol spawn rejected: blocked clearance or unsuitable ground."); yield break; }
+                    }
                 }
 
                 car = UnityEngine.Object.Instantiate(body, pos, rot);

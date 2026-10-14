@@ -172,9 +172,9 @@ namespace WildWasteland.Modules.Guns
             MaxLeadTime = cfg.Tool("NPC aim", "MaxLeadTime", 1.5f, "Longest flight time NPCs lead for, s (bolts at long range).", new AcceptableValueRange<float>(0f, 5f));
 
             StabWeapons = cfg.Tool("Melee", "StabWeapons", "knife,shiv,machete",
-                "Melee weapons (name contains one of these) that stab a corpse with StabSound instead of the game's knife hit. Every melee hit on a corpse shows blood.");
+                "Melee weapons (name contains one of these) that use StabSound when hitting living actors or corpses instead of the game's knife hit. Every melee hit on a corpse shows blood.");
             StabSound = cfg.Tool("Melee", "StabSound", "Sounds/knifestab.wav",
-                "The stab sound for blades on corpses (WAV, relative to BepInEx\\plugins\\WildWasteland\\Guns\\; the old Gunplay plugin folder is used as a fallback). Missing file: the game's knife hit.");
+                "The stab sound for blades on living actors and corpses (WAV, relative to BepInEx\\plugins\\WildWasteland\\Guns\\; the old Gunplay plugin folder is used as a fallback). Missing file: the game's knife hit.");
 
             AmmoSettings.PhaseTimeout = cfg.Tool("Ammo", "AnimationTimeout", 4f,
                 "Seconds to wait for an unload animation phase before completing it.", new AcceptableValueRange<float>(1f, 10f));
@@ -194,6 +194,7 @@ namespace WildWasteland.Modules.Guns
             ResetAll();
             Ironsights.Init(this);
             WeaponTransition.Init(this);
+            EmptyGunSound.Init(this);
 
             // shared targets: Core dispatchers (module init order NPC -> Guns keeps NPCAI's shot counting before the projectile prefix)
             Hooks.SensorRayHitEnter.Prefix(this, Tracers.BeforeRayHit);

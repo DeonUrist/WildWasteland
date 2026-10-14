@@ -10,19 +10,37 @@ namespace WildWasteland.Modules.Patrols.WarRig
     internal static class WorldSpawning
     {
         private static readonly HashSet<PlayMakerArrayListProxy> touched = new HashSet<PlayMakerArrayListProxy>();
+        private static Bounds clearance;
+        private static Vector3 modelOffset;
+        private static bool clearanceReady;
 
         // Sample the entire tanker from above: an upward ray alone can miss a roof
         // when its origin is already inside rock. Use current world coordinates.
         internal static bool CanSpawnAt(Vector3 position, Quaternion rotation)
         {
+            if (!clearanceReady)
+            {
+                clearance = Factory.Model().Bounds;
+                foreach (var hull in Factory.Hulls()) clearance.Encapsulate(hull.bounds);
+                clearance.center *= S.Scale;
+                clearance.size = clearance.size * S.Scale + Vector3.one * .2f;
+                modelOffset = Layout.Off;
+                clearanceReady = true;
+            }
+            var modelRotation = rotation * Layout.Rot;
+            var origin = position + rotation * modelOffset;
+            // Reserve the full model/hull envelope, including overhangs, with 10 cm clearance.
+            if (Physics.CheckBox(origin + modelRotation * clearance.center, clearance.extents,
+                modelRotation, Physics.AllLayers, QueryTriggerInteraction.Ignore)) return false;
             int mask = (1 << 0) | (1 << 11) | (1 << 14);
             foreach (var terrain in Terrain.activeTerrains)
                 if (terrain != null) mask |= 1 << terrain.gameObject.layer;
-            var modelRotation = rotation * Quaternion.Euler(0, S.Yaw, 0);
             for (int z = 0; z <= 10; z++)
                 for (int x = -1; x <= 1; x++)
                 {
-                    var sample = position + modelRotation * new Vector3(x * 2.5f, -.75f, -11f + z * 2f);
+                    var sample = origin + modelRotation * new Vector3(
+                        Mathf.Lerp(clearance.min.x, clearance.max.x, (x + 1) * .5f), -.75f,
+                        Mathf.Lerp(clearance.min.z, clearance.max.z, z * .1f));
                     RaycastHit hit;
                     if (!Physics.Raycast(sample + Vector3.up * 256f, Vector3.down, out hit,
                         512f, mask, QueryTriggerInteraction.Ignore) || hit.point.y > sample.y + .05f)
@@ -104,7 +122,7 @@ namespace WildWasteland.Modules.Patrols.WarRig
                     for (int i = proxy.arrayList.Count - 1; i >= 0; i--)
                         if (IsTemplate(proxy.arrayList[i] as GameObject)) proxy.arrayList.RemoveAt(i);
         }
-        internal static void ResetForScene() { touched.Clear(); Spawners.Clear(); }
+        internal static void ResetForScene() { touched.Clear(); Spawners.Clear(); clearanceReady = false; }
 
         // First-line filter for the ArrayListGetRandom patches: one string check per FSM, then a reference lookup (no string compare
         // on unrelated FSMs after their first call). Cleared on scene load.
@@ -195,6 +213,7 @@ namespace WildWasteland.Modules.Patrols.WarRig
                 if (InCave(__instance.Owner.transform) || (point != null && InCave(point.transform)) || !CanSpawnAt(position, rotation))
                 {
                     // Preserve vanilla naming, registration and the consumed-spawner flag.
+                    Core.Log.Info("[Patrols] War Rig spawn rejected: cave, blocked clearance or unsuitable ground; using Scrapwagon.");
                     __instance.gameObject.Value = NativeTrailer(__instance.Owner); return true;
                 }
                 var rig = Factory.Create(position, rotation, S.EquipWheels, null);

@@ -256,7 +256,7 @@ namespace WildWasteland.Modules.Guns
                     var ps = a as PlaySound;
                     if (ps == null || ps.clip == null) continue;
                     var clip = ps.clip.Value as AudioClip;
-                    if (clip != null) AudioSource.PlayClipAtPoint(clip, _weapon.transform.position + ps.position.Value, ps.volume.Value);
+                    if (clip != null && EmptyGunSound.Before(ps)) AudioSource.PlayClipAtPoint(clip, _weapon.transform.position + ps.position.Value, ps.volume.Value);
                 }
             }
             // State that waits for AnimEnd sends ReloadEnd (close animation).

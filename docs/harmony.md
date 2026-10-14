@@ -82,7 +82,8 @@ Dropped from NPCAI: postfixes on `Apocapatrol.Patrol.BailOut` / `Apocapatrol.Exp
 | Target | Kind | Handler | Filter (first line) | Hot? |
 |---|---|---|---|---|
 | `GetLayer.OnEnter` | postfix | `Tracers.AfterGetLayer` | `TracersEnabled`, FSM "Attack", state `getLayer`, result 10 | rare |
-| `SetAudioClip.OnEnter` | postfix | `Tracers.AfterSetAudioClip` | `_corpseHitAt.Count == 0` first | rare |
+| `SetAudioClip.OnEnter` | postfix | `Tracers.AfterSetAudioClip` | `TracersEnabled`, FSM "Attack", state `actorHitSound`, player melee blade | per blade hit on living actors or corpses |
+| `PlaySound.DoPlaySound` | prefix (camera position for player empty clicks and reload sounds; OnEnter keeps Finish) | `EmptyGunSound.Before` | FSM Attack/empty (empty_fire), AnimSound or Reload; weapon under PlayerRig.Parent, first person | per PlaySound |
 | `TranslatePosition.OnFixedUpdate` | prefix (false for registered orbs, `Finish()` when not everyFrame) | `Tracers.BeforeTranslatePosition` | `_orbs.Count == 0` | every TranslatePosition per FixedUpdate |
 | `IntClamp.DoClamp` | prefix (false only while an overflow drop is pending) | `AmmoCapacity_Patch` -> `BackpackOverflow.BeforeClamp` | `Fsm.Name.Length == 4` + `"Ammo"`, per-action cached classification, `Idle()` fast path | every IntClamp, everyFrame x calibers |
 | `FloatClamp.DoClamp` | prefix (false only while a plate drop is pending) | `ArmorCapacityPatch` -> `ArmorOverflow.BeforeClamp` | `Fsm.Name.Length == 13` + `"ArmorBackpack"`, per-action cache, `Idle()` | every FloatClamp, everyFrame |
