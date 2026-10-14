@@ -49,6 +49,23 @@ namespace WildWasteland.Modules.Patrols
         private static float _resumeAt = -1f;
         private const float PushSeconds = 0.5f;
 
+        // Scale the native creature hit after its value is written, before CarAttack sends Damage. Never change the shared speed/bumper variable.
+        internal static void AfterSetFsmFloat(HutongGames.PlayMaker.Actions.SetFsmFloat action)
+        {
+            if (!PatrolsModule.Running) return;
+            var fsm = action.Fsm;
+            if (fsm == null || fsm.Name.Length != 9 || fsm.Name != "CarAttack" || fsm.GameObject == null) return;
+            if (action.fsmName == null || action.fsmName.Value != "Bodypart" || action.variableName == null || action.variableName.Value != "Damage") return;
+            var target = fsm.GetOwnerDefaultTarget(action.gameObject);
+            var player = Core.GameRefs.Player;
+            if (target == null || (player != null && target.transform.IsChildOf(player.transform))) return;
+            var bodypart = Core.FsmUtil.Find(target, "Bodypart");
+            var damage = bodypart != null ? bodypart.FsmVariables.FindFsmFloat("Damage") : null;
+            if (damage == null || damage.Value >= 0f) return;
+            damage.Value *= PatrolsModule.NpcRamDamageMultiplier.Value;
+            if (Core.Log.Verbose) PatrolsModule.Verbose("Ram: car hit -> " + target.name + ", " + (-damage.Value) + " damage (x" + PatrolsModule.NpcRamDamageMultiplier.Value + ")");
+        }
+
         // kind: 1 = the player on foot, 2 = the player's car. rel = the car's speed into the contact (m/s), carVel = its velocity (push direction).
         internal static void Hit(GameObject car, string body, int kind, float rel, Collider hit, Vector3 carVel)
         {

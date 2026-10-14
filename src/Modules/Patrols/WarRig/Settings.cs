@@ -11,7 +11,6 @@ namespace WildWasteland.Modules.Patrols.WarRig
     internal static class S
     {
         public static ConfigEntry<bool> SpawnEnabled;
-        public static ConfigEntry<int> WarRigPercent;
         public static ConfigEntry<bool> GroundRecoveryEnabled;
         public const float Distance = 14f;
         public const bool EquipWheels = false; // Same bare-frame discovery as native trailers.
@@ -42,9 +41,7 @@ namespace WildWasteland.Modules.Patrols.WarRig
         public const string RearBox = "0, 3.59, 6.9 ; 2.06, 1.48, 1.7";
         public const string LockBox = "0, 0.95, -1.25 ; 4.4, 2.0, 17.7";
 
-        // WW: the three entries are bound by PatrolsModule (F6 [Patrols] War Rig spawns, [Patrols / War Rig] WarRigPercent,
-        // [Patrols] War Rig ground recovery) and migrated from com.denis.apocalypter.warrig.cfg. The old orphan purge is dropped: it
-        // must never touch the shared cfg. SpawnEnabled.SettingChanged -> WorldSpawning.Refresh is hooked by WarRigFeature.Install.
+        // Patrols binds the spawn/recovery toggles; POI owns the world-generation chance.
 
         public static Vector3 V3(string s, Vector3 def)
         {

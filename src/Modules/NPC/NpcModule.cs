@@ -100,7 +100,6 @@ namespace WildWasteland.Modules.NPC
             ShowNav.SettingChanged += OnShowNavChanged;
 
             Hotkeys.Register(this, ShoutKey, Senses.ShoutPressed, Senses.ShoutAllowed);
-            Hotkeys.Register(this, WebTestKey, Webs.TestKeyPressed);
 
             Running = true;
             Log.LogInfo("NPC Overhaul 1.9.15 port started");
@@ -195,6 +194,7 @@ namespace WildWasteland.Modules.NPC
             Hooks.RaycastDo.Prefix(this, Brain.BeforeRaycast);
             Hooks.RaycastEnter.Prefix(this, VanillaEvents.BeforePlayerShot);
             Hooks.SmoothLookAtDo.Prefix(this, Brain.BeforeSmoothLookAt);
+            Hooks.ProcessEvent.Prefix(this, Brain.BeforeDrivingHide);
             Hooks.ActivateGameObjectEnter.Postfix(this, Brain.AfterActivate);
             // SensorToolkit: the Detection FSM (registers agents), the burst LOS, the NPC burst ray (prefix + finalizer restores the ray length)
             Hooks.SensorDetectionsDo.Prefix(this, Senses.BeforeGetDetections);

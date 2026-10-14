@@ -89,6 +89,7 @@ namespace WildWasteland.Modules.NPC
             public Vector3 CoverPos; public float CoverUntil, CoverSince, NextCoverCheck, CoverCooldownUntil; public bool CoverArrived, CoverFromHide;
             public GameObject DogCoverThreat; public float NextDogCoverCheck, DogCoverRetry;
             public FsmGameObject HideVar;            // the Attack FSM's "Hide" variable (its FindClosest result)
+            public GameObject VehicleHide; public float NextVehicleHideCheck;
             public FsmFloat HpVar; public float HpMax;   // the Health FSM's Health, and the most it was seen at
             public bool Travel; public float RunZ;
             public float Boost = 1f, BoostUntil;
@@ -478,7 +479,8 @@ namespace WildWasteland.Modules.NPC
             if (ast == "hide")
             {
                 if (now < n.CoverCooldownUntil) return;
-                var h = n.HideVar != null ? n.HideVar.Value : null;
+                var h = DrivingHide(n, now);
+                if (h == null) { n.Attack.SendEvent("back"); return; }
                 if (h != null && (h.transform.position - n.T.position).sqrMagnitude <= 60f * 60f) { StartCover(n, h.transform.position, now, 60f, true, "the game's hide: " + h.name); return; }
                 return;
             }
@@ -495,6 +497,24 @@ namespace WildWasteland.Modules.NPC
             else if (Nav.CoverSpot(n.T.position, tp, range, out spot)) what = "a spot out of sight on the map";
             else { n.NextCoverCheck = now + 10f; return; }
             StartCover(n, spot, now, UnityEngine.Random.Range(NpcModule.CoverMin.Value, Mathf.Max(NpcModule.CoverMin.Value, NpcModule.CoverMax.Value)), false, "health " + hp.ToString("0") + "/" + n.HpMax.ToString("0") + ", " + what);
+        }
+
+        private static GameObject DrivingHide(Npc n, float now)
+        {
+            var agent = Senses.AgentFor(n.Owner);
+            if (n.Ranged || agent == null || !agent.Human || !Senses.PlayerInCar) return null;
+            if (now >= n.NextVehicleHideCheck)
+            {
+                n.NextVehicleHideCheck = now + 1f; n.VehicleHide = null;
+                NearestHide(n.T.position, 60f); float best = 60f * 60f;
+                if (_hides != null) foreach (var h in _hides)
+                {
+                    if (h == null) continue; float d = (h.transform.position - n.T.position).sqrMagnitude; if (d >= best) continue;
+                    var root = h.transform; while (root != null && !root.name.StartsWith("Camp_", StringComparison.Ordinal)) root = root.parent;
+                    if (root != null) { n.VehicleHide = h; best = d; }
+                }
+            }
+            return n.VehicleHide != null && (n.VehicleHide.transform.position - n.T.position).sqrMagnitude <= 60f * 60f ? n.VehicleHide : null;
         }
 
         private static void CompanionCoverCheck(Npc n, float now)
@@ -538,10 +558,12 @@ namespace WildWasteland.Modules.NPC
             // vanilla (no target at all). A ghost (lost sight) does not pull a wounded raider out of cover.
             bool dogCover = n.DogCoverThreat != null;
             bool leave = now >= n.CoverUntil || (!dogCover && kind == 1 && td < 8f)
+                || (n.CoverFromHide && DrivingHide(n, now) == null)
                 || (dogCover && (!n.DogCoverThreat.activeInHierarchy || n.DogCoverThreat.transform.parent != null || (n.DogCoverThreat.transform.position - n.T.position).sqrMagnitude > 36f))
                 || (n.CoverFromHide && ast != "hide" && now - n.CoverSince > 1f) || kind == 3 || (kind == 0 && Senses.On);
             if (leave)
             {
+                if (n.CoverFromHide && ast == "hide") n.Attack.SendEvent("back");
                 if (n.CoverArrived) Move(n, true);
                 SetMode(n, Mode.Chase, NpcModule.BrainLog.Value ? (kind == 1 && td < 8f ? "target too close for cover" : now >= n.CoverUntil ? "cover time over" : kind != 1 ? "nothing to hide from" : "the game's hide ended") : "");
                 return;
@@ -1794,13 +1816,20 @@ namespace WildWasteland.Modules.NPC
                 var n = NpcOf(fsm, "Attack");
                 if (n == null) return true;
                 string st = fsm.ActiveStateName;
-                if (st == "hide") return n.Mode != Mode.Cover;     // covering: the brain steers to the cover and faces the target itself
+                if (st == "hide") return false;     // the brain owns facing in cover, chase and ghost walks; the game's shelter turn must not compete
                 return !ChaseState(st);
             }
             catch (Exception e) { NpcModule.Log.LogError("Brain: " + e); return true; }
         }
 
         // SendEvent.OnEnter: Attack's Animal_Run while holding -> Animal_Idle; Unstuck's Animal_rotateRandom -> our stuck handling
+        internal static bool BeforeDrivingHide(Fsm fsm, FsmEvent ev, FsmEventData data)
+        {
+            if (_npcs.Count == 0 || !On || ev == null || ev.Name != "hide" || fsm == null || fsm.Name != "Attack" || fsm.ActiveStateName != "trigger") return true;
+            var n = Get(fsm.GameObject);
+            return n == null || (Time.time >= n.CoverCooldownUntil && DrivingHide(n, Time.time) != null);
+        }
+
         public static bool BeforeSendEvent(SendEvent __instance)
         {
             if (_npcs.Count == 0 || !On) return true;      // (WW) SendEvent runs everywhere: a static check before the event name

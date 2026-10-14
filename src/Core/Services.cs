@@ -19,6 +19,18 @@ namespace WildWasteland.Core
         public static IGunsApi Guns;
         /// <summary>Hit feedback (HUD module, ex GunplayHUD.Api). Null when HUD is off.</summary>
         public static IHitFeedback Hud;
+        private static IPoiApi _poi;
+        public static event Action<IPoiApi> PoiChanged;
+        public static IPoiApi Poi
+        {
+            get { return _poi; }
+            set
+            {
+                _poi = value;
+                var changed = PoiChanged;
+                if (changed != null) try { changed(value); } catch (Exception e) { Log.Error("POI provider notification", e); }
+            }
+        }
 
         /// <summary>Patrols raised: an occupant left a raider car (ex Apocapatrol.Patrol.BailOut). (car, previous passenger object, new on-foot NPC)</summary>
         public static event Action<GameObject, GameObject, GameObject> CrewBailedOut;
@@ -40,6 +52,21 @@ namespace WildWasteland.Core
         {
             CrewBailedOut = null; VehicleExploded = null;
         }
+    }
+
+    public sealed class PoiDefinition
+    {
+        public string Id;
+        public float Radius;
+        public Func<bool> Enabled;
+        public Action<Vector3, Quaternion, Action<GameObject>> Spawn;
+        public Action<GameObject> Mark;
+    }
+
+    public interface IPoiApi
+    {
+        void Register(PoiDefinition definition);
+        void Remove(string id);
     }
 
     // ------------------------------------------------------------------ Animation (PlayerBody)

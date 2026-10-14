@@ -12,9 +12,13 @@ namespace WildWasteland.Modules.Patrols
         private readonly System.Collections.Generic.List<MapLabel> _mapLabels=new System.Collections.Generic.List<MapLabel>();
         private readonly System.Collections.Generic.List<Rect> _mapBattles=new System.Collections.Generic.List<Rect>();
         private Vector2 _gameInkSize;
-        private bool _inkNames,_inkHide;
+        private bool _inkNames,_inkHide,_mapWasOpen;
         private readonly Vector3[] _mapCorners=new Vector3[4];
         private Texture2D _skull;
+        private Texture2D _mapDot;
+        private GUIStyle _mapLabelStyle;
+        private GUIStyle _rigNoticeStyle;
+        private GUIStyle _rigXStyle;
         private Vector3 OffscreenTrafficPoint(Vector3 center,Vector3 direction)
         {
             // Route creation only; include the inactive native camera when M is closed.
@@ -50,22 +54,32 @@ namespace WildWasteland.Modules.Patrols
         internal void Gui()
         {
             if(Event.current.type!=EventType.Repaint)return;
-            if(!PatrolsModule.WorldTrafficEnabled.Value||!PatrolsModule.TrafficDebugMap.Value||!Core.GameRefs.InGame)
-            {_gameInkAt=0f;return;}
-            if((_gameMap==null||_gameMapImage==null||_mapCheat==null)&&Time.unscaledTime>=_nextMapScan)
+            if(Core.GameRefs.InGame&&Time.unscaledTime<WarRig.WorldSpawning.NaturalNoticeUntil)
+            {
+                if(_rigNoticeStyle==null)_rigNoticeStyle=new GUIStyle(GUI.skin.box){fontSize=26,fontStyle=FontStyle.Bold,alignment=TextAnchor.MiddleCenter,normal={textColor=Color.yellow}};
+                GUI.Box(new Rect((Screen.width-420f)*.5f,40f,420f,55f),"WAR RIG SPAWNED",_rigNoticeStyle);
+            }
+            var rigs=WarRig.WorldSpawning.NaturalRigs;
+            for(int i=rigs.Count-1;i>=0;i--)if(rigs[i]==null)rigs.RemoveAt(i);
+            bool traffic=PatrolsModule.WorldTrafficEnabled.Value&&PatrolsModule.TrafficDebugMap.Value;
+            if((!traffic&&rigs.Count==0)||!Core.GameRefs.InGame)
+            {_gameInkAt=0f;_mapWasOpen=false;return;}
+            bool mapOpen=_mapCheat!=null&&_mapCheat.isActiveAndEnabled&&_mapCheat.ActiveStateName=="on";
+            if((_gameMap==null||_gameMapImage==null||_mapCheat==null)&&(Time.unscaledTime>=_nextMapScan||(mapOpen&&!_mapWasOpen)))
             {
                 _nextMapScan=Time.unscaledTime+5f;
-                var camera=GameObject.Find("MapCheat_Camera");_gameMap=camera!=null?camera.GetComponent<Camera>():null;
-                var image=GameObject.Find("RawImage_Map");_gameMapImage=image!=null?image.GetComponent<RectTransform>():null;
-                _mapCheat=Core.FsmUtil.Find(Core.GameRefs.GameManager,"MapCheat");
+                if(_gameMap==null){var camera=GameObject.Find("MapCheat_Camera");_gameMap=camera!=null?camera.GetComponent<Camera>():null;}
+                if(_mapCheat==null)_mapCheat=Core.FsmUtil.Find(Core.GameRefs.GameManager,"MapCheat");
+                if(_gameMapImage==null&&_mapCheat!=null)_gameMapImage=FindMapImage();
             }
-            if(_mapCheat==null||!_mapCheat.isActiveAndEnabled||_mapCheat.ActiveStateName!="on"||_gameMap==null||_gameMapImage==null||!_gameMapImage.gameObject.activeInHierarchy)
+            _mapWasOpen=_mapCheat!=null&&_mapCheat.isActiveAndEnabled&&_mapCheat.ActiveStateName=="on";
+            if(!_mapWasOpen||_gameMap==null||_gameMapImage==null||!_gameMapImage.gameObject.activeInHierarchy)
             {_gameInkAt=0f;return;}
             _gameMapImage.GetWorldCorners(_mapCorners);
             var rect=new Rect(_mapCorners[0].x,Screen.height-_mapCorners[1].y,_mapCorners[2].x-_mapCorners[0].x,_mapCorners[1].y-_mapCorners[0].y);
             if(rect.width<1f||rect.height<1f)return;
             var old=GUI.color;GUI.BeginGroup(rect);
-            if(Time.unscaledTime>=_gameInkAt||_gameInkSize!=rect.size||_inkNames!=PatrolsModule.RealPatrolNames.Value||_inkHide!=PatrolsModule.HideRouteType.Value)
+            if(traffic&&(Time.unscaledTime>=_gameInkAt||_gameInkSize!=rect.size||_inkNames!=PatrolsModule.RealPatrolNames.Value||_inkHide!=PatrolsModule.HideRouteType.Value))
             {
                 _gameInkAt=Time.unscaledTime+1f;_gameInkSize=rect.size;
                 _inkNames=PatrolsModule.RealPatrolNames.Value;_inkHide=PatrolsModule.HideRouteType.Value;
@@ -84,13 +98,48 @@ namespace WildWasteland.Modules.Patrols
                 foreach(var merchant in MerchantHost.All)if(merchant!=null&&!Owns(merchant.GetComponent<PatrolMarker>()))
                 CacheMapLabel(TrafficSpace.World(merchant.transform.position),rect,_inkHide?Color.gray:Color.yellow,_inkHide?"Distant traffic":_inkNames?merchant.Data?.group??"Coyote merchant":"Merchant");
             }
-            GUI.color=Color.white;GUI.DrawTexture(new Rect(0,0,rect.width,rect.height),_gameInk.Texture);
-            foreach(var label in _mapLabels){GUI.color=label.color;GUI.Label(label.rect,label.text);}
-            GUI.color=Color.white;foreach(var battle in _mapBattles)GUI.DrawTexture(battle,Skull());
+            if(traffic)
+            {
+                GUI.color=Color.white;GUI.DrawTexture(new Rect(0,0,rect.width,rect.height),_gameInk.Texture);
+                foreach(var label in _mapLabels)DrawMapLabel(label);
+                GUI.color=Color.white;foreach(var battle in _mapBattles)GUI.DrawTexture(battle,Skull());
+            }
+            foreach(var rig in rigs)
+            {
+                var p=_gameMap.WorldToViewportPoint(rig.transform.position);
+                if(p.z<=0f||p.x<0f||p.x>1f||p.y<0f||p.y>1f)continue;
+                if(_rigXStyle==null)_rigXStyle=new GUIStyle(GUI.skin.label){fontSize=24,fontStyle=FontStyle.Bold,alignment=TextAnchor.MiddleCenter,normal={textColor=Color.yellow}};
+                GUI.color=Color.white;GUI.Label(new Rect(p.x*rect.width-12f,(1f-p.y)*rect.height-12f,24f,24f),"X",_rigXStyle);
+            }
             GUI.EndGroup();GUI.color=old;
         }
+        private RectTransform FindMapImage()
+        {
+            // The native FSM holds MapCheatUI even while its hierarchy is inactive.
+            foreach(var state in _mapCheat.FsmStates)foreach(var action in state.Actions)
+            {
+                var activate=action as HutongGames.PlayMaker.Actions.ActivateGameObject;if(activate==null)continue;
+                var root=_mapCheat.Fsm.GetOwnerDefaultTarget(activate.gameObject);if(root==null||root.name!="MapCheatUI")continue;
+                foreach(var image in root.GetComponentsInChildren<RectTransform>(true))if(image.name=="RawImage_Map")return image;
+            }
+            return null;
+        }
         private void CacheMapLabel(Vector3 world,Rect rect,Color color,string text)
-        {var p=MapPoint(world,rect);_mapLabels.Add(new MapLabel{rect=new Rect(p.x,p.y,180f,22f),color=color,text=text});}
+        {var p=MapPoint(world,rect);_mapLabels.Add(new MapLabel{rect=new Rect(p.x+7f,p.y-13f,260f,26f),color=color,text=text});}
+        private void DrawMapLabel(MapLabel label)
+        {
+            if(_mapLabelStyle==null)_mapLabelStyle=new GUIStyle(GUI.skin.label){fontSize=15,wordWrap=false,normal={textColor=Color.white}};
+            if(_mapDot==null)
+            {
+                _mapDot=new Texture2D(9,9,TextureFormat.RGBA32,false);var pixels=new Color32[81];
+                for(int y=0;y<9;y++)for(int x=0;x<9;x++)if((x-4)*(x-4)+(y-4)*(y-4)<=16)pixels[y*9+x]=new Color32(255,255,255,255);
+                _mapDot.SetPixels32(pixels);_mapDot.Apply(false,false);
+            }
+            var r=label.rect;GUI.color=Color.black;GUI.DrawTexture(new Rect(r.x-11.5f,r.y+8.5f,9f,9f),_mapDot);
+            GUI.Label(new Rect(r.x-1f,r.y,r.width,r.height),label.text,_mapLabelStyle);GUI.Label(new Rect(r.x+1f,r.y,r.width,r.height),label.text,_mapLabelStyle);
+            GUI.Label(new Rect(r.x,r.y-1f,r.width,r.height),label.text,_mapLabelStyle);GUI.Label(new Rect(r.x,r.y+1f,r.width,r.height),label.text,_mapLabelStyle);
+            GUI.color=label.color;GUI.DrawTexture(new Rect(r.x-9.5f,r.y+10.5f,5f,5f),_mapDot);GUI.Label(r,label.text,_mapLabelStyle);
+        }
         private Vector2 MapPoint(Vector3 world,Rect rect)
         {var p=_gameMap.WorldToViewportPoint(TrafficSpace.Scene(world));return new Vector2(p.x*rect.width,(1f-p.y)*rect.height);}
         internal static string MapName(TrafficJourney journey)
@@ -109,6 +158,6 @@ namespace WildWasteland.Modules.Patrols
             _skull=new Texture2D(14,11,TextureFormat.RGBA32,false);var pixels=new Color32[154];for(int y=0;y<11;y++)for(int x=0;x<14;x++)pixels[(10-y)*14+x]=rows[y][x]=='1'?new Color32(230,230,230,255):new Color32(0,0,0,0);
             _skull.SetPixels32(pixels);_skull.filterMode=FilterMode.Point;_skull.Apply();return _skull;
         }
-        private void OnDestroy(){_gameInk.Dispose();if(_skull!=null)Destroy(_skull);}
+        private void OnDestroy(){_gameInk.Dispose();if(_skull!=null)Destroy(_skull);if(_mapDot!=null)Destroy(_mapDot);}
     }
 }

@@ -26,6 +26,21 @@ namespace WildWasteland.Core.UI
         {
             Hotkeys.Register(null, Plugin.ToolWindowKey, Toggle, null, true);
             CorePages.Register();
+            SaveBus.StateChanged += OnSaveState;
+        }
+
+        static bool _newGame, _openNewGame;
+        static void OnSaveState(string previous, string current)
+        {
+            if (current == "LoadGame" || current == "generateTerrain 2") { _newGame = _openNewGame = false; }
+            else if (current == "setSeed" || current == "generateTerrain") _newGame = true;
+            else if (current == "isPlay" && _newGame) { _newGame = false; _openNewGame = true; }
+        }
+        internal static void Tick()
+        {
+            if (!_openNewGame || !GameRefs.InGame || EditorSession.Busy || ApocasetterBridge.InputBlocked) return;
+            Open(CorePages.GamePage);
+            if (_open) { _openNewGame = false; Log.Always("[Core] New game ready: opened Game settings"); }
         }
 
         public static void Add(ToolPage p) { if (p != null && !_pages.Contains(p)) _pages.Add(p); }
@@ -41,7 +56,7 @@ namespace WildWasteland.Core.UI
                 _open = true;
                 CollectModulePages();
             }
-            if (page != null) _current = page;
+            if (page != null) { _current = page; _scroll = Vector2.zero; Ledger.ClearNumbers(); ToolLayout.CancelRebind(); }
             if (_current == null && _pages.Count > 0) _current = Sorted()[0];
             if (_current != null) _current.OnShow();
         }
@@ -49,7 +64,7 @@ namespace WildWasteland.Core.UI
         public static void Close()
         {
             if (!_open) return;
-            _open = false; _session.Close(); Ledger.ClearNumbers();
+            _open = false; _session.Close(); Ledger.ClearNumbers(); ToolLayout.CancelRebind();
         }
 
         /// <summary>Close the window and run <paramref name="a"/> on the next frame (after the session was released), e.g. to open another editor.</summary>
@@ -65,13 +80,14 @@ namespace WildWasteland.Core.UI
                 IEnumerable<ToolPage> pages = null;
                 try { pages = e.Module.ToolPages(); } catch (Exception ex) { Log.Error("[" + e.Module.Id + "] ToolPages", ex); }
                 if (pages == null) continue;
-                foreach (var p in pages) { if (p.Owner == null) p.Owner = e.Module; Add(p); }
+                foreach (var p in pages) { if (p.Owner == null) p.Owner = e.Module; CorePages.AddDebugPage(p); }
             }
         }
 
         static List<ToolPage> Sorted()
         {
-            var l = new List<ToolPage>(_pages);
+            var l = new List<ToolPage>();
+            foreach (var p in _pages) if (!p.DebugOnly || Plugin.EnableDebug.Value) l.Add(p);
             l.Sort((a, b) =>
             {
                 int ga = GroupIndex(a.Group), gb = GroupIndex(b.Group);
@@ -91,6 +107,8 @@ namespace WildWasteland.Core.UI
                 try { d(); } catch (Exception e) { Log.Error("F7 deferred action", e); }
             }
             if (!_open) return;
+            if (_current != null && _current.DebugOnly && !Plugin.EnableDebug.Value)
+            { _current = CorePages.GamePage; _scroll = Vector2.zero; Ledger.ClearNumbers(); ToolLayout.CancelRebind(); _current.OnShow(); }
             if (Event.current.type == EventType.Layout)
             {
                 _session.Maintain();
@@ -113,7 +131,7 @@ namespace WildWasteland.Core.UI
         static void DrawWindow(int id)
         {
             Ledger.Window(_rect);
-            Ledger.Header(_rect.width, "WILD WASTELAND  ·  TOOLS");
+            Ledger.Header(_rect.width, "WILD WASTELAND  ·  SETTINGS");
             Ledger.Label(new Rect(_rect.width - 380, 30, 230, 26), Plugin.VERSION + "  ·  " + Plugin.ToolWindowKey.Value + " / Esc to close", Ledger.Small, Ledger.Muted, TextAnchor.MiddleRight);
             if (Ledger.Button(new Rect(_rect.width - 130, 26, 100, 34), "CLOSE", true, false, true)) { Close(); return; }
 
@@ -135,7 +153,7 @@ namespace WildWasteland.Core.UI
                     var r = new Rect(2, y, w - 4, 28);
                     if (p == _current) Ledger.Fill(r, Ledger.Selected);
                     Ledger.Label(new Rect(r.x + 12, r.y, r.width - 16, r.height), p.Title + (off ? "  (off)" : ""), Ledger.Body, off ? Ledger.Muted : Ledger.Text);
-                    if (GUI.Button(r, GUIContent.none, GUIStyle.none) && p != _current) { _current = p; _scroll = Vector2.zero; Ledger.ClearNumbers(); p.OnShow(); }
+                    if (GUI.Button(r, GUIContent.none, GUIStyle.none) && p != _current) { _current = p; _scroll = Vector2.zero; Ledger.ClearNumbers(); ToolLayout.CancelRebind(); p.OnShow(); }
                     y += 30;
                 }
                 _navHeight = y + 6;

@@ -14,7 +14,7 @@ namespace WildWasteland.Modules.Guns
         private static Vector3 _position;
         private static Quaternion _rotation;
         private static float _nextFind, _at, _weight;
-        private static bool _replaying, _lowering;
+        private static bool _replaying, _lowering, _holster;
         private const float Duration = .14f;
 
         internal static void Init(GunsModule owner)
@@ -27,8 +27,9 @@ namespace WildWasteland.Modules.Guns
         internal static void Reset()
         {
             Restore(); _handler = _switcher = null; _pending = null; _data = null;
-            _weight = _nextFind = 0f; _lowering = _replaying = false;
+            _weight = _nextFind = 0f; _lowering = _replaying = _holster = false;
         }
+        internal static void StartWorld() { _holster = true; }
         internal static void Shutdown()
         {
             Restore();
@@ -81,6 +82,13 @@ namespace WildWasteland.Modules.Guns
                     _handler = FsmUtil.Find(weapons.gameObject, "WeaponInHand");
                     _switcher = FsmUtil.Find(weapons.gameObject, "Weapons");
                 }
+            }
+            if (_holster && _switcher != null && _switcher.Fsm.Initialized && GameRefs.InPlay)
+            {
+                _holster = false; _pending = null; _data = null; _lowering = false; _weight = 0f;
+                _at = Time.time - Duration;
+                _switcher.SendEvent("Activate"); // Native off 2 also deactivates WeaponInHand and all arm models.
+                if (Log.Verbose) Log.Info("[Guns] World ready: weapons holstered");
             }
             if (!GunsModule.SmoothWeaponSwitch.Value)
             {

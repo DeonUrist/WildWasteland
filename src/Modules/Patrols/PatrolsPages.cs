@@ -19,20 +19,15 @@ namespace WildWasteland.Modules.Patrols
             var v = ToolGroups.Vehicles; var p = ToolGroups.Poses; var m = ToolGroups.Merchants;
             return new ToolPage[]
             {
-                new ActionPage(this, v, "Patrol editor", PatrolEditorPage),
-                new ActionPage(this, v, "Template recorder", RecorderPage),
+                new ActionPage(this, v, "Patrol editor", PatrolEditorPage) { IsTool = true },
+                new ActionPage(this, v, "Template recorder", RecorderPage) { IsTool = true },
+                new ActionPage(this, p, "Turret spot editor", TurretSpotPage) { IsTool = true },
+                new ActionPage(this, p, "Bus passenger pose editor", BusPosePage) { IsTool = true },
+                new ActionPage(this, m, "Merchant item placement", MerchantSpotPage) { IsTool = true },
+                new ActionPage(this, v, "War Rig", WarRigPage) { IsTool = true },
+                new ActionPage(this, v, "AI overlay & debug spawns", DebugPage) { IsTool = true },
                 new ActionPage(this, v, "World traffic", WorldTrafficPage),
-                new ActionPage(this, v, "AI overlay & debug spawns", DebugPage),
-                new ConfigPage(this, v, "Driving AI tuning", Cfg.Tools, Sec(TAI), Sec(TDriving)) { Intro = "The raider driving AI (Pilot): aiming, steering, obstacle feelers, stuck recovery, and what the crew does when the driver dies or the car gives up. Changes apply live to every car." },
-                new ConfigPage(this, v, "Combat tuning", Cfg.Tools, Sec(TCombat), Sec(TAudio)) { Intro = "Occupant fire arcs and bursts, ram damage, the Warboys' blast lances and \"Witness me!\" leap. The on/off switches (Ranged combat, Human turrets, Ram damage) and ShootDistance / WitnessMeChance are in F6. AudioVoices applies at game start." },
                 new ActionPage(this, v, "Spawning & cleanup", SpawningPage),
-                new ActionPage(this, v, "War Rig", WarRigPage),
-                new ActionPage(this, p, "Turret spot editor", TurretSpotPage),
-                new ActionPage(this, p, "Bus passenger pose editor", BusPosePage),
-                new ConfigPage(this, p, "Driver & passenger poses", Cfg.Tools, Sec(TPose)) { Intro = "The seated pose of every live occupant: hip offset from the seat anchor, thigh / knee / arm angles, how far legs and arms close in, the motorcycle riders' arms. Live: seated raiders follow the sliders." },
-                new ConfigPage(this, p, "Raider arm & weapon poses", Cfg.Tools, Sec(TPose) + ".*") { Intro = "Per human type (Boltjaw, Flexa, Lugnut, Scrud, Sprokka, Scraffa, Spanna): shoulder / elbow / hand angles of the seated shooting pose, and for the ranged ones the weapon's position and rotation in the hand." },
-                new ConfigPage(this, p, "Turret rider pose", Cfg.Tools, Sec(TTurret)) { Intro = "Human turrets on the roof: the crouched gunner's thigh / knee / hip height above the spot (when the player animation framework does not animate it), and the Warboy's lance prop in the throwing hand." },
-                new ActionPage(this, m, "Merchant item placement", MerchantSpotPage),
                 new ActionPage(this, m, "Merchants", MerchantsPage),
             };
         }
@@ -97,23 +92,15 @@ namespace WildWasteland.Modules.Patrols
         void WorldTrafficPage(ToolLayout l)
         {
             l.Text("Persistent world traffic: patrols, convoys, Coyote roamers, merchants and faction battles travel between known camps on road-influenced routes and become real cars near you. The game's debug map can show the routes.");
-            l.Toggle(WorldTrafficEnabled, "World traffic (F6)");
-            if (Running) l.Value("Status", WorldTrafficEnabled.Value ? WorldTraffic.OverlayLine() : "off - the automatic spawn timer is used");
+            l.Toggle(WorldTrafficEnabled, "World traffic");
+            if (Running) l.Value("Status", WorldTrafficEnabled.Value ? WorldTraffic.OverlayLine() : "off - no automatic raiders");
             l.Value("Road cache", TrafficRoads.Status);
             l.Heading("Debug map");
             l.Text("Open the game's debug map: routes, group labels, cleared camps, battle skulls and merchants are drawn on it.");
             l.Toggle(TrafficDebugMap, "Draw routes on the debug map (DebugMap)");
             l.Toggle(RealPatrolNames, "Real patrol names");
             l.Toggle(HideRouteType, "Hide route type (all gray, \"Distant traffic\")");
-            l.Heading("Tuning");
-            foreach (var k in Cfg.Tools.Keys)
-            {
-                if (k.Section != Sec(TTraffic)) continue;
-                var e = Cfg.Tools[k];
-                if (e == null || ReferenceEquals(e, TrafficDebugMap) || ReferenceEquals(e, RealPatrolNames) || ReferenceEquals(e, HideRouteType)) continue;
-                l.Entry(e);
-            }
-            l.Heading("Player-facing values (F6)");
+            l.Heading("Values");
             Section(l, Cfg.Main, Cfg.Section("World traffic"));
             l.Entry(TacticalDriving); l.Entry(FactionBattles);
         }
@@ -121,40 +108,33 @@ namespace WildWasteland.Modules.Patrols
         void DebugPage(ToolLayout l)
         {
             l.Text("On-screen diagnostics and the editor's test spawns.");
-            l.Toggle(AiOverlay, "AI overlay (one line per AI car, or the spawn clock)");
+            l.Toggle(AiOverlay, "AI overlay (one line per AI car, or the world traffic state)");
             if (Running)
             {
                 l.Value("Driving AI cars", Pilot.All.Count.ToString());
                 l.Value("Raider cars", PatrolMarker.All.Count.ToString());
-                l.Value("Spawn clock", Convoy.OverlayLine());
+                l.Value("Automatic raiders", Convoy.OverlayLine());
             }
             l.Toggle(AllowDebugSpawns, "Spawn controls in the patrol editor (AllowDebugSpawns)");
             l.Heading("Other");
             l.Entry(HideFsmWarnings);
-            l.Entry(ExitSpeedKmh);
-            l.Text("Verbose logging of spawns, builds, crews and AI state changes is the shared [Debug] VerboseLog switch (F6).");
+            l.Text("Verbose logging of spawns, builds, crews and AI state changes is the shared [Debug] VerboseLog switch (Debug > Other settings).");
         }
 
         void SpawningPage(ToolLayout l)
         {
-            l.Text("The automatic spawner (heat from the game's Distance Travelled and boss kills, a cooldown clock), the loot fill of spawned cars and the cleanup of cars you left behind. The on/off switches and the caps / cooldowns are in F6.");
-            l.Toggle(ConvoyEnabled, "Automatic spawns (F6)");
-            l.Toggle(CleanupEnabled, "Cleanup (F6)");
-            if (Running) l.Value("Spawn clock", Convoy.OverlayLine());
-            Section(l, Cfg.Tools, Sec(TSpawner));
-            Section(l, Cfg.Tools, Sec(TLoot));
-            Section(l, Cfg.Tools, Sec(TCleanup));
-            l.Heading("Caps and cooldowns (F6)");
+            l.Text("Automatic raiders come from the world traffic (Game > World > Enemy Vehicles). Caps of the groups near you and the cleanup of cars you left behind.");
+            l.Toggle(CleanupEnabled, "Cleanup");
+            l.Heading("Caps");
             Section(l, Cfg.Main, Cfg.Section("Spawning"));
         }
 
         static string _rigStatus = "";
         void WarRigPage(ToolLayout l)
         {
-            l.Text("The War Rig: a six-wheel tanker semi-trailer for the Rustchief, built from the game's Trailer_Big and Patrols\\WarRig\\WarRig.glb. It spawns in the game's trailer spawners (WarRigPercent of the Scrapwagon picks), shelters the player from sandstorms inside the tank, and is the trailer of the Truck War Rig template.");
-            l.Toggle(WarRig.S.SpawnEnabled, "War Rig spawns (F6)");
-            l.Entry(WarRig.S.WarRigPercent);
-            l.Toggle(WarRig.S.GroundRecoveryEnabled, "Ground recovery (F6)");
+            l.Text("The War Rig: a six-wheel tanker semi-trailer for the Rustchief. The POI module places abandoned trucks with tankers, worn wheels, no engine and nearby zombies. World chance is in Points of interest. Temporary map markers are yellow Xs. The tanker shelters the player from sandstorms and remains available in truck templates and manual spawns.");
+            l.Toggle(WarRig.S.SpawnEnabled, "War Rig spawns");
+            l.Toggle(WarRig.S.GroundRecoveryEnabled, "Ground recovery");
             l.Heading("Status");
             l.Value("Model", File.Exists(Path.Combine(WarRig.WarRigFeature.Dir, WarRig.S.ModelFile)) ? WarRig.S.ModelFile + " found" : WarRig.S.ModelFile + " MISSING in " + WarRig.WarRigFeature.Dir);
             l.Value("Template", WarRig.Factory.Cached != null ? "built" : "not built yet (first spawn / save load)");
@@ -252,8 +232,8 @@ namespace WildWasteland.Modules.Patrols
         void MerchantsPage(ToolLayout l)
         {
             l.Text("Coyote trader buses (General / Mechanic / Organic shops) of the world traffic: parked setup buses and travelling traders with stock, prices and wanted lists that are saved. Stop a loaded merchant near you with Alt+Q (30 m) or the car horn (100 m). Shop types and rosters are edited in the patrol editor's MERCHANTS tab.");
-            l.Toggle(Merchants, "Merchants (F6)");
-            if (!WorldTrafficEnabled.Value) l.Text("World traffic is off (F6): automatic merchants need it.", Ledger.Danger);
+            l.Toggle(Merchants, "Merchants");
+            if (!WorldTrafficEnabled.Value) l.Text("World traffic is off (Game > World > Enemy Vehicles): automatic merchants need it.", Ledger.Danger);
             Section(l, Cfg.Main, Cfg.Section("Merchants"));
             if (Running) l.Value("Merchant buses loaded", MerchantHost.All.Count.ToString());
         }

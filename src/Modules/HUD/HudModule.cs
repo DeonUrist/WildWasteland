@@ -43,7 +43,7 @@ namespace WildWasteland.Modules.HUD
         {
             Instance = this;
             // ---- F6: one toggle per feature first (crosshair style, selection dot, hit feedback group, hit marker, damage numbers, headshot sound)
-            Crosshair = cfg.Player("", "Crosshair", 1, "Weapon crosshair: 0 = none, 1 = vanilla, 2 = two horizontal lines, 3 = dot. Follows the game's weapon and aiming visibility.",
+            Crosshair = cfg.Player("", "Crosshair", 3, "Weapon crosshair: 0 = none, 1 = vanilla, 2 = two horizontal lines, 3 = dot. Follows the game's weapon and aiming visibility.",
                 new AcceptableValueRange<int>(0, 3));
             SelectionDot = cfg.Player("", "SelectionDot", true, "Show the game's selection dot without a weapon. Independent of the weapon crosshair.");
             HudEnabled = cfg.Player("", "HitFeedback", true, "Damage numbers, hit marker and headshot sound for your hits (master switch for HitMarker, FloatingDamage and HeadshotSound). The crosshair settings are independent.");
@@ -62,7 +62,7 @@ namespace WildWasteland.Modules.HUD
             ListLines = cfg.Tool("Hit feedback", "ListLines", 8, "Maximum lines in the top-right damage list.", new AcceptableValueRange<int>(1, 20));
             MarkerSeconds = cfg.Tool("Hit feedback", "MarkerSeconds", 0.18f, "How long the hit marker shows, s.", new AcceptableValueRange<float>(0.05f, 1f));
             MergeSeconds = cfg.Tool("Hit feedback", "MergeSeconds", 0.05f, "Hits on the same target within this time are merged into one number (shotgun pellets), s.", new AcceptableValueRange<float>(0f, 0.5f));
-            DotScale = cfg.Tool("Crosshair", "DotScale", 0.5f, "Size of the dot crosshair (style 3) relative to the vanilla crosshair.", new AcceptableValueRange<float>(0.1f, 2f));
+            DotScale = cfg.Tool("Crosshair", "DotScale", 0.3f, "Size of the dot crosshair (style 3) relative to the vanilla crosshair.", new AcceptableValueRange<float>(0.1f, 2f));
             SearchSeconds = cfg.Tool("Crosshair", "SearchSeconds", 1f, "While the game's Canvas/MousePoint and MouseCrosshair are not found (menus, loading), look for them at most this often, s.", new AcceptableValueRange<float>(1f, 10f));
             HeadshotGain = cfg.Tool("Headshot sound", "Gain", 1.3f, "Sample gain applied once when headshot.mp3 is decoded (AudioSource volume cannot exceed 1). Applies on the next load (module off/on).", new AcceptableValueRange<float>(0.5f, 3f));
             HeadshotMinInterval = cfg.Tool("Headshot sound", "MinInterval", 0.075f, "Headshots closer together than this play one sound, s.", new AcceptableValueRange<float>(0f, 0.5f));
@@ -169,14 +169,14 @@ namespace WildWasteland.Modules.HUD
             readonly ConfigPage _settings;
             public HudToolPage(IModule owner, ConfigFile tools)
             {
-                Owner = owner; Group = ToolGroups.Weapons; Title = "HUD"; ShowWhenModuleOff = true;
+                Owner = owner; Group = ToolGroups.Weapons; Title = "HUD"; ShowWhenModuleOff = true; IsTool = true;
                 _settings = new ConfigPage(owner, ToolGroups.Weapons, "HUD", tools, "HUD / *");
             }
 
             public override void Draw(ToolLayout l)
             {
                 bool on = ModuleHost.IsRunning(Owner);
-                l.Text("Crosshair, hit marker, damage numbers and headshot sound (ex Gunplay HUD 1.2.2). Player settings are in F6 ([HUD]); the technical values below are saved in tools.cfg.");
+                l.Text("Crosshair, hit marker, damage numbers and headshot sound (ex Gunplay HUD 1.2.2). The player settings are on the Game page.");
                 l.Heading("Status");
                 l.Value("Crosshair UI", CrosshairController.Status);
                 l.Value("Headshot sound", HeadshotAudio.Status);

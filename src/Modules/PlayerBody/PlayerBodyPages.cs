@@ -18,26 +18,13 @@ namespace WildWasteland.Modules.PlayerBody
 
         internal static IEnumerable<ToolPage> Create(PlayerBodyModule m)
         {
-            var tools = m.Config.Tools;
             return new ToolPage[]
             {
                 new ActionPage(m, G, "Animation framework", Framework),
                 new ActionPage(m, G, "Body & model", BodyPage),
                 new ActionPage(m, G, "Camera", CameraPage),
                 new ActionPage(m, G, "Climbing", ClimbingPage),
-                new ActionPage(m, G, "Weapon pose editor", PoseEditor) { ShowWhenModuleOff = false },
-                new ConfigPage(m, G, "Car seat poses", tools, "PlayerBody / Car seat")
-                {
-                    Intro = "The driver's seat: your character is posed from the car's seated driver (PlayerModel_Sit, the game's own driving pose, retargeted bone by bone). "
-                          + "SeatDrop lowers the body for the steering wheel; the first-person driving offsets move the body under the camera (added to the built-in base -0.03, 0.02, 0.02 m); "
-                          + "CarCameraForward draws the first-person view a little in front of the eye when the body is shown. Passengers are not posed by this module."
-                },
-                new ConfigPage(m, G, "First person", tools, "PlayerBody / First person")
-                { Intro = "First-person body placement under the camera (BodyFirstPerson / FirstPersonArms) and the jump knee correction." },
-                new ConfigPage(m, G, "Animation tuning", tools, "PlayerBody / Animation", "PlayerBody / Animation (fallback clips)")
-                { Intro = "Locomotion tuning of the player's body (and every ModAPI character, which reads the same values when it is attached). The fallback clips are only used without the animation bundle." },
-                new ConfigPage(m, G, "Vehicles & ModAPI", tools, "PlayerBody / ModAPI")
-                { Intro = "Vehicle hints read the game's Headlight and Handbrake Controls bindings. Cassette shortcuts are in F6 [Keys]; ignition is in the game's Controls screen (Ignition)." },
+                new ActionPage(m, G, "Weapon pose editor", PoseEditor) { ShowWhenModuleOff = false, IsTool = true },
             };
         }
 
@@ -63,8 +50,7 @@ namespace WildWasteland.Modules.PlayerBody
                     + (c.HandsClip != "" ? ", hands " + c.HandsClip : "") + (c.ActionClip != "" ? ", " + c.ActionClip : ""));
             }
             if (ModAPI.Count > shown) l.Text("(" + (ModAPI.Count - shown) + " more)");
-            l.Heading("Settings");
-            l.Entry(PlayerBodyModule.AnimBundleFile);
+            l.Heading("Debug");
             l.Entry(PlayerBodyModule.VerboseModApi);
         }
 
@@ -78,7 +64,7 @@ namespace WildWasteland.Modules.PlayerBody
             l.Value("Character / model", PlayerBodyModule.Character.Value + " / " + PlayerBodyModule.BodyModelFile);
             l.Value("Driver's seat", CarSeat.Seat != null ? CarSeat.Seat.root.name : "-");
             if (l.Button("Rebuild the body now", Game.Ready, false, 260)) BodyRunner.CharacterChanged();
-            l.Heading("Features (F6)");
+            l.Heading("Settings");
             l.Entry(PlayerBodyModule.Character);
             l.Toggle(PlayerBodyModule.BodyFirstPerson);
             l.Toggle(PlayerBodyModule.EmptyHandArms);
@@ -86,15 +72,10 @@ namespace WildWasteland.Modules.PlayerBody
             l.Toggle(PlayerBodyModule.ReplaceDriver);
             l.Toggle(PlayerBodyModule.EquipmentOnBody);
             l.Toggle(PlayerBodyModule.PainSounds);
-            l.Heading("Model files (F7)");
-            l.Text("Relative to BepInEx\\plugins\\WildWasteland\\PlayerBody. A changed model is used from the next body build (Rebuild above).");
-            l.Entry(PlayerBodyModule.ModelFile);
-            l.Entry(PlayerBodyModule.TextureFile);
-            l.Entry(PlayerBodyModule.ArmsTextureFile);
         }
 
         // ------------------------------------------------------------------ Camera
-        static ConfigEntryBase[] _cam, _cull;
+        
         static void CameraPage(ToolLayout l)
         {
             l.Heading("State");
@@ -102,7 +83,7 @@ namespace WildWasteland.Modules.PlayerBody
             l.Value("Orbiting / aim zoom", YesNo(ThirdPerson.Orbiting) + " / " + YesNo(ThirdPerson.AimZoom));
             l.Value("Dynamic crosshair", ThirdPerson.HasCrosshair ? "at " + ThirdPerson.CrosshairScreen.ToString("F0") : "centred");
             l.Value("Camera culling", !PlayerBodyModule.OcclusionPrototype.Value ? "off" : Cave.Inside ? "paused (in a cave)" : OcclusionCutaway.Blockers + " blocker(s), " + OcclusionCutaway.Renders + " extra views so far");
-            l.Heading("Features (F6)");
+            l.Heading("Settings");
             l.Toggle(PlayerBodyModule.ThirdPersonOnFoot);
             l.Toggle(PlayerBodyModule.ToggleMiddleMouse);
             l.Toggle(PlayerBodyModule.DynamicCrosshair);
@@ -112,13 +93,6 @@ namespace WildWasteland.Modules.PlayerBody
             l.Toggle(PlayerBodyModule.OcclusionPrototype);
             l.Toggle(PlayerBodyModule.OcclusionInVehicle);
             l.Entry(PlayerBodyModule.ObserveKey);
-            l.Heading("Camera (F7)");
-            if (_cam == null) _cam = new ConfigEntryBase[] { PlayerBodyModule.ThirdDistance, PlayerBodyModule.ThirdCarDistance, PlayerBodyModule.ThirdHeight, PlayerBodyModule.ThirdShoulder,
-                PlayerBodyModule.ThirdCarHeight, PlayerBodyModule.OrbitSpeed, PlayerBodyModule.EnableMMB, PlayerBodyModule.AdsTime, PlayerBodyModule.PickAssistRadius };
-            foreach (var e in _cam) l.Entry(e);
-            l.Heading("Camera culling (F7)");
-            if (_cull == null) _cull = new ConfigEntryBase[] { PlayerBodyModule.OcclusionOpacity, PlayerBodyModule.OcclusionRadius };
-            foreach (var e in _cull) l.Entry(e);
         }
 
         // ------------------------------------------------------------------ Climbing
@@ -131,18 +105,10 @@ namespace WildWasteland.Modules.PlayerBody
             l.Value("Can climb here", YesNo(ModAPI.PlayerCanTraverse));
             l.Value("Last climb", string.IsNullOrEmpty(ClimbingController.LastResult) ? "-" : ClimbingController.LastResult);
             l.Value("Last rejection", string.IsNullOrEmpty(ClimbingController.LastReject) ? "-" : ClimbingController.LastReject);
-            l.Value("Last step-up rejection", AutoStepUp.LastReject.ToString(CultureInfo.InvariantCulture) + " (0 = stepped; 1 no landing, 2 height, 3-5 blocked)");
-            l.Heading("Features (F6)");
+            l.Heading("Settings");
             l.Toggle(PlayerBodyModule.ClimbingOn);
             l.Toggle(PlayerBodyModule.JumpTriggersClimbing);
-            l.Toggle(PlayerBodyModule.AutomaticStepUp);
             l.Entry(PlayerBodyModule.ClimbKey);
-            l.Heading("Tuning (F7)");
-            l.Entry(PlayerBodyModule.ClimbMinHeight);
-            l.Entry(PlayerBodyModule.ClimbMaxHeight);
-            l.Entry(PlayerBodyModule.ClimbReach);
-            l.Entry(PlayerBodyModule.ClimbWaistLimit);
-            l.Entry(PlayerBodyModule.ClimbSpeed);
         }
 
         // ------------------------------------------------------------------ Weapon pose editor

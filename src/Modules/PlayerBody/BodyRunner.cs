@@ -4,7 +4,7 @@ using UnityEngine;
 namespace WildWasteland.Modules.PlayerBody
 {
     // The old Apocaplayer Runner MonoBehaviour, as plain static job methods registered by PlayerBodyModule.Init (Update -> Tick,
-    // LateUpdate -> LateTick, FixedUpdate -> FixedTick, OnGUI -> Gui, ModApiRunner.LateUpdate -> ModApiTick, Start's end-of-frame
+    // LateUpdate -> LateTick, OnGUI -> Gui, ModApiRunner.LateUpdate -> ModApiTick, Start's end-of-frame
     // coroutine -> EndOfFrameLoop). The old "Enabled off" branch is Shutdown -> TearDown (the jobs are removed by Core).
     internal static class BodyRunner
     {
@@ -34,8 +34,6 @@ namespace WildWasteland.Modules.PlayerBody
         public static void OnSceneLoaded()
         {
             ClimbingController.ResetInstance();
-            AutoStepUp.Reset();
-            RustlinerDoors.Reset();
             DestroyBody();
             CarSeat.Detach();
             ThirdPerson.Off();
@@ -54,11 +52,9 @@ namespace WildWasteland.Modules.PlayerBody
             _nextBuild = 0f; _lastMode = "";
         }
 
-        // Shutdown: everything the old "Enabled = false" branch restored, plus the camera / cutaway / step-up components
+        // Shutdown: everything the old "Enabled = false" branch restored, plus the camera / cutaway components
         internal static void TearDown()
         {
-            RustlinerDoors.Reset();
-            AutoStepUp.Reset();
             DestroyBody();
             CarSeat.Detach();
             ThirdPerson.Off();
@@ -100,7 +96,7 @@ namespace WildWasteland.Modules.PlayerBody
             try
             {
                 try { Perf.Frame(); } catch (Exception e) { PlayerBodyModule.Warn("Perf: " + e.Message); }
-                if (!Game.Ready) { RustlinerDoors.Restore(); OcclusionCutaway.Stop(); if (_body != null) DestroyBody(); return; }   // (2.2.6) the cutaway taken down in menus / loading too
+                if (!Game.Ready) { OcclusionCutaway.Stop(); if (_body != null) DestroyBody(); return; }   // (2.2.6) the cutaway taken down in menus / loading too
                 if (!Game.Dead) { _lastVelocity = Game.Velocity; _lastCar = Game.InCar ? Game.CarRoot : null; }
                 if (PlayerBodyModule.FemaleArms.Value && PlayerBodyModule.Female) Arms.Tick(); else Arms.Restore();
                 ThirdPerson.Tick();
@@ -157,10 +153,10 @@ namespace WildWasteland.Modules.PlayerBody
                         _body.LateCar(Game.Player.transform, firstPerson);
                         if (firstPerson) _body.ShiftFirstPerson(Game.Player.transform.rotation, PlayerBodyModule.CarViewBase + new Vector3(PlayerBodyModule.FpCarCamX.Value, PlayerBodyModule.FpCarCamY.Value, PlayerBodyModule.FpCarCamZ.Value));
                         _body.SetMesh(firstPerson, true, Game.DrawnWeapon != "");
-                        _body.SetVisible(!firstPerson || PlayerBodyModule.BodyFirstPerson.Value, firstPerson && PlayerBodyModule.BodyFirstPerson.Value);
-                        ThirdPerson.CarShift = firstPerson && PlayerBodyModule.BodyFirstPerson.Value && PlayerBodyModule.CarCameraForward.Value != 0f;
+                        _body.SetVisible(!firstPerson || PlayerBodyModule.BodyInCar, firstPerson && PlayerBodyModule.BodyInCar);
+                        ThirdPerson.CarShift = firstPerson && PlayerBodyModule.BodyInCar && PlayerBodyModule.CarCameraForward.Value != 0f;
                         // no body in first person: still her arms on the wheel while nothing is drawn (the body mesh has them when it is shown)
-                        fpArms = firstPerson && fpCam && !PlayerBodyModule.BodyFirstPerson.Value && PlayerBodyModule.EmptyHandArms.Value && Game.DrawnWeapon == "" && !Game.Binoculars && !Game.GameArmsShown;
+                        fpArms = firstPerson && fpCam && !PlayerBodyModule.BodyInCar && PlayerBodyModule.ArmsInCar && Game.DrawnWeapon == "" && !Game.Binoculars && !Game.GameArmsShown;
                         mode = firstPerson ? "car, first person" : "car, third person";
                     }
                 }
@@ -171,7 +167,6 @@ namespace WildWasteland.Modules.PlayerBody
                     _body.LateFoot(third ? Body.View.ThirdPerson : Body.View.FirstPerson, Time.deltaTime);
                     if (!third && Game.PlayerCamera != null)
                         _body.ShiftFirstPerson(Quaternion.Euler(0f, Game.PlayerCamera.eulerAngles.y, 0f), new Vector3(PlayerBodyModule.FpCamX.Value, PlayerBodyModule.FpCamY.Value, PlayerBodyModule.FpCamZ.Value));
-                    _body.FitFirstPersonJump(!third, Time.deltaTime);
                     _jumpHeadPlayerPosition = Game.Player.transform.position;
                     _jumpHeadReady = true;
                     _body.SetMesh(!third, false);
@@ -198,7 +193,6 @@ namespace WildWasteland.Modules.PlayerBody
             try { ModAPI.LateTick(); } finally { Perf.Add(Perf.ModApi, t0); }
         }
 
-        internal static void FixedTick() { try { AutoStepUp.Tick(); } catch (Exception e) { PlayerBodyModule.Warn("Step up: " + e.Message); } }
 
         internal static void Gui() { long t0 = Perf.Now; try { GunPose.OnGUI(); Car.OnGUI(); } catch (Exception) { } Perf.Add(Perf.Gui, t0); }
 

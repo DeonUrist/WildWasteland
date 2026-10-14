@@ -39,7 +39,7 @@ namespace WildWasteland.Modules.NPC
         internal static bool SimpleSight(Transform from,GameObject owner,GameObject target)
         {
             var eye=from.position+Vector3.up*1.3f;var to=target.transform.position+Vector3.up-eye;
-            int n=Physics.RaycastNonAlloc(eye,to.normalized,SimpleHits,to.magnitude,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore);
+            int n=Physics.RaycastNonAlloc(eye,to.normalized,SimpleHits,to.magnitude,Physics.DefaultRaycastLayers&~(1<<8),QueryTriggerInteraction.Ignore);
             if(n==SimpleHits.Length)return false;
             for(int i=0;i<n;i++){var c=SimpleHits[i].collider;if(c!=null&&!c.transform.IsChildOf(owner.transform)&&!c.transform.IsChildOf(target.transform))return false;}
             return true;

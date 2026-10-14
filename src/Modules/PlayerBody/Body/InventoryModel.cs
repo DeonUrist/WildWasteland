@@ -21,10 +21,40 @@ namespace WildWasteland.Modules.PlayerBody
         // her picture, or Max's; the game man (Male) keeps the game's own
         private static string PictureFile { get { return "Models/player_character_2_UI.png"; } }
         private static Texture2D _game, _backup, _mine;
+        private static Texture2D _settingsFemale;
+        private static bool _settingsPictureTried;
         private static readonly System.Collections.Generic.List<RawImage> _switched = new System.Collections.Generic.List<RawImage>();   // last-resort path: the UI elements we pointed at our picture
         private static bool _applied, _loadFailed;
         private static float _nextTry;
         private static int _tries;
+
+        internal static void PrepareSettingsPictures()
+        {
+            if (_game == null)
+                foreach (var t in Resources.FindObjectsOfTypeAll<Texture2D>())
+                    if (t != null && t.name == GameTexture) { _game = t; break; }
+            if (_backup == null && _game != null && !_applied) _backup = Copy(_game);
+            if (_settingsPictureTried) return;
+            _settingsPictureTried = true;
+            string path = PlayerBodyModule.ModPath(PictureFile);
+            if (!File.Exists(path)) return;
+            try
+            {
+                _settingsFemale = new Texture2D(2, 2, TextureFormat.RGBA32, false) { name = "Wild Wasteland female TAB preview", hideFlags = HideFlags.HideAndDontSave };
+                if (!ImageConversion.LoadImage(_settingsFemale, File.ReadAllBytes(path), true)) throw new InvalidDataException("not a PNG/JPG");
+            }
+            catch (Exception e)
+            {
+                if (_settingsFemale != null) UnityEngine.Object.Destroy(_settingsFemale);
+                _settingsFemale = null;
+                PlayerBodyModule.Warn("Body selection picture: " + e.Message);
+            }
+        }
+
+        internal static Texture SettingsPicture(bool female)
+        {
+            return female ? _settingsFemale : _backup != null ? _backup : !_applied ? _game : null;
+        }
 
         // Runner calls this every frame, but it only works until the swap is done for the loaded scene (a cheap bool check after that)
         public static void LateTick()

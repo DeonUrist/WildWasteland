@@ -17,7 +17,7 @@ namespace WildWasteland.Modules.Patrols
         public string saveFile;
         public int worldSeed;
         public PatrolCarData[] cars = new PatrolCarData[0];
-        public float convoyCooldown = -1f;    // seconds until the next automatic convoy roll (schema 3), -1 = unknown
+        public float convoyCooldown = -1f;    // the old automatic spawn clock (schema 3); always -1 since the clock was removed, kept for the format
         public string lastGroup = "";         // the group id of the last automatic spawn (schema 8)
         public string trafficJson = "";       // schema 10: remembered camps and persistent journeys
     }
@@ -231,7 +231,7 @@ namespace WildWasteland.Modules.Patrols
                 var runner = Runner;
                 if (state == "SaveGame") Save(CurrentSaveSlot(), CurrentSeed());
                 if (state == "LoadGame") _loadSlot = CurrentSaveSlot();
-                if (state == "LoadGame" || state == "setSeed") { Convoy.SetCooldown(-1f); WorldTraffic.ResetForScene(); }
+                if (state == "LoadGame" || state == "setSeed") WorldTraffic.ResetForScene();
                 if (state == "isPlay" && _pendingData != null) _flushAt = Time.unscaledTime + 1f;
                 if (state == "isPlay" && !string.IsNullOrEmpty(_loadSlot) && !_restoreRunning)
                 {
@@ -282,7 +282,7 @@ namespace WildWasteland.Modules.Patrols
             if (!TryPath(slot, out path)) { Core.Log.Warn("[Patrols] " + "Persistence: invalid save slot " + slot); return; }
             try
             {
-                var data = new PatrolSaveData { version = SchemaVersion, saveFile = Path.GetFileName(slot), worldSeed = seed, convoyCooldown = Convoy.CurrentCooldown(), lastGroup = Convoy.LastGroup ?? "", trafficJson = WorldTraffic.SaveJson() };
+                var data = new PatrolSaveData { version = SchemaVersion, saveFile = Path.GetFileName(slot), worldSeed = seed, convoyCooldown = -1f, lastGroup = Convoy.LastGroup ?? "", trafficJson = WorldTraffic.SaveJson() };
                 var cars = new List<PatrolCarData>();
                 foreach (var marker in PatrolMarker.All)
                     if (marker != null && !Register.Pending(marker.gameObject)) cars.Add(marker.Snapshot());   // still being built: not in the game's save either
@@ -309,7 +309,6 @@ namespace WildWasteland.Modules.Patrols
                 _restoreRunning = false; yield break;
             }
 
-            if (data.convoyCooldown >= 0f) Convoy.SetCooldown(data.convoyCooldown);
             Convoy.LastGroup = data.lastGroup ?? "";
             try { WorldTraffic.RestoreJson(data.trafficJson); }
             catch (Exception e) { Core.Log.Warn("[Patrols] " + "Persistence: world traffic skipped: " + e.Message); }

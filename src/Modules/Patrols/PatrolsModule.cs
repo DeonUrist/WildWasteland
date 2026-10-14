@@ -76,6 +76,7 @@ namespace WildWasteland.Modules.Patrols
             Try("Camp status", () => TrafficCamps.Install(this));
             Try("Seated LOS guard", () => SeatedLosGuard.Install(this));
             Try("Suspension", () => Suspension.Install(this));
+            Core.Hooks.SetFsmFloatEnter.Postfix(this, Ram.AfterSetFsmFloat);
             Try("Motorcycle save hook (saved motorcycles may not load)", () => MotorcycleIntegration.Install(this));
 
             Paint.Init(DataDir);
@@ -124,6 +125,9 @@ namespace WildWasteland.Modules.Patrols
 
         // Core.Origin (NWH FloatingOrigin.Jump): legacy physics caches of the pilots and PlayerRef move with the world
         public override void OnOriginShift(Vector3 delta) { TrafficSpace.OriginShift(delta); }
+        public override void OnWorldReady() { WarRig.PoiEncounter.Prepare(); }
+        internal void SpawnPoi(CarTemplate template, Vector3 position, Quaternion rotation, Action<GameObject> onDone)
+        { if (_patrol != null && Running) _patrol.SpawnAt(template, position, rotation, true, onDone); else onDone(null); }
 
         // ---------------------------------------------------------------- runner object + jobs
 
@@ -168,7 +172,6 @@ namespace WildWasteland.Modules.Patrols
             Scheduler.Gui(this, "TemplateExporter.Gui", () => { if (_exporter != null) _exporter.Gui(); });
             Scheduler.Gui(this, "TurretSpotter.Gui", () => { if (_spotter != null) _spotter.Gui(); });
             Scheduler.Gui(this, "BusPassengerPoseEditor.Gui", () => { if (_busPose != null) _busPose.Gui(); });
-            Scheduler.Gui(this, "Convoy.Gui", () => { if (_convoy != null) _convoy.Gui(); });
             Scheduler.Gui(this, "WorldTraffic.Gui", () => { if (_traffic != null) _traffic.Gui(); });
             Scheduler.Gui(this, "MerchantEditor.Gui", () => { if (_merchantEditor != null) _merchantEditor.Gui(); });
         }

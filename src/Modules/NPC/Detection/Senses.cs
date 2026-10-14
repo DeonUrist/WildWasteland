@@ -24,7 +24,7 @@ namespace WildWasteland.Modules.NPC
     //
     // Here: the Detection FSM's SensorGetDetections actions are answered by the mod (Harmony prefix: we write detectedObj and fire the
     // state's own events), the vanilla sensors are switched off, and what an NPC "knows" is one of:
-    // - a target it sees: a 100 deg cone from the head, a ray from the head to the target's head or body (blockers Default/Car/Item/Door/
+    // - a target it sees: a 100 deg cone from the head, a ray from the head to the target's head or body (blockers Default/Item/Door/
     //   Ground), range SightRange in daylight shrinking to DarkSightRange in full darkness (Enviro's main light), full range for a player
     //   with the flashlight on; NoticeSeconds in view -> combat; LoseSeconds out of view -> a ghost at the last seen spot;
     // - a ghost: a hidden object at a position, fed to detectedObj so the game's own Attack FSM (and the brain) go there. Ghosts come from
@@ -68,6 +68,8 @@ namespace WildWasteland.Modules.NPC
             public HashSet<string> BaseHostile; public PlayMakerFSM PlayerIsEnemy;   // the prefab's own enemies, and its faction-relation FSM (Coyotes)
             public State State; public GameObject Target; public Ghost Ghost; public Src GhostPrio;
             public float SeenFor, UnseenFor, SearchUntil, NextLook, Stagger, LastLog, InvestigateUntil, InvestigateSince; public Vector3 LastSeen;
+            public string SightMiss;
+            public float UnseenSince = -1f;
             public GameObject Pursue; public int Pursuits, PursuitsTotal;     // the target it lost from sight, and how many more guesses it will make about where it went
             public bool Tracker;          // a hound / four-legged mutant: follows the real position, never a guess
             public float NextShout;       // the combat shout (taunt): not before this
@@ -99,6 +101,7 @@ namespace WildWasteland.Modules.NPC
         private static Rigidbody _thrown; private static float _thrownRest, _thrownSince;
         private static Transform _ghostRoot;
         private const int Blockers = (1 << 0) | (1 << 8) | (1 << 9) | (1 << 11) | (1 << 14);   // Default, Car, Item, Door, Ground (the game's bullet obstruction set)
+        private const int SightBlockers = Blockers & ~(1 << 8);   // cars do not hide the player or enemy NPCs
 
         internal static GameObject PlayerObj { get { return _player; } }
         internal static bool PlayerInCar { get { return PlayerCar() != null; } }       // (1.5.0) Pounce: no leaping at a car   // (1.4.0) Burrow: "behind the player" is behind the camera
@@ -204,6 +207,7 @@ namespace WildWasteland.Modules.NPC
 
             // candidates: the player (if this faction hunts players) and every other NPC of a hostile faction
             float d2max = NpcModule.SightRange.Value * NpcModule.SightRange.Value;
+            a.SightMiss = "outside maximum sight range or no hostile candidate";
             Vector3 eye = Eye(a);
             GameObject best = null; float bestD = float.MaxValue;
             if (a.Hostile.Contains("Player") && _player != null && (_player.transform.position - a.T.position).sqrMagnitude <= d2max)
@@ -225,10 +229,7 @@ namespace WildWasteland.Modules.NPC
             }
             if (best != null)
             {
-                a.UnseenFor = 0f;
                 a.SeenFor += interval;
-                a.LastSeen = best.transform.position;
-                a.LastSeenVel = VelocityOf(best);
                 if (a.State != State.Combat || a.Target != best)
                 {
                     // noticing takes longer at a distance and in the dark: NoticeSeconds up close (<= 15 m), NoticeFar at the edge of sight,
@@ -246,8 +247,13 @@ namespace WildWasteland.Modules.NPC
             else
             {
                 a.SeenFor = Mathf.Max(0f, a.SeenFor - interval);
-                a.UnseenFor += interval;
-                if (a.State == State.Combat && a.UnseenFor > Mathf.Max(0f, NpcModule.LoseSeconds.Value)) LoseTarget(a, now);   // in Hide it keeps the target (the brain ends the cover)
+            }
+            if ((a.State == State.Combat || a.State == State.Hide) && a.Target != null)
+            {
+                bool seen = best == a.Target || Visible(a, eye, a.Target, a.Target == _player, InStormOf(a.Target));
+                if (seen) { a.UnseenSince = -1f; a.UnseenFor = 0f; a.LastSeen = a.Target.transform.position; a.LastSeenVel = VelocityOf(a.Target); }
+                else { if (a.UnseenSince < 0f) a.UnseenSince = now; a.UnseenFor = now - a.UnseenSince; }
+                if (!seen && a.UnseenFor >= Mathf.Max(0f, NpcModule.LoseSeconds.Value)) LoseTarget(a, now);
             }
         }
 
@@ -282,7 +288,8 @@ namespace WildWasteland.Modules.NPC
         {
             // the game's God Mode (F11, Player [GODMODE]) moves the Player, camera holder and head to layer 5 (UI) - the vanilla sensors never
             // see that layer, so neither does this sight. Hearing, ghosts and hits are untouched.
-            if (isPlayer && target.layer == 5) return false;
+            bool tracked = (a.State == State.Combat || a.State == State.Hide) && target == a.Target;
+            if (isPlayer && target.layer == 5) { if (tracked) a.SightMiss = "God Mode"; return false; }
             Vector3 tp = target.transform.position;
             Vector3 flat = tp - a.T.position; flat.y = 0f;
             float d = flat.magnitude;
@@ -306,12 +313,14 @@ namespace WildWasteland.Modules.NPC
                 }
             }
             if (a.CaveWeb) { if ((tp - a.T.position).sqrMagnitude > 9f) return false; range = Mathf.Max(range, 3f); }
-            if (d > range) return false;
-            if (Vector3.Angle(a.T.forward, flat) > Mathf.Clamp(ConeOf(a), 10f, 360f) * 0.5f) return false;
+            if (d > range) { if (tracked) a.SightMiss = "outside light/storm sight range"; return false; }
+            if (!tracked && Vector3.Angle(a.T.forward, flat) > Mathf.Clamp(ConeOf(a), 10f, 360f) * 0.5f) return false;
             Transform troot = target.transform.root;
             Vector3 head, body;
             Points(target, isPlayer, out head, out body);
-            return Clear(eye, head, troot) || Clear(eye, body, troot);
+            bool clear = Clear(eye, head, troot) || Clear(eye, body, troot);
+            if (tracked) a.SightMiss = clear ? null : "head and body sight lines blocked";
+            return clear;
         }
 
         private static bool Clear(Vector3 from, Vector3 to, Transform targetRoot)
@@ -319,7 +328,7 @@ namespace WildWasteland.Modules.NPC
             RaycastHit hit;
             Vector3 d = to - from; float len = d.magnitude;
             if (len < 0.05f) return true;
-            if (!Physics.Raycast(from, d / len, out hit, len, Blockers, QueryTriggerInteraction.Ignore)) return true;
+            if (!Physics.Raycast(from, d / len, out hit, len, SightBlockers, QueryTriggerInteraction.Ignore)) return true;
             var r = hit.collider.transform.root;
             if (r == targetRoot) return true;
             if (_playerCar != null && r == _playerCar.transform.root && targetRoot == _player.transform.root) return true;   // the player in a car: the car does not hide them
@@ -507,9 +516,9 @@ namespace WildWasteland.Modules.NPC
         {
             if (a.Spider) a.AmbushDist = 0f;
             if ((a.State == State.Combat || a.State == State.Hide) && a.Target == target) return;
-            if (a.State == State.Hide) { a.Target = target; a.UnseenFor = 0f; return; }   // in cover: it knows its target, stays put
+            if (a.State == State.Hide) { a.Target = target; a.UnseenFor = 0f; a.UnseenSince = -1f; return; }   // in cover: it knows its target, stays put
             Release(a);
-            a.State = State.Combat; a.Target = target; a.UnseenFor = 0f; a.Pursuits = 0; a.Pursue = null; a.Heard.RemoveWhere(x => x < 0);
+            a.State = State.Combat; a.Target = target; a.UnseenFor = 0f; a.UnseenSince = -1f; a.Pursuits = 0; a.Pursue = null; a.Heard.RemoveWhere(x => x < 0);
             a.NextShout = 0f;       // a fresh sighting: the next shout comes at once
             Log(a, "sees " + Name(target) + " at " + Vector3.Distance(a.T.position, target.transform.position).ToString("0") + " m");
         }
@@ -521,13 +530,18 @@ namespace WildWasteland.Modules.NPC
             if (a == null || target == null || !On) return false;
             a.AmbushDist = 0f;
             Engage(a, target);
-            a.LastSeen = target.transform.position; a.LastSeenVel = Vector3.zero; a.UnseenFor = 0f;
+            a.LastSeen = target.transform.position; a.LastSeenVel = Vector3.zero; a.UnseenFor = 0f; a.UnseenSince = -1f;
             return true;
         }
 
         private static void LoseTarget(Agent a, float now)
         {
             var target = a.Target;
+            if (NpcModule.SensesLog.Value && target != null)
+            {
+                Vector3 flat = target.transform.position - a.T.position; flat.y = 0f;
+                Log(a, "sight loss: " + a.SightMiss + ", target " + Name(target) + ", unseen " + a.UnseenFor.ToString("0.0", CultureInfo.InvariantCulture) + " s, distance " + flat.magnitude.ToString("0.0", CultureInfo.InvariantCulture) + " m, angle " + Vector3.Angle(a.T.forward, flat).ToString("0.0", CultureInfo.InvariantCulture) + " deg, half-cone " + (Mathf.Clamp(ConeOf(a), 10f, 360f) * 0.5f).ToString("0.0", CultureInfo.InvariantCulture) + " deg");
+            }
             a.Target = null;
             var g = GetOrMake(Src.Vision, a.LastSeen, target, "last seen " + Name(target), 4f, 3f, now);
             g.Subject = target;
@@ -1008,7 +1022,7 @@ namespace WildWasteland.Modules.NPC
         // ShoutCooldown.
         private static float _nextShout;
         private static AudioClip[] _voice;
-        // (WW) Core.Hotkeys: [Keys] "NPC shout" pressed (not while Apocasetter blocks input / time is stopped) and ShoutAllowed()
+        // (WW) Core.Hotkeys: [Keys] "Shout" pressed (not while Apocasetter blocks input / time is stopped) and ShoutAllowed()
         internal static bool ShoutAllowed() { return On && ModifierHeld(); }
         internal static void ShoutPressed()
         {
@@ -1922,7 +1936,7 @@ namespace WildWasteland.Modules.NPC
                             int gid = int.Parse(p[4]); Ghost g; ghostById.TryGetValue(gid, out g);
                             if (st == State.Combat)
                             {
-                                if (target != null) { a.State = State.Combat; a.Target = target; }
+                                if (target != null) { a.State = State.Combat; a.Target = target; a.UnseenFor = 0f; a.UnseenSince = -1f; }
                                 else { g = GetOrMake(Src.Vision, a.LastSeen, null, "last seen (before the load)", 2f, 9999f, now); a.State = State.Idle; Assign(a, g, Src.Vision, now); }
                             }
                             else if (g != null)

@@ -19,6 +19,7 @@ namespace WildWasteland
     [BepInDependency("com.denis.apocalypter.npcai", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.gunplay", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.apocaunloader", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("com.denis.apocalypter.healthstacks", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.itweenguard", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.gunplayhud", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.apocapatrol", BepInDependency.DependencyFlags.SoftDependency)]
@@ -37,8 +38,9 @@ namespace WildWasteland
         public const string VERSION = "0.1.3";
 
         public static Plugin Instance;
-        public static ConfigFile Main, Tools;
+        public static ConfigFile Main, Settings, Tools;
         public static ConfigEntry<Key> ToolWindowKey;
+        public static ConfigEntry<bool> EnableDebug;
         public static ConfigEntry<bool> VerboseLog;
         public static ConfigEntry<float> FrameBudgetMs;
 
@@ -55,17 +57,27 @@ namespace WildWasteland
                 Directory.CreateDirectory(Core.Assets.ConfigDir);
                 Core.Legacy.FirstRunTools = !File.Exists(toolsPath);
                 Main = Config;
+                var settingsPath = Path.Combine(Core.Assets.ConfigDir, "settings.cfg");
+                Core.Legacy.FirstRunMain = Core.Legacy.FirstRunMain && !File.Exists(settingsPath);
+                if (!File.Exists(settingsPath) && File.Exists(Main.ConfigFilePath))
+                    File.Copy(Main.ConfigFilePath, settingsPath);
+                Settings = new ConfigFile(settingsPath, true);
                 Tools = new ConfigFile(toolsPath, true);
 
-                // F6 (Apocasetter) page order: General, Keys, one section per module, Debug.
+                // Apocasetter hides its own opt-in entry; only these two settings are shown in F6.
+                string oldKey = Core.Legacy.Get(Path.GetFileName(Main.ConfigFilePath), "Keys", "Tool window");
+                bool hasWindowKey = Core.Legacy.Get(Path.GetFileName(Main.ConfigFilePath), "Keys", "In-Game Settings Button") != null;
                 Main.Bind("General", "Apocasetter", true, "Lists Wild Wasteland in the Apocasetter Mods menu (F6).");
-                ToolWindowKey = Main.Bind("Keys", "Tool window", Key.F7,
-                    "Opens the Wild Wasteland tool window: every debug, editor and technical setting of all modules (turret spots, seat poses, merchant layouts, patrol editor, AI tuning, performance).");
+                ToolWindowKey = Main.Bind("Keys", "In-Game Settings Button", Key.F7,
+                    "Opens Wild Wasteland settings: Game, Modules and, when enabled, Debug.");
+                if (!hasWindowKey && oldKey != null) ToolWindowKey.SetSerializedValue(oldKey);
+                EnableDebug = Main.Bind("General", "Enable Debug", false,
+                    "Show the Debug section in Wild Wasteland settings. Contains all advanced settings, editors and diagnostics.");
 
                 RegisterModules();
-                Core.ModuleHost.BindAll(Main, Tools);
+                Core.ModuleHost.BindAll(Settings, Tools);
 
-                VerboseLog = Main.Bind("Debug", "VerboseLog", false, "Detailed info logging for every module (off for normal play).");
+                VerboseLog = Settings.Bind("Debug", "VerboseLog", false, "Detailed info logging for every module (off for normal play).");
                 FrameBudgetMs = Tools.Bind("Core", "Frame budget (ms)", 2f, new ConfigDescription("Sliced background work (bakes, scans) stops for the frame once Wild Wasteland used this much time.", new AcceptableValueRange<float>(0.5f, 8f)));
                 Core.Log.Verbose = VerboseLog.Value;
                 VerboseLog.SettingChanged += (s, a) => Core.Log.Verbose = VerboseLog.Value;
@@ -75,6 +87,7 @@ namespace WildWasteland
                 Core.Runner.Ensure();
                 RegisterCoreJobs();
                 Core.SaveTypes.Install();
+                Core.HealthStacks.Init();
                 Core.ITweenGuard.Init();
                 Core.QuietFsm.Install();
                 Core.UI.ToolWindow.Init();
@@ -100,6 +113,7 @@ namespace WildWasteland
             Core.ModuleHost.Add(new Modules.Guns.GunsModule());
             Core.ModuleHost.Add(new Modules.HUD.HudModule());
             Core.ModuleHost.Add(new Modules.Patrols.PatrolsModule());
+            Core.ModuleHost.Add(new Modules.POI.PoiModule());
         }
 
         static void ApplyAudioVoices(int want)
@@ -127,6 +141,7 @@ namespace WildWasteland
             Core.UI.EditorSession.Tick();
             Core.SaveBus.Tick();
             Core.Hotkeys.Tick();
+            Core.UI.ToolWindow.Tick();
         }
 
         static void OnSceneLoaded(Scene s, LoadSceneMode m)

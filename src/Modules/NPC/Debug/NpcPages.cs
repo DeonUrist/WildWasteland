@@ -76,7 +76,7 @@ namespace WildWasteland.Modules.NPC
                 l.Value("Agents / alert / ghosts", I(Senses.AgentCount) + " / " + I(Senses.AlertCount) + " / " + I(Senses.GhostCount));
                 l.Value("Light now", F(Senses.LightLevel(), "0.00") + " (sight " + F(Senses.SightRange(), "0") + " m)");
                 l.Value("Storms", NpcModule.StormsEnabled.Value ? I(Storm.StormCount) + " sandstorm(s), " + I(Storm.FunnelCount) + " funnel(s)" + (Storm.DustBridge ? (Storm.Dust ? ", ApocaDustStorm dust active" : ", ApocaDustStorm bridge on") : "") : "off (F6 Storms)");
-                l.Value("Shout", NpcModule.ShoutModifier.Value + " + " + NpcModule.ShoutKey.Value + " ([Keys] NPC shout)");
+                l.Value("Shout", NpcModule.ShoutModifier.Value + " + " + NpcModule.ShoutKey.Value + " ([Keys] Shout)");
             }, Sec("Detection"), Sec("Senses")));
 
             pages.Add(new LivePage(m, "Navigation & baking", "Structure maps (camps, caves, buildings): baked in slices of BakeBudgetMs per frame, nearest first, faster when an NPC waits or the player is at it.", l =>
@@ -107,14 +107,11 @@ namespace WildWasteland.Modules.NPC
                 l.Value("Dog Companion", DogCompanionCompat.Present ? (NpcModule.DogCompanionCompatEnabled.Value ? I(DogCompanionCompat.Count) + " companion(s) driven" : "installed, compatibility off (F6)") : "not installed");
             }, Sec("Behaviour"), Sec("Burrow"), Sec("Hunt"), Sec("Ambush"), Sec("Pounce"), Sec("Dogs")));
 
-            pages.Add(new LivePage(m, "Hazards (nests, webs, storms)", "Spider nests and their webs (built in slices while you are far away, layouts kept in config/WildWasteland/NPC/nest-layouts.txt), test webs, sandstorms.", l =>
+            pages.Add(new LivePage(m, "Hazards (nests, webs, storms)", "Spider nests and their webs (built in slices while you are far away, layouts kept in config/WildWasteland/NPC/nest-layouts.txt) and sandstorms.", l =>
             {
                 l.Value("Nests", I(Nests.Count) + " (" + I(Nests.Ready) + " built), " + I(Nests.Pending) + " spider(s) not placed yet");
-                l.Value("Webs", I(Webs.Count) + " (" + I(Webs.TestCount) + " test webs)");
+                l.Value("Webs", I(Webs.Count));
                 l.Value("Storms", NpcModule.StormsEnabled.Value ? I(Storm.StormCount) + " sandstorm(s), " + I(Storm.FunnelCount) + " funnel(s)" : "off (F6 Storms)");
-                l.Value("Test web key", NpcModule.WebTestKey.Value + " ([Keys] NPC test web; Shift + key removes them)");
-                int b = l.Buttons("Place a test web where you look", "Remove test webs");
-                if (b == 0) Webs.PlaceTestWeb(); else if (b == 1) Webs.RemoveTestWebs();
             }, Sec("Nests"), Sec("Webs")));
 
             pages.Add(new LivePage(m, "Debug", "World overlay, map pictures and the NPC log. Hunting a problem: VerboseLog + NavDump, reproduce, then read BepInEx/LogOutput.log and the BMPs.", l =>
@@ -125,7 +122,7 @@ namespace WildWasteland.Modules.NPC
                 l.Value("Nav", Nav.Status());
                 if (l.Button("Write the NPC status to the log", true, false, 360))
                     Core.Log.Always("[NPC] senses " + Senses.Status() + "; brain " + Brain.Status() + "; nav " + Nav.Status() + "; baking " + Nav.BakingText + "; nests " + Nests.Count + "; webs " + Webs.Count);
-            }, Sec("Debug")));
+            }, Sec("Debug")) { IsTool = true });
 
             return pages;
         }

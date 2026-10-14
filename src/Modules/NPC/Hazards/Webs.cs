@@ -14,14 +14,12 @@ namespace WildWasteland.Modules.NPC
     //  * an orb web hung in the air between rocks / wrecks / walls / the ground: spokes to the surfaces around, a frame, a sagging capture
     //    spiral with gaps and uneven spacing, a tangled hub;
     //  * a sheet web on the ground: an irregular net of strands following the bumps of the terrain, denser in the middle, fraying at the edge.
-    // Test: [Webs] TestKey (F9) puts a web where you look (a hanging web if there are surfaces around to hold it, a sheet on the ground);
-    // Shift + the key removes them all. Nothing else uses webs yet.
+    // Used by the spider nests (Nests.cs). (WW) The old test webs (a web where you look, on a key) were removed.
     internal static class Webs
     {
         internal sealed class Web { public GameObject Go; public Mesh Mesh; public float Born; public bool Orb; public Vector3 Center, N; public float R; public Renderer Rend; public float Sky = 1f, Shown = -1f; }
 
-        private static readonly List<Web> _webs = new List<Web>();       // the F9 test webs
-        private static readonly List<Web> _all = new List<Web>();        // (1.7.3) every web (test and nests): lit each second / by the flashlight
+        private static readonly List<Web> _all = new List<Web>();        // (1.7.3) every web (nests): lit each second / by the flashlight
         private static MaterialPropertyBlock _mpb; private static float _k = 0.88f; private static Light _flLight; private static Transform _flOf;
         private static Material _mat; private static Texture2D _tex; private static float _nextTint;
         private const int Anchors = (1 << 0) | (1 << 8) | (1 << 11) | (1 << 14) | (1 << 16);    // Default, Car, Door, Ground, SeeThrough
@@ -34,36 +32,19 @@ namespace WildWasteland.Modules.NPC
         private static readonly List<int> _t = new List<int>(12288);
         private static Vector3 _origin;
 
-        internal static void OnSceneLoaded() { Clear(); _all.Clear(); _flOf = null; _flLight = null; }
+        internal static void OnSceneLoaded() { _all.Clear(); _flOf = null; _flLight = null; }
 
         internal static void Tick()
         {
             float now = Time.time;
             if (_all.Count > 0) { if (now >= _nextTint) { _nextTint = now + 1f; Tint(); } else Flash(false); }
-            if (_webs.Count > 0)
-            {
-                float life = NpcModule.WebTestLifetime.Value;
-                if (life > 0f && now - _webs[0].Born > life) { Kill(_webs[0]); _webs.RemoveAt(0); }
-            }
-            // (WW) the test key is a Core.Hotkeys binding ([Keys] "NPC test web", default None; was F9 = the game's hide-UI key)
         }
 
-        // [Keys] NPC test web: a web where you look; Shift + the key removes them all (also F7 > NPC AI & navigation > Hazards)
-        internal static void TestKeyPressed()
-        {
-            var kb = Keyboard.current;
-            if (kb != null && (kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed)) { RemoveTestWebs(); return; }
-            PlaceTestWeb();
-        }
-        internal static void PlaceTestWeb() { try { PlaceAtAim(); } catch (Exception e) { NpcModule.Log.LogError("Webs: " + e); } }
-        internal static void RemoveTestWebs() { int n = _webs.Count; Clear(); NpcModule.Log.LogInfo("Webs: removed " + n + " test web(s)"); }
-        internal static int TestCount { get { return _webs.Count; } }
         internal static int Count { get { return _all.Count; } }
 
         // (WW) module shutdown: every web (test and nests) destroyed with its mesh; the shared material and thread texture too
         internal static void Shutdown()
         {
-            Clear();
             for (int i = _all.Count - 1; i >= 0; i--) Kill(_all[i]);
             _all.Clear();
             if (_mat != null) { UnityEngine.Object.Destroy(_mat); _mat = null; }
@@ -74,43 +55,7 @@ namespace WildWasteland.Modules.NPC
         // (WW) floating origin: the web objects are scene roots (the game moves them); their centres are kept as scene-space points
         internal static void Shift(Vector3 d) { foreach (var w in _all) w.Center += d; }
 
-        private static void Clear() { foreach (var w in _webs) Kill(w); _webs.Clear(); }
         internal static void Kill(Web w) { _all.Remove(w); if (w.Go != null) UnityEngine.Object.Destroy(w.Go); if (w.Mesh != null) UnityEngine.Object.Destroy(w.Mesh); }
-
-        // ---------- the test: a web where the camera looks ----------
-        private static void PlaceAtAim()
-        {
-            var cam = Core.GameRefs.MainCamera; if (cam == null) return;
-            RaycastHit h;
-            if (!Physics.Raycast(cam.transform.position, cam.transform.forward, out h, 40f, Anchors, QueryTriggerInteraction.Ignore)) { NpcModule.Log.LogInfo("Webs: nothing within 40 m where you look"); return; }
-            var sw = Stopwatch.StartNew();
-            Vector3 toCam = cam.transform.position - h.point; toCam.y = 0f; toCam = toCam.sqrMagnitude > 0.001f ? toCam.normalized : Vector3.forward;
-            string made = "";
-            // a hanging web: in front of a wall / rock face, or about a metre above the ground, wherever surfaces around can hold it
-            Vector3 hub = h.normal.y < 0.6f ? h.point + h.normal * 0.45f + Vector3.up * 0.2f : h.point + Vector3.up * UnityEngine.Random.Range(0.8f, 1.2f);
-            Vector3 n1 = toCam, n2 = Vector3.Cross(Vector3.up, toCam);
-            if (h.normal.y < 0.6f) { n1 = Vector3.Cross(Vector3.up, h.normal).normalized; n2 = (n1 + toCam).normalized; }     // across a corner, at an angle to the face
-            var orb = Orb(hub, n1) ?? Orb(hub, n2);
-            if (orb != null) { Add(orb); made = "a hanging web (" + orb.Mesh.vertexCount + " vertices)"; }
-            if (h.normal.y >= 0.6f || orb == null)
-            {
-                RaycastHit g;
-                Vector3 gp = h.normal.y >= 0.6f ? h.point : (Physics.Raycast(h.point + h.normal * 0.6f + Vector3.up, Vector3.down, out g, 5f, GroundMask, QueryTriggerInteraction.Ignore) ? g.point : h.point);
-                var sheet = Sheet(gp);
-                if (sheet != null) { Add(sheet); made += (made.Length > 0 ? " and " : "") + "a ground web (" + sheet.Mesh.vertexCount + " vertices)"; }
-            }
-            sw.Stop();
-            NpcModule.Log.LogInfo("Webs: " + (made.Length > 0 ? made : "no room for a web") + " in " + sw.Elapsed.TotalMilliseconds.ToString("0.00") + " ms (" + _webs.Count + " test webs; " + (orb == null ? "nothing around to hang a web on, aim between rocks / at a wreck or wall" : "hung") + ")");
-        }
-
-        private static void Add(Web w)
-        {
-            w.Born = Time.time;
-            _webs.Add(w);
-            int cap = Mathf.Max(1, NpcModule.WebTestMax.Value);
-            while (_webs.Count > cap) { Kill(_webs[0]); _webs.RemoveAt(0); }
-            Tint();
-        }
 
         // ---------- the orb web ----------
         // spokes from the hub in the plane (normal n); a spoke that reaches a surface within MaxR is tied to it. Needs 3 tied spokes around

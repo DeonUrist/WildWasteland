@@ -14,35 +14,35 @@ namespace WildWasteland.Modules.Patrols.WarRig
         internal const string Version = "1.1.3";
         internal static string Dir = ".";
         private static Core.IModule _owner;
-        private static EventHandler _refresh;
 
         internal static void Install(Core.IModule owner, string dir)
         {
             _owner = owner; Dir = dir;
             // ES3: resolve the War Rig prefab id, also before the spawner was ever used this session (shared dispatcher, keyed by id)
             Core.Hooks.GetPrefab.Resolver(owner, PrefabLookup.Resolve);
-            WorldSpawning.Install(owner);
             NativeStormProtection.Install(owner);
             SpawnerIntegration.Install(owner);
             DustStormBridge.Install(owner);
             // Apocapatrol templates use the rig as a trailer body ("body": "WarRig"): direct registration instead of the reflection scan
             ModVehicles.Register(Factory.Name, Factory.Template);
-            if (_refresh == null) _refresh = (s, a) => WorldSpawning.Refresh();
-            S.SpawnEnabled.SettingChanged += _refresh;
-            Core.Log.Info("[Patrols] War Rig " + Version + " installed; natural spawning " + (S.SpawnEnabled.Value ? "on" : "off") + ".");
+            PoiEncounter.InstallRetention(owner);
+            Core.Services.PoiChanged += PoiEncounter.Register;
+            PoiEncounter.Register(Core.Services.Poi);
+            Core.Log.Info("[Patrols] War Rig " + Version + " installed; world discovery supplied by the POI module.");
         }
 
-        // module shutdown: the rig leaves the game's trailer pools again, the storm dust is restored. Saved rigs stay (inert).
+        // Module shutdown removes POI registration and restores storm dust. Saved rigs stay (inert).
         internal static void Uninstall()
         {
-            if (_refresh != null && S.SpawnEnabled != null) S.SpawnEnabled.SettingChanged -= _refresh;
-            try { WorldSpawning.RemoveFromPools(); } catch (Exception e) { Core.Log.Warn("[Patrols] War Rig pools: " + e.Message); }
+            Core.Services.PoiChanged -= PoiEncounter.Register;
+            if (Core.Services.Poi != null) Core.Services.Poi.Remove("WarRig");
+            PoiEncounter.Reset();
             try { NativeStormProtection.Restore(); } catch (Exception e) { Core.Log.Warn("[Patrols] War Rig storm restore: " + e.Message); }
             WorldSpawning.ResetForScene();
             _owner = null;
         }
 
-        internal static void OnSceneLoaded() { WorldSpawning.ResetForScene(); NativeStormProtection.ResetForScene(); }
+        internal static void OnSceneLoaded() { WorldSpawning.ResetForScene(); NativeStormProtection.ResetForScene(); PoiEncounter.ResetForScene(); }
 
         internal static void Say(string text) { Core.Log.Always("[Patrols] " + text); }
 
@@ -66,7 +66,7 @@ namespace WildWasteland.Modules.Patrols.WarRig
             if (Physics.Raycast(pos + Vector3.up * 15f, Vector3.down, out ground, 40f, (1 << 0) | (1 << 14), QueryTriggerInteraction.Ignore)) pos.y = ground.point.y;
             pos += Vector3.up * 1.5f;
             var rotation = Quaternion.LookRotation(Vector3.Cross(Vector3.up, dir));
-            if (!WorldSpawning.CanSpawnAt(pos, rotation))
+            if (!WorldSpawning.CanSpawnAt(ref pos, rotation))
                 throw new InvalidOperationException("War Rig needs open ground outside, with space for the entire trailer. Move to an open area.");
             var rig = Factory.Create(pos, rotation, equip, () => ++id.Value);
             list.arrayList.Add(rig); Say("War Rig spawned."); return rig;

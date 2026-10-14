@@ -10,7 +10,7 @@ namespace WildWasteland.Core
 {
     /// <summary>
     /// Per-module config helper (AGENTS.md 5.7).
-    /// Main  = the plugin's own ConfigFile (shown in Apocasetter / F6): player-facing settings and hotkeys only.
+    /// Main  = WildWasteland/settings.cfg: gameplay settings, module switches and hotkeys, edited in the F7 menu.
     /// Tools = BepInEx\config\WildWasteland\tools.cfg (invisible to Apocasetter, edited from the F7 tool window): tuning,
     ///         offsets, debug switches, developer settings.
     /// Sections are prefixed with the module id so five modules can share one file: "Patrols", "Patrols / Combat", ...
@@ -46,7 +46,7 @@ namespace WildWasteland.Core
         {
             return Tools.Bind(Section(sub), key, def, new ConfigDescription(desc, range));
         }
-        /// <summary>Rebindable hotkey (InputSystem Key, the only type Apocasetter rebinds). All WW keys live in [Keys].</summary>
+        /// <summary>Rebindable gameplay/editor hotkey, edited in Debug. The menu key lives in the plugin's F6 config.</summary>
         public ConfigEntry<Key> Hotkey(string key, Key def, string desc)
         {
             return Main.Bind("Keys", key, def, desc);

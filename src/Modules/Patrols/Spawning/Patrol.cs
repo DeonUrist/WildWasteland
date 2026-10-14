@@ -145,8 +145,8 @@ namespace WildWasteland.Modules.Patrols
                 yield return WaitForSave(gen, saveOk);   // the game is saving: spawn after it, never half-built into the save
                 if(!CrewFactions.Compatible(tpl,tpl.Faction)){Core.Log.Warn("[Patrols] " + "Template "+tpl.Name+" has crew from different factions; correct its driver, passenger or turret choices");yield break;}
                 if (!saveOk[0]) { PatrolsModule.Verbose("Build of " + tpl.Name + " dropped: the game loaded or changed scene meanwhile"); yield break; }
-                if(!EventBudget.Reserve(eventId))yield break;
-                reserved=true;
+                if(tpl.Origin!="POI"&&!EventBudget.Reserve(eventId))yield break;
+                reserved=tpl.Origin!="POI";
                 string missing = tpl.MissingPrefab;
                 if (missing.Length > 0) { Core.Log.Warn("[Patrols] " + "Template " + tpl.Name + " unavailable: prefab not loaded: " + missing); yield break; }
                 Vector3 pos;
@@ -172,13 +172,16 @@ namespace WildWasteland.Modules.Patrols
                     {
                         var hitchOffset = body.transform.InverseTransformPoint(FindChild(body.transform, "hitch").position);
                         var attacherOffset = trailerBody.transform.InverseTransformPoint(FindChild(trailerBody.transform, "attacher").position);
-                        if (!WarRig.WorldSpawning.CanSpawnAt(pos + rot * (hitchOffset - attacherOffset), rot))
+                        var trailerPos = pos + rot * (hitchOffset - attacherOffset);
+                        float trailerY = trailerPos.y;
+                        if (tpl.Origin != "POI" && !WarRig.WorldSpawning.CanSpawnAt(ref trailerPos, rot))
                         { Core.Log.Info("[Patrols] War Rig patrol spawn rejected: blocked clearance or unsuitable ground."); yield break; }
+                        pos.y += trailerPos.y - trailerY;
                     }
                 }
 
                 car = UnityEngine.Object.Instantiate(body, pos, rot);
-                EncounterCar.Attach(car,eventId,tpl.ConvoyMember,true);
+                if(tpl.Origin!="POI")EncounterCar.Attach(car,eventId,tpl.ConvoyMember,true);
                 car.SetActive(true);
                 Paint.Apply(car, body.name,tpl.Faction);
                 // The car, its parts and its cargo go into the game's save lists only once the car is complete (Register.Commit below):
@@ -261,6 +264,7 @@ namespace WildWasteland.Modules.Patrols
                 }
                 if (tpl.ReleaseHandbrake) Handbrake(car, false);
                 List<GameObject> cargo = null;
+                List<GameObject> trailerCargo = null;
                 string lootKey = null;
                 // a truck: its fixed cargo option (template "E" in the editor) when it has one, else a roll among the convoy's allowed cargo
                 var loot = tpl.IsTruck ? (tpl.SpawnLoot == null ? (EditorStore.Loot(true, tpl.LootPreset) ?? EditorStore.RollTruckLoot(() => UnityEngine.Random.value, tpl.SpawnCargoOptions)) : null) : EditorStore.Loot(false, tpl.LootPreset);
@@ -271,6 +275,12 @@ namespace WildWasteland.Modules.Patrols
                     cargo = new List<GameObject>();
                     yield return Cargo.Load(car, rolled, tpl.IsTruck, cargo);
                     if (car == null) yield break;
+                }
+                if (tpl.Origin == "POI" && trailer != null && tpl.Trailer.SpawnLoot != null)
+                {
+                    trailerCargo = new List<GameObject>();
+                    yield return Cargo.Load(trailer, tpl.Trailer.SpawnLoot, true, trailerCargo);
+                    if (car == null || trailer == null) yield break;
                 }
 
                 yield return null;
@@ -315,6 +325,7 @@ namespace WildWasteland.Modules.Patrols
                 yield return new WaitForSeconds(1f);
                 if (car == null) yield break;
                 if (cargo != null) Cargo.SettleFsms(cargo);
+                if (trailerCargo != null) Cargo.SettleFsms(trailerCargo);
                 if (Explode.IsWreck(car)) yield break;   // crew killed during the build: it already blew up
                 SetPartConditions(car);
                 FillParts(car);

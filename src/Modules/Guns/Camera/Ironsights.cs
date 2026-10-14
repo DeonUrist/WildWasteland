@@ -10,7 +10,7 @@ namespace WildWasteland.Modules.Guns
         private static PlayMakerFSM _ads;
         private static float _nextFind, _target = 1f, _zoom = 1f;
         private static int _buttonFrame = -1;
-        private static bool _buttonValue, _transparentProjection;
+        private static bool _buttonValue, _transparentProjection, _resetAim;
 
         internal static void Init(GunsModule owner)
         {
@@ -28,7 +28,10 @@ namespace WildWasteland.Modules.Guns
         {
             Restore(); _camera = null; _ads = null; _nextFind = 0f;
             _target = _zoom = 1f; _buttonFrame = -1;
+            _buttonValue = _resetAim = false;
         }
+        internal static void StartWorld()
+        { _buttonValue = false; _buttonFrame = -1; _target = _zoom = 1f; _resetAim = true; }
         private static bool ThirdPerson { get { return Services.Animation != null && Services.Animation.PlayerThirdPerson; } }
         private static bool Aiming { get { return _ads != null && _ads.enabled && _ads.ActiveStateName == "ads"; } }
 
@@ -45,6 +48,12 @@ namespace WildWasteland.Modules.Guns
                     _ads = FsmUtil.Find(eye.gameObject, "AimDownSIghts_Hold") ?? FsmUtil.Find(eye.gameObject, "AimDownSights_Hold");
                 }
             }
+            if (_resetAim && _ads != null && _ads.Fsm.Initialized && GameRefs.InPlay)
+            {
+                _resetAim = false; _ads.SendEvent("Activate");
+                if (Log.Verbose) Log.Info("[Guns] World ready: ironsights off");
+            }
+            if (!GameRefs.InPlay || !GunsModule.ToggleIronsights.Value || _ads == null || !_ads.enabled || _ads.ActiveStateName == "reloading") _buttonValue = false;
             if (!GunsModule.IronsightWheelZoom.Value) { _target = _zoom = 1f; return; }
             if (!GameRefs.InGame || ApocasetterBridge.InputBlocked || !Application.isFocused) return;
             if (!Aiming || ThirdPerson) _target = 1f;
@@ -63,10 +72,12 @@ namespace WildWasteland.Modules.Guns
         private static bool BeforeGetButton(GetButton action)
         {
             if (_ads == null || !ReferenceEquals(action.Fsm, _ads.Fsm) || !GunsModule.ToggleIronsights.Value) return true;
-            if (action.buttonName.Value != "Aim Down Sights" || ApocasetterBridge.InputBlocked || !GameRefs.InGame || !Application.isFocused) return true;
+            if (action.buttonName.Value != "Aim Down Sights") return true;
+            if (ApocasetterBridge.InputBlocked || !GameRefs.InGame || !Application.isFocused)
+            { action.storeResult.Value = _buttonValue; return false; }
             if (_buttonFrame != Time.frameCount)
             {
-                _buttonFrame = Time.frameCount; _buttonValue = Aiming;
+                _buttonFrame = Time.frameCount;
                 if (Input.GetButtonDown(action.buttonName.Value)) _buttonValue = !_buttonValue;
             }
             action.storeResult.Value = _buttonValue;

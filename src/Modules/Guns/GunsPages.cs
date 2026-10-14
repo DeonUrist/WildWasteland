@@ -106,7 +106,7 @@ namespace WildWasteland.Modules.Guns
             if (_live != null) { l.Heading("Live"); _live(l); }
             if (_main != null && _main.Length > 0)
             {
-                l.Heading("F6 settings (Guns)");
+                l.Heading("Settings");
                 for (int i = 0; i < _main.Length; i++) if (_main[i] != null) l.Entry(_main[i]);
             }
             if (_cfg != null) _cfg.Draw(l);

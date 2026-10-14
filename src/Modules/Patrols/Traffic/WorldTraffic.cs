@@ -178,6 +178,7 @@ namespace WildWasteland.Modules.Patrols
             _instance._battles.Clear();_instance._battleLive.Clear();_instance._nextBattleScan=0f;
             _instance._elapsed = _instance._nextPopulation = 0f; _instance._generation = Patrol.SceneGen;
             _instance._gameInkAt = 0f;
+            _instance._gameMap=null;_instance._gameMapImage=null;_instance._mapCheat=null;_instance._nextMapScan=0f;_instance._mapWasOpen=false;
             _instance._nextRoadRefresh = 0f;
         }
 

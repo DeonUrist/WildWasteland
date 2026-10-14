@@ -16,24 +16,29 @@ Init order = config display order = the order below (providers before consumers)
 | `HUD` | Combat HUD | `in` | Gunplay HUD 1.2.2 `a8f94cf` | `src/Modules/HUD/` = `WildWasteland.Modules.HUD` (Crosshair, HitFeedback, Embedded) | `com.denis.apocalypter.gunplayhud` |
 | `Patrols` | Patrols, traffic & War Rig | `in` | Apocapatrol 2.14.4 = `ed0c422` (2.7.5) + uncommitted working tree; War Rig 1.1.3 `89419ea`; debug MerchantSpotter 1.0.2 (inside the Apocapatrol tree) | `src/Modules/Patrols/` = `WildWasteland.Modules.Patrols` (+ `.Motorcycles`, `.WarRig`; subfolders Spawning, Vehicles, Crews, Traffic, Merchants, Editor, Persistence, WarRig, Embedded) | `com.denis.apocalypter.apocapatrol`, `com.denis.apocalypter.warrig`, `com.denis.apocalypter.merchantspotter` |
 
-Not separable inside a module (no toggle): motorcycles (bike templates + ES3 prefab resolution) inside Patrols; simple convoy bandits inside NPC (driven by Patrols through the service). War Rig is a **feature** of Patrols (`WarRig/` folder, two F6 toggles), not a module.
+| `POI` | Points of interest | `in` (Testing, #81) | New native MapMagic integration | `src/Modules/POI/` = `WildWasteland.Modules.POI` | - |
+
+Not separable inside a module (no toggle): motorcycles (bike templates + ES3 prefab resolution) inside Patrols; simple convoy bandits inside NPC (driven by Patrols through the service). War Rig remains a **feature** of Patrols (`WarRig/` folder, two F6 toggles); its new world sites are registered through the POI module.
 
 ### 1.1 F6 sections (main cfg, Apocasetter page "Wild Wasteland")
 
-Order on the page: `[General]` (Apocasetter), `[Keys]` (all hotkeys of all modules), then one block per module, `[Debug]` last. 139 entries in total (3 Core + 136 modules).
+Since the 2026-10-14 settings rework, F6 displays only `[Keys] In-Game Settings Button` (F7 by default) and `[General] Enable Debug` (false by default). The required Apocasetter opt-in is hidden by Apocasetter. Former gameplay settings, module switches and hotkeys retain their sections/keys in `config/WildWasteland/settings.cfg`, copied once from the old main cfg. The table below inventories those stored settings, rather than F6 controls; legacy orphans in the public cfg are retained.
 
 | Module | Sections | Entries | Keys in `[Keys]` |
 |---|---|---|---|
-| PlayerBody | `[PlayerBody]`, `[PlayerBody / Climbing]`, `[PlayerBody / Camera culling]`, `[PlayerBody / Vehicles]` | 25 incl. Enabled | Observe (third person), Climb (alternative key), Cassette start/stop, Cassette volume down, Cassette volume up |
-| NPC | `[NPC]`, `[NPC / Detection]`, `[NPC / Pathfinding]` | 21 incl. Enabled | NPC shout, NPC shout modifier, NPC test web |
+| PlayerBody | `[PlayerBody]`, `[PlayerBody / Climbing]`, `[PlayerBody / Camera culling]`, `[PlayerBody / Vehicles]` | 24 incl. Enabled | Observe (third person), Climb (alternative key), Cassette start/stop, Cassette volume down, Cassette volume up |
+| NPC | `[NPC]`, `[NPC / Detection]`, `[NPC / Pathfinding]` | 21 incl. Enabled | Shout, Shout modifier (renamed from NPC shout / NPC shout modifier; old values carried over) |
 | Guns | `[Guns]`, `[Guns / Projectiles]`, `[Guns / Ranges]`, `[Guns / Ammo]`, `[Guns / Bosses]` | 28 incl. Enabled | Guns: unload fallback key |
 | HUD | `[HUD]` | 8 incl. Enabled | - |
-| Patrols | `[Patrols]`, `[Patrols / Spawning]`, `[Patrols / World traffic]`, `[Patrols / Merchants]`, `[Patrols / Combat]`, `[Patrols / Balance]`, `[Patrols / War Rig]` | 41 incl. Enabled | Patrol editor, Template recorder, Bus passenger pose editor, Merchant item editor |
+| Patrols | `[Patrols]`, `[Patrols / Spawning]`, `[Patrols / World traffic]`, `[Patrols / Merchants]`, `[Patrols / Combat]`, `[Patrols / Balance]` | 40 incl. Enabled | Patrol editor, Template recorder, Bus passenger pose editor, Merchant item editor |
+| POI | `[POI]`, `[POI / World]` | 2 incl. Enabled | - |
 | Core | `[General] Apocasetter`, `[Keys] Tool window` (F7), `[Debug] VerboseLog` | 3 | Tool window |
 
 The full entry lists with meanings are in the wiki (`Guides/F6-Settings.md`) and in each module's wiki page.
 
 ### 1.2 F7 pages (tools.cfg: `BepInEx\config\WildWasteland\tools.cfg`, 545 entries)
+
+The SETTINGS window has Game (Player: body pictures, Full Body, First Person Arms, Climbing, Third Person Camera, Occlusion; World: Enemy Vehicles, New POI; HUD: crosshair previews, Grabbing dot, floating damage, hit markers, headshot sound, Toggle Ironsights, Shout + Shout modifier keys on one row), Modules (every module toggle followed by Performance), and Debug (hidden unless enabled in F6). Off is left and On is right. First Person Arms is Off / On foot / On (default On); Occlusion defaults On and switches only the on-foot third-person culling (CameraCullingInVehicles defaults Off and the Game page never changes it). Enemy Vehicles is Loner / New arrival / Fury road: Loner disables automatic spawns and world traffic, New arrival enables both with distance/boss gates, Fury road enables both with all patrol types available from the start. Lines uses the native crosshair's two solid horizontal bars; Grabbing dot controls SelectionDot (default On). The former pages below are sections inside the single Debug page: Tools first (Patrols editors, then the other editors / overlays: pages with `ToolPage.IsTool`), then the settings and diagnostics pages, then the remaining settings.cfg entries. tools.cfg entries (tuning, offsets, poses) are not drawn except debug switches (sections `/ Debug`, `/ Editors`, keys `Log` / `*Verbose*`, the traffic debug-map toggles); they still work from the file. Game opens automatically for a new game, never a loaded save. Fury road defaults On for fresh installs; saved settings are preserved.
 
 | Module | Group | Pages | tools.cfg sections |
 |---|---|---|---|
@@ -55,6 +60,7 @@ Modules never reference each other's types. Every dependency below goes through 
 | Guns | `Services.Guns` (`IGunsApi` + `HandlesFittedWheelMelee`) | `Gunplay.Api` + the `Apocapatrol.MeleeWheels.RaiderHandles` Harmony redirect | NPC (WeaponRanges, VanillaEvents: `ProjectilesEnabled` decides vanilla-observer vs projectile mode), Patrols (MeleeWheels stands down when `HandlesFittedWheelMelee`) |
 | HUD | `Services.Hud` (`IHitFeedback`) | `GunplayHUD.Api` (reflection from Gunplay) | Guns (PlayerHit / PartHit; sets `ExternalReporter = ProjectilesEnabled` every frame and on toggle; HUD seeds it in Init) |
 | Patrols | events `Services.CrewBailedOut(car, pax, npc)`, `Services.VehicleExploded(car)` | NPCAI's postfixes on `Apocapatrol.Patrol.BailOut` / `Explode.Blast` | NPC (Senses: bailed crews keep knowledge, explosions are heard) |
+| POI | `Services.Poi` (`IPoiApi`, `PoiDefinition`), `Services.PoiChanged` | Native world-generation additions, no replacement mod | Patrols registers the abandoned War Rig encounter and its temporary map Xs. Registration notification supports POI runtime off/on without a module type reference. |
 
 Dependency graph (all optional at runtime): PlayerBody -> (NPC, Patrols); NPC -> (Guns, Patrols); Guns -> (NPC via consume, HUD); HUD -> Guns (consume); Patrols -> NPC (events). Init order PlayerBody, NPC, Guns, HUD, Patrols makes every provider start before its consumers; order dependence that matters: NPC's shot-counting prefixes must run before Guns' on the shared `Raycast.OnEnter` / `SensorGetDetectionRayHit.OnEnter` dispatchers (they do, by init order).
 
@@ -120,9 +126,17 @@ Rules shared by all modules (details per module in the wiki pages and port repor
 | Apocaraider | com.denis.apocalypter.apocaraider | 1.7.0 / 7c1e3e9 | dropped | Superseded: monolith that gunplay/NPCAI/WoW were split from; soft-dep only so its cfg can be migrated. Running it beside WW doubles features (not in ConflictsWith: remove it by hand). |
 | Apocapocket | com.denis.apocalypter.apocapocket | 2.0.10 / 41a5032 | candidate | Extra slots; owns save data (`apocasaver.pose.*` via Apocasaver HandPose). PlayerBody reads it by reflection today. |
 | Apocaunloader | com.denis.apocalypter.apocaunloader | 1.3.0 / 7a215cb | candidate | Leftover: its mechanics are in Guns (via Gunplay 1.3.0); the standalone plugin is in Guns' ConflictsWith. Nothing left to port unless a newer standalone commit differs. |
-| HealthStacks | com.denis.apocalypter.healthstacks | 1.0.0 / a326d8d | candidate | |
+| HealthStacks | com.denis.apocalypter.healthstacks | 1.0.0 / a326d8d | in (Testing, #87) | Always-on Core fix in `src/Core/HealthStacks.cs`; no settings, assets or new save data. Tops up Bandage / First Aid slots to 3 charges, leaving excess on the ground. Uses the existing GetButtonDown dispatcher; stands down if the standalone plugin is loaded. |
 | Apocatremors | com.denis.apocalypter.apocatremors | 1.2.0 / 60f2bb2 | candidate | |
 | CaveDarkness | com.denis.apocalypter.cavedarkness | 1.0.0 / 2eac97c | candidate | |
 | ultimatetools | com.denis.apocalypter.partadjustment | 2.3.2 / e0abb4c | candidate | Already a merge (Part Adjustment + toolbox); kept the old GUID for save compatibility - absorbing it means a second plugin class (AGENTS.md 5.8 exception). |
 | Apocaclimber | com.denis.apocalypter.apocaclimber | 1.0.2 / (no git) | candidate | Already absorbed: inside PlayerBody (Climbing/), via Apocaplayer 2.3.9. Listed in PlayerBody's ConflictsWith. |
 | iTweenGuard | com.denis.apocalypter.itweenguard | 1.0.0 / d7f5411 | in (Core) | Always-on Core fix in `src/Core/ITweenGuard.cs`; no settings (the standalone `LogFixes` line is now Log.Info under VerboseLog, first 20 repairs). Prefix on `iTween.TweenUpdate`; stands down if the standalone plugin is loaded. |
+
+### POI world discovery (#81)
+
+Init order now ends with Patrols, POI. Patrols prepares its War Rig provider first and registers it when Services.Poi becomes available. POI has no scheduler jobs. Its F7 page is Patrols & vehicles → Points of interest; F6 [POI / World] Spawn chance (%) defaults to 2, with 100 for one site per newly generated 5 km main slice. MapMagic chooses seeded positions away from native POIs, flattens a 65 m pad, and clears collidable decoration there. A 500 m event-only player trigger starts the parked, engine-less Rustchief/tanker encounter with ten wheels at 5% condition and three Zombie_Runner NPCs scattered at varied angles/radii, two Lugnut_Dead corpses beside the cab, and 3–6 bandage/nuts/ammo items inside the tanker PhysicsLock area. Cargo uses the existing deferred registration, placement and lock-FSM settling path. Temporary yellow Xs mark generated sites on M.
+
+Old WarRigPercent is no longer bound or used; existing cfg orphans are not purged. Ordinary Scrapwagon/trailer selections are untouched. Existing War Rig prefab id/class/save compatibility is retained by Patrols. POI spawned-site keys are saved as an atomic text sidecar under config/WildWasteland/POI/Saves/<slot>.poi.txt through SaveBus.AfterSave. Save/load must preserve the sidecar to avoid a duplicate site encounter.
+
+War Rig retention (#81): native DeleteFarAwayItems skips tankers and their attached parts permanently. The abandoned POI truck and its parts are protected until the player drives it with an engine running and horizontal speed above 1 m/s. The existing saved SetupOnly flag records whether that release has happened; no save schema change. Patrols cleanup also honors this protection and detaches/preserves a tanker when an eligible towing truck is removed.

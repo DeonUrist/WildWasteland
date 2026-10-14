@@ -114,7 +114,7 @@ namespace WildWasteland.Modules.Guns
 
             AmmoSettings.HoldSeconds = cfg.Player("Ammo", "HoldSeconds", 0.35f,
                 "Seconds to hold Reload before unloading; a shorter press reloads on release.", new AcceptableValueRange<float>(0.1f, 2f));
-            BossHpPercent = cfg.Player("Bosses", "AdjustHumanBossHP", 40f,
+            BossHpPercent = cfg.Player("Bosses", "AdjustHumanBossHP", 50f,
                 "Health of the human bosses (Duke Ironjaw 1500, Buzzgut 600) in % of the game's own.", new AcceptableValueRange<float>(5f, 300f));
             AmmoSettings.FallbackKey = cfg.Hotkey("Guns: unload fallback key", Key.R,
                 "Guns: key polled for hold-to-unload only if the game's Reload input axis cannot be read (normally the game's own Reload binding is used).");
@@ -132,7 +132,7 @@ namespace WildWasteland.Modules.Guns
                 "NPC bullets that hit the world show the same impact (sparks, sound) your own hits do; the game showed nothing for their misses.");
             MetalSparks = cfg.Tool("Tracers", "MetalSparks", true,
                 "Extra sparks, smoke and a bullet mark on anything that is part of a car - attached parts, the body and frame, loose parts - except wheels (any bullet), using the game's MetalImpact effect.");
-            MetalSparksScale = cfg.Tool("Tracers", "MetalSparksScale", 0.25f, "Size of the metal sparks effect (1 = the prefab's own, demo-scene size).", new AcceptableValueRange<float>(0.05f, 4f));
+            MetalSparksScale = cfg.Tool("Tracers", "MetalSparksScale", 0.1f, "Size of the metal sparks effect (1 = the prefab's own, demo-scene size).", new AcceptableValueRange<float>(0.05f, 4f));
 
             PlayerTracers = cfg.Tool("Ballistics", "PlayerGuns", true,
                 "Your own guns follow the same rules: visible bullets with travel time, the same range falloff and vehicle-part hits.");
@@ -283,6 +283,8 @@ namespace WildWasteland.Modules.Guns
             PlayerRig.Reset();
             _creates.Clear();
         }
+
+        public override void OnWorldReady() { WeaponTransition.StartWorld(); Ironsights.StartWorld(); }
 
         public override void OnOriginShift(Vector3 delta) { Tracers.OriginShift(delta); }
 

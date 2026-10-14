@@ -179,7 +179,7 @@ namespace WildWasteland.Modules.PlayerBody
         { for (; t != null; t = t.parent) if (t.name == name) return true; return false; }
         void Suspend(PlayMakerFSM fsm) { suspended.Add(fsm); fsm.enabled = false; }
         internal static string LastReject = "", LastResult = "";   // (WW) F7 "Climbing" page
-        void Reject(string why) { LastReject = why; if (PlayerBodyModule.VerboseOn) PlayerBodyModule.Info("Climb rejected: " + why); }
+        void Reject(string why) { LastReject = why; }
 
         internal void FixedTick()
         {

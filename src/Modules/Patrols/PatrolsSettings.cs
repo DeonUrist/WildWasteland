@@ -19,7 +19,7 @@ namespace WildWasteland.Modules.Patrols
 
         internal static ConfigEntry<Key> MenuKey, TemplateDumpKey, BusPassengerPoseEditorKey, MerchantEditorKey;
         internal static ConfigEntry<bool> AllowDebugSpawns;
-        internal static ConfigEntry<float> PatrolSpawnChancePercent, PatrolSizePercent;
+        internal static ConfigEntry<float> PatrolSizePercent;
         internal static ConfigEntry<float> MinPartHealth, MaxPartHealth, MinPartsFill, MaxPartsFill;
 
         // Condition of a spawned part: min..max, weighted toward two thirds of the way up (triangular distribution)
@@ -41,17 +41,17 @@ namespace WildWasteland.Modules.Patrols
         internal static ConfigEntry<int> AudioVoices;
         internal static ConfigEntry<float> FireArc, MaxAimPitch, AimTurnSpeed, FireBurstSeconds, FireIntervalMin, FireIntervalMax, ShootDistance;
         internal static ConfigEntry<bool> RamDamage, RamDamageInCar;
-        internal static ConfigEntry<float> RamDamageMultiplier, RamFullSpeedKmh, RamInCarFactor, RamPushStrength;
+        internal static ConfigEntry<float> RamDamageMultiplier, NpcRamDamageMultiplier, RamFullSpeedKmh, RamInCarFactor, RamPushStrength;
         internal static ConfigEntry<string> RamDamageByBody;
         // [Driving]
-        internal static ConfigEntry<float> StuckPedalChance, StuckPedalTakeoverSeconds, BailChance, StuckBailChance;
+        internal static ConfigEntry<float> StuckPedalChance, BailChance, StuckBailChance;
         // [Self-destruct]
         internal static ConfigEntry<bool> SelfDestruct;
         internal static ConfigEntry<float> ExplodedLootPercent;
         // [AI]
         internal static ConfigEntry<bool> AiInvertSteering, AiOverlay, CustomPaintjobs;
         internal static ConfigEntry<bool> RaidersOverheat;
-        internal static ConfigEntry<bool> SpawnWarning, RaiderMusic, RiderLances, HideFsmWarnings, TurretSpotEditor, FuryRoad, SuspensionLiftCenterOfMass;
+        internal static ConfigEntry<bool> RaiderMusic, RiderLances, HideFsmWarnings, TurretSpotEditor, FuryRoad, SuspensionLiftCenterOfMass;
         internal static ConfigEntry<float> RiderRange, RiderIntervalMin, RiderIntervalMax, RiderLanceSpeed, RiderMaxThrowAngle, RiderJumpRange, WitnessMeChance, RiderLeapSpeed, RiderBlastDamage, RiderBlastRadius, TurretThigh, TurretKnee, TurretHipHeight, RiderLeapReachPercent, RiderBailRange;
         internal static ConfigEntry<string> RiderLanceOffset, RiderLanceRotation;
         internal static ConfigEntry<float> AiDriveByOffset;
@@ -81,7 +81,7 @@ namespace WildWasteland.Modules.Patrols
         internal static ConfigEntry<int> CleanupMaxCars;
         // [Convoy spawner]
         internal static ConfigEntry<bool> ConvoyEnabled;
-        internal static ConfigEntry<float> MaxHeat, HeatIntervalKm, ConvoySpawnDistance, MinConvoyCooldown, MaxConvoyCooldown;
+        internal static ConfigEntry<float> ConvoySpawnDistance;
         // pose settings (F7 "Patrols / Pose", "Patrols / Pose.<Human>"; were hidden behind PoseConfiguration = true)
         internal static PoseFloat DriverOffsetX, DriverOffsetY, DriverOffsetZ;
         internal static PoseBool PoseEnabled;
@@ -123,7 +123,7 @@ namespace WildWasteland.Modules.Patrols
             ConvoyEnabled = cfg.Player(null, "Automatic spawns", true,
                 "Raider patrols and convoys spawn on their own while you play. Off = no automatic spawns at all (the editor's test spawns still work)");
             Migrate(cfg, ConvoyEnabled, "Convoy spawner", "Enabled"); Migrate(cfg, ConvoyEnabled, "General", "Enabled");
-            WorldTrafficEnabled = cfg.Player(null, "World traffic", false,
+            WorldTrafficEnabled = cfg.Player(null, "World traffic", true,
                 "Persistent patrols and convoys travelling between known camps; replaces the automatic spawn timer. Experimental, opt in");
             Migrate(cfg, WorldTrafficEnabled, "World traffic prototype", "Enabled");
             FactionBattles = cfg.Player(null, "Faction battles", true,
@@ -148,10 +148,6 @@ namespace WildWasteland.Modules.Patrols
                 "A raider car built from a template that has a cassette in its radio plays it at full volume from the moment it spawns, " +
                 "until you switch the radio off. Off = the cassette sits in the radio, silent, as in a parked car");
             Migrate(cfg, RaiderMusic, "General", "Raider music");
-            SpawnWarning = cfg.Player(null, "Spawn warning", true,
-                "When raiders spawn (an automatic patrol or convoy, or a test spawn from the editor) a red warning appears top left for a few " +
-                "seconds: \"You hear a sound of distant engines\". Template spawns do not show it. Off = no warning");
-            Migrate(cfg, SpawnWarning, "General", "SpawnWarning");
             CustomPaintjobs = cfg.Player(null, "Custom paintjobs", true,
                 "Raider cars wear the paint jobs from the Patrols\\Textures folder (body textures, truck container sides and inside). " +
                 "Off = they keep the game's own textures (cars spawned from then on; the textures are not loaded at game start)");
@@ -166,7 +162,7 @@ namespace WildWasteland.Modules.Patrols
                 "Raider engines overheat like yours (smoke, steam, the engine wears down). Off = they never overheat while their crew drives; " +
                 "a car you take or an engine you loot heats normally again");
             Migrate(cfg, RaidersOverheat, "Balance", "RaidersOverheat");
-            FuryRoad = cfg.Player(null, "Fury Road", false,
+            FuryRoad = cfg.Player(null, "Fury Road", true,
                 "Every patrol and convoy group can spawn from the start: their minimum distance travelled and minimum boss kills are ignored. " +
                 "Off = groups unlock with distance and bosses as set in the editor");
             Migrate(cfg, FuryRoad, "General", "Fury Road");
@@ -176,7 +172,7 @@ namespace WildWasteland.Modules.Patrols
             TacticalDriving = cfg.Player(null, "Tactical driving", true, "World traffic: varied attack runs and vehicle-checked camp approaches");
             Migrate(cfg, TacticalDriving, "World traffic prototype", "TacticalDriving");
             WarRig.S.SpawnEnabled = cfg.Player(null, "War Rig spawns", true,
-                "War Rig tanker trailer (hitches to the Rustchief): allow new spawns in the game's trailer spawners (and Apocaspawner's catalog). Existing rigs are unaffected");
+                "Allow the abandoned War Rig POI and manual War Rig spawns. World discovery chance is in POI / World. Existing rigs are unaffected");
             cfg.Migrate(WarRig.S.SpawnEnabled, WarRigCfg, "Spawn", "Enabled");
             WarRig.S.GroundRecoveryEnabled = cfg.Player(null, "War Rig ground recovery", false,
                 "Rescue a War Rig (with its truck and passengers) after a confirmed fall below the terrain. Off by default");
@@ -187,15 +183,6 @@ namespace WildWasteland.Modules.Patrols
         void BindValues(ModuleConfig cfg)
         {
             const string sp = "Spawning";
-            MinConvoyCooldown = cfg.Player(sp, "MinConvoyCooldown", 5f,
-                "Shortest time between two raider spawns (minutes; 0 = can follow immediately). Each wait is rolled between this and " +
-                "MaxConvoyCooldown, a little shorter at high heat. A change applies from the next roll", new AcceptableValueRange<float>(0f, 120f));
-            Migrate(cfg, MinConvoyCooldown, "Scaling", "MinConvoyCooldown");
-            MaxConvoyCooldown = cfg.Player(sp, "MaxConvoyCooldown", 60f,
-                "Longest time between two raider spawns (minutes; 0 = automatic spawning off)", new AcceptableValueRange<float>(0f, 240f));
-            Migrate(cfg, MaxConvoyCooldown, "Scaling", "MaxConvoyCooldown");
-            PatrolSpawnChancePercent = cfg.Player(sp, "PatrolSpawnChancePercent", 80f, "Global patrol/convoy distribution: 80 = 80 % patrols and 20 % convoys when both have eligible types", new AcceptableValueRange<float>(0f, 100f));
-            Migrate(cfg, PatrolSpawnChancePercent, "Scaling", "PatrolSpawnChancePercent");
             PatrolSizePercent = cfg.Player(sp, "PatrolSizePercent", 100f, "Size of every patrol / convoy that spawns, for weaker PCs: below 100 the group loses cars at random down to this share (rounded down, never below one car; a convoy keeps all of its trucks)", new AcceptableValueRange<float>(10f, 100f));
             Migrate(cfg, PatrolSizePercent, "Scaling", "PatrolSizePercent");
             MaxPatrols = cfg.Player(sp, "Max patrols", 3, "Maximum tracked patrol groups, including arrived and passing Coyote groups; replaces density", new AcceptableValueRange<int>(0, 64));
@@ -226,6 +213,8 @@ namespace WildWasteland.Modules.Patrols
             Migrate(cfg, MerchantCheckMinutes, "Experimental", "Merchant check interval (minutes)");
 
             const string cb = "Combat";
+            NpcRamDamageMultiplier = cfg.Player(cb, "NPC ram damage multiplier", 4f,
+                "Damage multiplier when any car hits a creature other than the player, including NPC-driven cars: 4 = four times the game's bumper damage, 1 = vanilla, 0 = no damage", new AcceptableValueRange<float>(0f, 10f));
             ShootDistance = cfg.Player(cb, "ShootDistance", 40f, "Occupants only shoot at a target closer than this, m", new AcceptableValueRange<float>(1f, 200f));
             Migrate(cfg, ShootDistance, "Combat", "ShootDistance");
             WitnessMeChance = cfg.Player(cb, "WitnessMeChance", 10f,
@@ -244,9 +233,6 @@ namespace WildWasteland.Modules.Patrols
                 "at 0 %. 20 = about one part in five, 0 = all junk, 100 = all usable", new AcceptableValueRange<float>(0f, 100f));
             Migrate(cfg, ExplodedLootPercent, "Scaling", "ExplodedCarPartsPercent");
 
-            WarRig.S.WarRigPercent = cfg.Player("War Rig", "WarRigPercent", 50,
-                "War Rig share (%) of the trailer spawners' Scrapwagon / War Rig picks; the rest is Scrapwagon. Applies to future natural spawns", new AcceptableValueRange<int>(0, 100));
-            cfg.Migrate(WarRig.S.WarRigPercent, WarRigCfg, "Spawn", "WarRigPercent");
         }
 
         // ---------------------------------------------------------------- [Keys]
@@ -358,14 +344,13 @@ namespace WildWasteland.Modules.Patrols
             foreach (var e in new ConfigEntryBase[] { TurretThigh, TurretKnee, TurretHipHeight, RiderLanceOffset, RiderLanceRotation }) MigrateBase(cfg, e, "Combat", e.Definition.Key);
 
             StuckPedalChance = cfg.Tool(TDriving, "StuckPedalChance", 5f, "% chance that a killed driver's gas pedal stays stuck; otherwise the gas is released and the car rolls to a stop", new AcceptableValueRange<float>(0f, 100f));
-            StuckPedalTakeoverSeconds = cfg.Tool(TDriving, "StuckPedalTakeoverSeconds", 4f, "With a dead driver's foot stuck on the gas, a live passenger kicks it off after this long so the car can stop, s", new AcceptableValueRange<float>(0f, 120f));
             BailChance = cfg.Tool(TDriving, "BailChance", 25f,
                 "% chance that a passenger who outlives the driver gets out and fights on foot once the car stands still; otherwise it takes the wheel. " +
                 "If the player took the car first it always gets out", new AcceptableValueRange<float>(0f, 100f));
             StuckBailChance = cfg.Tool(TDriving, "StuckBailChance", 100f,
                 "% chance that, when the driving AI gives up on a stuck car (after AI MaxRecovers), the whole crew gets out and fights on foot " +
                 "instead of the car waiting WaitSeconds and trying again", new AcceptableValueRange<float>(0f, 100f));
-            foreach (var e in new ConfigEntryBase[] { StuckPedalChance, StuckPedalTakeoverSeconds, BailChance, StuckBailChance }) MigrateBase(cfg, e, "Driving", e.Definition.Key);
+            foreach (var e in new ConfigEntryBase[] { StuckPedalChance, BailChance, StuckBailChance }) MigrateBase(cfg, e, "Driving", e.Definition.Key);
 
             AiThrottle = cfg.Tool(TAI, "Throttle", 1f, "Maximum throttle the driving AI uses (0..1); also the throttle of a stuck pedal", new AcceptableValueRange<float>(0.05f, 1f));
             AiDriveByOffset = cfg.Tool(TAI, "DriveByOffset", 5f, "When the target may not be rammed (the template's ramsTargets), the car aims this far beside it and drives past instead, m", new AcceptableValueRange<float>(1f, 20f));
@@ -402,12 +387,8 @@ namespace WildWasteland.Modules.Patrols
             MaxPartsFill = cfg.Tool(TLoot, "MaxPartsFill", 60f, "Highest fill (%) of tank, oil and water; each rolled separately, weighted toward two thirds of the way from Min to Max", new AcceptableValueRange<float>(0f, 100f));
             Migrate(cfg, MinPartsFill, "Loot", "MinPartsFill"); Migrate(cfg, MaxPartsFill, "Loot", "MaxPartsFill");
 
-            MaxHeat = cfg.Tool(TSpawner, "MaxHeat", 3f,
-                "Upper limit of the heat (3 = 300 %). Below 100 % the heat is how complete a group is; above 100 % it only raises the chances of " +
-                "shortens the cooldown a little; group definitions, cargo and exact rosters are configured in the editor", new AcceptableValueRange<float>(0f, 5f));
-            HeatIntervalKm = cfg.Tool(TSpawner, "HeatIntervalKm", 10f, "Every this many km of the game's Distance Travelled add 25 % heat (linear: 10 = 100 % at 40 km)", new AcceptableValueRange<float>(1f, 200f));
             ConvoySpawnDistance = cfg.Tool(TSpawner, "SpawnDistance", 350f, "How far away a spawn appears (m): ahead of your car, up to 45 degrees left or right; behind you when on foot", new AcceptableValueRange<float>(50f, 1000f));
-            foreach (var e in new ConfigEntryBase[] { MaxHeat, HeatIntervalKm, ConvoySpawnDistance }) MigrateBase(cfg, e, "Convoy spawner", e.Definition.Key);
+            MigrateBase(cfg, ConvoySpawnDistance, "Convoy spawner", ConvoySpawnDistance.Definition.Key);
 
             CleanupMinutes = cfg.Tool(TCleanup, "RemoveAfterMinutes", 10f, "A raider car farther than MinDistance for this long is removed with its crew and cargo (0 = never by time)", new AcceptableValueRange<float>(0f, 600f));
             CleanupMaxCars = cfg.Tool(TCleanup, "MaxCars", 30, "With more raider cars than this in the world, the farthest ones beyond MinDistance are removed first (0 = no limit)", new AcceptableValueRange<int>(0, 200));

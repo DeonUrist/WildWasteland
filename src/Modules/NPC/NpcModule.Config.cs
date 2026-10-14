@@ -37,15 +37,13 @@ namespace WildWasteland.Modules.NPC
         internal static ConfigEntry<string> ConeInsects, ConeBeasts, ConeBrutes, ConeBurrowers, BurrowPrefabs, BurrowSandKeywords;
         internal static ConfigEntry<bool> BurrowEnabled, BurrowTerrainIsSand, BurrowUseLayers, BurrowLog;
         internal static ConfigEntry<string> HuntPrefabs, PouncePrefabs;
-        internal static ConfigEntry<Key> WebTestKey;
-        internal static ConfigEntry<int> WebTestMax, NestMinWebs, NestMaxWebs, NestGroundMin, NestGroundMax, NestSpots;
+        internal static ConfigEntry<int> NestMinWebs, NestMaxWebs, NestGroundMin, NestGroundMax, NestSpots;
         internal static ConfigEntry<bool> NestsEnabled, NestLog, AmbushEnabled;
         internal static ConfigEntry<string> AmbushPrefabs, DogPrefabs;
         internal static ConfigEntry<bool> DogBiteEnabled, DogLog;
         internal static ConfigEntry<float> AmbushMin, AmbushMax;
         internal static ConfigEntry<string> NestPrefabs, NestSitters;
         internal static ConfigEntry<float> NestBuildRange, NestFreeRange, NestPoiRadius, NestMaxRadius, NestFrameBudgetMs, NestAlarmSpeed, NestAlarmSeconds, NestAlarmCooldown, NestSitterReach;
-        internal static ConfigEntry<float> WebTestLifetime;
         internal static ConfigEntry<bool> PounceEnabled, PounceLog;
         internal static ConfigEntry<float> PounceZigMin, PounceZigMax, PounceLeapMin, PounceLeapMax, PounceZigAngle, PounceZigSeconds, PounceZigSpeed, PounceLeapSpeed, PouncePitch, PounceFleeMin, PounceFleeMax, PounceCooldownMin, PounceCooldownMax;
         internal static ConfigEntry<float> HuntRange, HuntMaxDistance, HuntBehind, HuntSpeed, HuntCooldown, HuntDiveSeconds, HuntRiseSeconds, HuntFallbackMin, HuntFallbackMax, HuntTravelFactor, HuntBurrowFactor, HuntFxScale, HuntFxVolume, HuntFxPitch;
@@ -78,6 +76,13 @@ namespace WildWasteland.Modules.NPC
             return e;
         }
 
+        private static void Renamed(ConfigEntryBase e, string oldRaw)
+        {
+            if (e == null || oldRaw == null) return;
+            try { e.SetSerializedValue(oldRaw); Core.Log.Info("[NPC] " + e.Definition.Key + " = " + oldRaw + " (from the old key name)"); }
+            catch (Exception ex) { Core.Log.Warn("[NPC] could not carry over " + e.Definition.Key + ": " + ex.Message); }
+        }
+
         public override void BindConfig(ModuleConfig cfg)
         {
             _cfg = cfg;
@@ -88,7 +93,7 @@ namespace WildWasteland.Modules.NPC
                 "NPCs steer around obstacles, use the maps of camps, caves and buildings, take shooting positions, kneel and aim. Off = the game's own movement.", "General", "EnableNpcPathfinding");
             AimEnabled = V(null, "NpcAim", true, "NPC gunmen pace their bursts: they hold fire beyond their gun's reach, take longer to aim at a distance and lead moving targets.", "Gunplay", "NpcAim");
             IdleEnabled = V(null, "EnableIdleBehavior", true, "Camp raiders who lose you go back to their spawn spot, and walk a short round in their camp while nothing happens.", "Pathfinding", "EnableIdleBehavior");
-            IdleCoyotes = V(null, "CoyotesIdle", false, "The idle behaviour also for the peaceful Coyote towns.", "Pathfinding", "CoyotesIdle");
+            IdleCoyotes = V(null, "CoyotesIdle", true, "The idle behaviour also for the peaceful Coyote towns.", "Pathfinding", "CoyotesIdle");
             FriendsPassThrough = V(null, "FriendsPassThrough", true, "NPCs of the same faction walk through each other while they fight, search or walk home - no bumping, no blocking a passage. Solid again once they are idle.", "Pathfinding", "FriendsPassThrough");
             StormsEnabled = _cfg.Main.Bind(_cfg.Section(null), "Storms", true, "Sandstorms (and ApocaDustStorm's dust storms) dim NPC sight and hearing; tornado funnels make NPCs forget what they were doing. Off = storms do not affect the senses.");
             BurrowEnabled = B("Burrow", true, "Scorpions burrow into sand when nothing alerts them (and come up every 10-30 s), eyes above the surface. Big scorpions also hunt underground: they travel under the sand and come up behind their enemy.");
@@ -98,7 +103,7 @@ namespace WildWasteland.Modules.NPC
             DogBiteEnabled = B("DogBite", true, "Quadrupeds commit to dodgeable running bites and use faster bites at close range. Without the animation bundle, the original procedural bite is used.");
             DogAnimationsEnabled = B("DogAnimations", true, "Retargeted animations on hounds, Grimhound and nightwalkers. Requires NPC/Models/npcai_dogs.bundle; otherwise the existing procedural bite remains active.");
             DogsLieDown = B("DogsLieDown", true, "Non-boss quadrupeds alternate standing and lying idle, spending a random 10-25 seconds in each pose. Threats interrupt rest through get-up.");
-            DogJumpAttack = B("DogJumpAttack", false, "Optional short, collision-checked jumping bite. Native damage is applied only if the target remains within reach at contact.");
+            DogJumpAttack = B("DogJumpAttack", true, "Optional short, collision-checked jumping bite. Native damage is applied only if the target remains within reach at contact.");
             DogCompanionCompatEnabled = _cfg.Main.Bind(_cfg.Section(null), "DogCompanionCompat", true, "With FlyingKlick's Dog Companion installed: the companion dog uses the same dog animations (locomotion, bites, sitting in vehicles, sneaking). Off = Dog Companion's own behaviour.");
             // ---------------- F6: player-facing settings ----------------
             SightCone = V("Detection", "SightCone", 100f, new ConfigDescription("Width of an NPC's field of view, degrees.", new AcceptableValueRange<float>(10f, 360f)), "Detection", "SightCone");
@@ -106,14 +111,18 @@ namespace WildWasteland.Modules.NPC
             DarkSightRange = V("Detection", "DarkSightRange", 5f, new ConfigDescription("How far an NPC sees in full darkness, m.", new AcceptableValueRange<float>(0f, 100f)), "Detection", "DarkSightRange");
             ScaleWithActors = V("Pathfinding", "ScaleWithActors", false, "With many NPCs around, each one thinks less often (saves CPU in big fights).", "Pathfinding", "ScaleWithActors");
             // ---------------- [Keys] ----------------
-            ShoutKey = cfg.Hotkey("NPC shout", Key.Q,
-                "Your shout (with 'NPC shout modifier' held): you yell like a raider and every NPC hostile to you within 25 m comes to check. None = off. (Alt+Q is shared on purpose with the Patrols merchant stop signal.)");
+            // renamed from "NPC shout" / "NPC shout modifier": read the old values before the new keys are bound (and saved)
+            const string sf = "WildWasteland/settings.cfg";
+            string oldShout = Legacy.Get(sf, "Keys", "NPC shout"), oldModifier = Legacy.Get(sf, "Keys", "NPC shout modifier");
+            bool freshShout = Legacy.Get(sf, "Keys", "Shout") == null, freshModifier = Legacy.Get(sf, "Keys", "Shout modifier") == null;
+            ShoutKey = cfg.Hotkey("Shout", Key.Q,
+                "Your shout (with 'Shout modifier' held): you yell like a raider and every NPC hostile to you within 25 m comes to check. None = off. (Alt+Q is shared on purpose with the Patrols merchant stop signal.)");
             cfg.Migrate(ShoutKey, LegacyCfg, "Detection", "PlayerShoutKey");
-            ShoutModifier = cfg.Hotkey("NPC shout modifier", Key.LeftAlt,
-                "Hold this and press 'NPC shout' to shout (either Alt works when this is an Alt key); the game's own Q actions are ignored while it is held. None = the key alone.");
+            if (freshShout) Renamed(ShoutKey, oldShout);
+            ShoutModifier = cfg.Hotkey("Shout modifier", Key.LeftAlt,
+                "Hold this and press 'Shout' to shout (either Alt works when this is an Alt key); the game's own Q actions are ignored while it is held. None = the key alone.");
             cfg.Migrate(ShoutModifier, LegacyCfg, "Detection", "PlayerShoutKeyModifier");
-            WebTestKey = cfg.Hotkey("NPC test web", Key.None,
-                "TEST: puts a spider web where you look (Shift + the key removes them all). None = off (also on F7 > NPC AI & navigation > Hazards). Was F9 in NPCAI, which is the game's hide-UI key.");
+            if (freshModifier) Renamed(ShoutModifier, oldModifier);
             // ---------------- F7 (tools.cfg): debug ----------------
             VerboseLog = H("Debug", "VerboseLog", false, "Detailed NPC logs (hits, detection, movement, maps) - also written when the global [Debug] VerboseLog is off.");
             _cfg.Migrate(VerboseLog, LegacyCfg, "Debug", "VerboseLog");
@@ -174,8 +183,6 @@ namespace WildWasteland.Modules.NPC
             NestAlarmCooldown = H("Nests", "AlarmCooldown", 5f, new ConfigDescription("A nest is alarmed again by its webs at most this often, s.", new AcceptableValueRange<float>(1f, 120f)));
             NestSitterReach = H("Nests", "SitterReach", 1f, new ConfigDescription("A spider sitting in its web attacks only what comes this close, m (shot or alarmed: at once).", new AcceptableValueRange<float>(0.3f, 20f)));
             NestLog = H("Nests", "Log", false, "Log seating, drops and nests freed (the nest summary and alarms are always logged).");
-            WebTestMax = H("Webs", "TestMax", 24, new ConfigDescription("TEST: at most this many test webs; the oldest goes.", new AcceptableValueRange<int>(1, 200)));
-            WebTestLifetime = H("Webs", "TestLifetime", 900f, new ConfigDescription("TEST: a test web disappears after this long, s (0 = never).", new AcceptableValueRange<float>(0f, 36000f)));
             PouncePrefabs = H("Pounce", "Prefabs", "Spider_Small", "Creatures that pounce (exact prefab names).");
             PounceZigMin = H("Pounce", "ZigzagFromMin", 8f, new ConfigDescription("It starts zigzagging this close at the least, m (chosen at random per try).", new AcceptableValueRange<float>(1f, 30f)));
             PounceZigMax = H("Pounce", "ZigzagFromMax", 11f, new ConfigDescription("... and at the most, m.", new AcceptableValueRange<float>(1f, 20f)));
@@ -258,7 +265,7 @@ namespace WildWasteland.Modules.NPC
             FlankWidth = H("Senses", "FlankWidth", 10f, new ConfigDescription("See FlankDistance, m.", new AcceptableValueRange<float>(0f, 50f)));
             NoticeSeconds = H("Senses", "NoticeSeconds", 0.2f, new ConfigDescription("How long a target has to be in view before the NPC reacts, s (up close, within 15 m).", new AcceptableValueRange<float>(0f, 5f)));
             NoticeFar = H("Senses", "NoticeFar", 2f, new ConfigDescription("... and at the edge of its sight, s (in between it scales with the distance; up to twice as long in the dark).", new AcceptableValueRange<float>(0f, 10f)));
-            LoseSeconds = H("Senses", "LoseSeconds", 1.5f, new ConfigDescription("How long a target can be out of view before the NPC counts it as lost and goes to where it last saw it, s.", new AcceptableValueRange<float>(0f, 10f)));
+            LoseSeconds = H("Senses", "LoseSeconds", 5f, new ConfigDescription("How long a target can be out of view before the NPC counts it as lost and goes to where it last saw it, s (at least 5).", new AcceptableValueRange<float>(5f, 10f)));
             Guesses = H("Senses", "Guesses", 3, new ConfigDescription("How many times an NPC that lost you from sight goes to a new spot (a guess for humans, your real position for trackers) before it gives up and searches where it stands.", new AcceptableValueRange<int>(0, 10)));
             GuessRadius = H("Senses", "GuessRadius", 8f, new ConfigDescription("A human that reaches the spot it last saw you and finds nothing guesses where you went: this far off (m) the first time, twice that the second, three times the third (PursuitMin..Max guesses). Trackers follow your real position instead.", new AcceptableValueRange<float>(0f, 50f)));
             Trackers = H("Senses", "Trackers", "Hound,Grimhound,Pup,Nightwalker,Spider,Arachnid,Scorpion", "NPC types (name parts) that track you by smell: they go to where you really are when they lose sight, and know exactly where a hit came from.");

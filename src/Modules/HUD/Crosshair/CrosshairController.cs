@@ -27,6 +27,45 @@ namespace WildWasteland.Modules.HUD
         private static float _nextLook;
         private static int _appliedMode = -1;
         private static readonly List<GameObject> _roots = new List<GameObject>(64);
+        private static Sprite _previewSprite;
+        private static Texture _previewTexture;
+        private static Rect _previewUv = new Rect(0, 0, 1, 1);
+
+        internal static void PreparePreview()
+        {
+            LoadAssets();
+            _previewSprite = _originalOverride != null ? _originalOverride : _originalSprite;
+            _previewTexture = _originalTexture;
+            _previewUv = _originalTexture != null ? _originalUv : new Rect(0, 0, 1, 1);
+            if (_previewSprite == null && _previewTexture == null)
+            {
+                foreach (var image in Resources.FindObjectsOfTypeAll<Image>())
+                    if (image != null && image.gameObject.scene.IsValid() && image.name == "MouseCrosshair")
+                    { _previewSprite = image.overrideSprite != null ? image.overrideSprite : image.sprite; break; }
+            }
+            if (_previewSprite == null && _previewTexture == null)
+                foreach (var image in Resources.FindObjectsOfTypeAll<RawImage>())
+                    if (image != null && image.gameObject.scene.IsValid() && image.name == "MouseCrosshair") { _previewTexture = image.texture; _previewUv = image.uvRect; break; }
+            LoadLines();
+        }
+
+        internal static void DrawPreview(Rect rect, int mode)
+        {
+            if (mode == 0) return;
+            Sprite sprite = mode == 1 ? _previewSprite : mode == 2 ? _linesSprite : _dotSprite;
+            Texture texture = mode == 1 ? _previewTexture : mode == 2 ? _linesTexture : _dotTexture;
+            if (mode == 3)
+            {
+                float size = rect.width * HudModule.DotScale.Value;
+                rect = new Rect(rect.center.x - size / 2, rect.center.y - size / 2, size, size);
+            }
+            if (sprite != null)
+            {
+                var uv = sprite.textureRect;
+                GUI.DrawTextureWithTexCoords(rect, sprite.texture, new Rect(uv.x / sprite.texture.width, uv.y / sprite.texture.height, uv.width / sprite.texture.width, uv.height / sprite.texture.height));
+            }
+            else if (texture != null) GUI.DrawTexture(rect, texture, ScaleMode.ScaleToFit);
+        }
 
         internal static string Status
         {
@@ -79,7 +118,7 @@ namespace WildWasteland.Modules.HUD
             Vector3 wantCross = mode == 0 ? Vector3.zero : mode == 3 ? _crossScale * HudModule.DotScale.Value : _crossScale;
             if (_cross.localScale != wantCross) _cross.localScale = wantCross;
             if (_appliedMode == mode) return;
-            if (mode >= 2) LoadAssets();
+            if (mode >= 2) { LoadAssets(); LoadLines(); }
             if (_image != null)
             {
                 _image.sprite = mode == 2 && _linesSprite != null ? _linesSprite : mode == 3 && _dotSprite != null ? _dotSprite : _originalSprite;
@@ -125,6 +164,7 @@ namespace WildWasteland.Modules.HUD
             if (_dot != null) _dot.localScale = _dotScale;
             RestoreCross(); _dot = null; _cross = null; _image = null; _raw = null; _nextLook = 0f; _appliedMode = -1;
             _originalSprite = null; _originalOverride = null; _originalTexture = null;
+            _previewSprite = null; _previewTexture = null;
         }
         /// <summary>Module off: vanilla UI back, loaded textures/sprites destroyed, next Init loads them again.</summary>
         internal static void Shutdown()
@@ -144,8 +184,39 @@ namespace WildWasteland.Modules.HUD
         {
             if (_assetsAttempted) return;
             _assetsAttempted = true;
-            Load("crosshair_lines.png", out _linesTexture, out _linesSprite);
             Load("crosshair_dot.png", out _dotTexture, out _dotSprite);
+        }
+        private static void LoadLines()
+        {
+            if (_linesTexture != null) return;
+            var sprite = _originalOverride != null ? _originalOverride : _originalSprite != null ? _originalSprite : _previewSprite;
+            var source = sprite != null ? sprite.texture : _originalTexture != null ? _originalTexture : _previewTexture;
+            if (source == null) return;
+            var uv = _originalTexture != null ? _originalUv : _previewUv;
+            var crop = sprite != null ? sprite.textureRect : new Rect(uv.x * source.width, uv.y * source.height, uv.width * source.width, uv.height * source.height);
+            var previous = RenderTexture.active;
+            var buffer = RenderTexture.GetTemporary(source.width, source.height, 0, RenderTextureFormat.ARGB32);
+            Texture2D texture = null;
+            try
+            {
+                Graphics.Blit(source, buffer); RenderTexture.active = buffer;
+                int width = Mathf.RoundToInt(crop.width), height = Mathf.RoundToInt(crop.height);
+                texture = new Texture2D(width, height, TextureFormat.RGBA32, false) { name = "Wild Wasteland vanilla horizontal crosshair", hideFlags = HideFlags.HideAndDontSave, filterMode = source.filterMode, wrapMode = TextureWrapMode.Clamp };
+                texture.ReadPixels(crop, 0, 0, false);
+                var pixels = texture.GetPixels32();
+                // The vanilla horizontal bars occupy the outer quarters; clear the central vertical bars.
+                for (int y = 0; y < height; y++)
+                    for (int x = width / 4; x < width * 3 / 4; x++) pixels[y * width + x] = new Color32(0, 0, 0, 0);
+                texture.SetPixels32(pixels); texture.Apply(false, true);
+                _linesSprite = Sprite.Create(texture, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f));
+                _linesSprite.hideFlags = HideFlags.HideAndDontSave; _linesTexture = texture;
+            }
+            catch (Exception e)
+            {
+                if (texture != null) UnityEngine.Object.Destroy(texture);
+                Log.Warn("[HUD] Vanilla horizontal crosshair: " + e.Message);
+            }
+            finally { RenderTexture.active = previous; RenderTexture.ReleaseTemporary(buffer); }
         }
         private static void Load(string name, out Texture2D texture, out Sprite sprite)
         {

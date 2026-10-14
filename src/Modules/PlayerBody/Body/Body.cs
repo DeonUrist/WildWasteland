@@ -1064,7 +1064,7 @@ namespace WildWasteland.Modules.PlayerBody
 
         public void SetMesh(bool firstPerson, bool inCar, bool gameArms = false)
         {
-            var want = !firstPerson ? Model.Full : inCar && !gameArms && PlayerBodyModule.EmptyHandArms.Value ? Model.NoHead : Model.NoArms;   // arms on the wheel only with FirstPersonArms
+            var want = !firstPerson ? Model.Full : inCar && !gameArms && PlayerBodyModule.ArmsInCar ? Model.NoHead : Model.NoArms;   // arms on the wheel only with FirstPersonArms
             if (_smr.sharedMesh != want) _smr.sharedMesh = want;
             _innerOn = firstPerson;
             if (_inner != null) { var inside = firstPerson ? Model.Inside(want) : null; if (_inner.sharedMesh != inside) _inner.sharedMesh = inside; }
@@ -1283,13 +1283,13 @@ namespace WildWasteland.Modules.PlayerBody
         }
 
         // ---------------------------------------------------------------- weapon in hand (third person)
-        private bool _propShown;
+        private bool _propShown, _propShadow;
         // the weapon model: drawn in third person; in first person (the game draws its own gun) only its shadow, next to her body's shadow
         private void ShowProp(bool on)
         {
-            if (_prop == null || _propShown == on) return;
-            _propShown = on;
-            bool shadow = !on && PlayerBodyModule.BodyFirstPerson.Value;
+            bool shadow = !on && PlayerBodyModule.BodyFirstPerson.Value && (!Game.InCar || PlayerBodyModule.BodyInCar);
+            if (_prop == null || _propShown == on && _propShadow == shadow) return;
+            _propShown = on; _propShadow = shadow;
             var mode = on ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
             foreach (var r in _prop.GetComponentsInChildren<Renderer>(true)) { r.enabled = on || shadow; r.shadowCastingMode = mode; }
         }

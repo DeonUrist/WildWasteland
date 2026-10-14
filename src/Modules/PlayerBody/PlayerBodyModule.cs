@@ -13,7 +13,7 @@ namespace WildWasteland.Modules.PlayerBody
 {
     // Player body & animation (ported from Apocaplayer 2.3.9, which had absorbed Apocaclimber): a full character body under the
     // first-person camera and in the driver's seat, third person on foot and in cars, the Mixamo animation framework (ModAPI, also
-    // used by NPC and Patrols through Core.Services.Animation), climbing, step-up, vehicle hotkeys / HUD and first-person polish.
+    // used by NPC and Patrols through Core.Services.Animation), climbing, vehicle hotkeys / HUD and first-person polish.
     // The old Plugin's config statics live here under the same names; Apocaplayer's own Runner / ClimbRunner / ModApiRunner loops are
     // scheduler jobs (BodyRunner), its Harmony patches are Core hooks or module patches (see Init).
     public sealed class PlayerBodyModule : ModuleBase
@@ -38,10 +38,14 @@ namespace WildWasteland.Modules.PlayerBody
         internal enum Gender { Female, Male }
         internal static ConfigEntry<Gender> Character;
         internal static ConfigEntry<bool> ThirdPersonOnFoot, ToggleMiddleMouse, DynamicCrosshair, BodyFirstPerson, EmptyHandArms, FemaleArms, ReplaceDriver,
-            EquipmentOnBody, PainSounds, FirstPersonSwayOn, FirstPersonJumpFix, SmoothAimDownSights, PickAssistOn;
-        internal static ConfigEntry<bool> ClimbingOn, JumpTriggersClimbing, AutomaticStepUp;
+            EquipmentOnBody, PainSounds, FirstPersonSwayOn, SmoothAimDownSights, PickAssistOn;
+        internal static ConfigEntry<bool> ClimbingOn, JumpTriggersClimbing;
+        internal static ConfigEntry<bool> FullBodyOnlyOnFoot;
+        internal static ConfigEntry<bool> FirstPersonArmsOnlyOnFoot;
+        internal static bool BodyInCar { get { return BodyFirstPerson.Value && !FullBodyOnlyOnFoot.Value; } }
+        internal static bool ArmsInCar { get { return EmptyHandArms.Value && !FirstPersonArmsOnlyOnFoot.Value; } }
         internal static ConfigEntry<bool> OcclusionPrototype, OcclusionInVehicle;
-        internal static ConfigEntry<bool> VehicleStatusHint, VehicleHotkeyHint, IgnitionControlOn, RustlinerDoorways, LanceIgnoresOwnCar;
+        internal static ConfigEntry<bool> VehicleStatusHint, VehicleHotkeyHint, IgnitionControlOn, LanceIgnoresOwnCar;
         // [Keys]
         internal static ConfigEntry<Key> ObserveKey, ClimbKey, CassetteKey, VolumeDownKey, VolumeUpKey;
 
@@ -50,7 +54,7 @@ namespace WildWasteland.Modules.PlayerBody
         internal static ConfigEntry<string> ModelFile, TextureFile, ArmsTextureFile, AnimBundleFile;
         internal static ConfigEntry<string> IdleClip, RunClip, RifleClip, PistolClip, MeleeClip;
         internal static ConfigEntry<float> BodyBack, BodyBackDown, RunClipSpeed, WalkStride, RunFrom, ThirdDistance, ThirdHeight, ThirdShoulder, AimPitchShare;
-        internal static ConfigEntry<float> CarCameraForward, FirstPersonWeaponBack, FirstPersonChestLean, FirstPersonJumpKneeCorrection;
+        internal static ConfigEntry<float> CarCameraForward, FirstPersonWeaponBack, FirstPersonChestLean;
         internal static ConfigEntry<float> FpCamX, FpCamY, FpCamZ, FpCarCamX, FpCarCamY, FpCarCamZ;
         internal static ConfigEntry<float> ThirdCarDistance, ThirdCarHeight;
         internal static ConfigEntry<float> JumpClipStart, StrikeWindup, PickAssistRadius, AdsTime, SeatDrop;
@@ -101,16 +105,17 @@ namespace WildWasteland.Modules.PlayerBody
             Mig(ToggleMiddleMouse, "Debug", "ToggleMiddleMouse"); Mig(ToggleMiddleMouse, "General", "Toggle Observing");
             DynamicCrosshair = cfg.Player("", "DynamicCrosshair", true, "Third person with a weapon drawn: the crosshair sits where your shots and melee hits really land (the eye ray from the head). Without a weapon, or Off: the crosshair stays centred and the camera turns toward the aim point.");
             Mig(DynamicCrosshair, "CAMERA", "DynamicCrosshair");
-            BodyFirstPerson = cfg.Player("", "BodyFirstPerson", false, "First person: see the body (legs and torso when you look down, the shadow, the body in the driver's seat). Off = only the first-person arms.");
+            BodyFirstPerson = cfg.Player("", "BodyFirstPerson", true, "First person: see the body (legs and torso when you look down, the shadow, the body in the driver's seat). Off = only the first-person arms.");
             Mig(BodyFirstPerson, "General", "BodyFirstPerson");
-            EmptyHandArms = cfg.Player("", "FirstPersonArms", false, "First person with nothing in hand: show the body's own arms (idle/walk swing, hands on the wheel in a car). Off = no body arms in first person; the game's weapon and item arms always show.");
+            FullBodyOnlyOnFoot = cfg.Player("", "FullBodyOnlyOnFoot", false, "Full Body: show the first-person body only on foot, keeping the driver's first-person view clear.");
+            EmptyHandArms = cfg.Player("", "FirstPersonArms", true, "First person with nothing in hand: show the body's own arms (idle/walk swing, hands on the wheel in a car). Off = no body arms in first person; the game's weapon and item arms always show.");
             Mig(EmptyHandArms, "General", "FirstPersonArms");
+            FirstPersonArmsOnlyOnFoot = cfg.Player("", "FirstPersonArmsOnlyOnFoot", false, "First Person Arms: show the empty-handed arms only on foot, hiding the hands on the wheel while driving.");
             FemaleArms = cfg.Player("", "FirstPersonArmSkin", true, "The game's first-person arms and kick leg wear your character's skin (Female; Male keeps the game's own).");
             ReplaceDriver = cfg.Player("", "ReplaceDriver", true, "Your character replaces the game's man in the driver's seat (posed from the seat, guns and throws from the seat) and on the TAB screen picture.");
             EquipmentOnBody = cfg.Player("", "EquipmentOnBody", true, "Show the carried equipment on the body: backpack, long guns on the back, sidearms, blades, binoculars, flashlight (with its glow).");
             PainSounds = cfg.Player("", "FemalePainSounds", true, "Female character: four female hurt sounds and a female death sound.");
             FirstPersonSwayOn = cfg.Player("", "SmoothWeaponSway", true, "First person: frame-rate independent weapon / item sway (the game's own sway stutters with uneven frame times).");
-            FirstPersonJumpFix = cfg.Player("", "FirstPersonJumpLegs", true, "First person with the body shown: keep the knees below the hips while jumping (no knee in the eye). Strength in F7.");
             SmoothAimDownSights = cfg.Player("", "SmoothAimDownSights", true, "First person: the gun eases between hip and sights (right mouse button) instead of jumping. Time in F7.");
             PickAssistOn = cfg.Player("", "PickAssist", true, "Third person on foot: an item, part or switch close to the crosshair on screen is picked even if the eye ray misses it.");
 
@@ -118,10 +123,8 @@ namespace WildWasteland.Modules.PlayerBody
             cfg.Migrate(ClimbingOn, ClimberCfg, "General", "Enabled"); Mig(ClimbingOn, "climbing", "Enabled");
             JumpTriggersClimbing = cfg.Player("Climbing", "JumpTriggersClimbing", true, "The game's Jump key climbs onto a reachable ledge or catches one within arm's reach during a jump. Otherwise it jumps normally.");
             Mig(JumpTriggersClimbing, "climbing", "Jump triggers climbing");
-            AutomaticStepUp = cfg.Player("Climbing", "AutomaticStepUp", true, "Automatically step onto low solid obstacles up to 35 cm while moving on foot. Off while jumping, prone or driving.");
-            Mig(AutomaticStepUp, "General", "AutomaticStepUp"); Mig(AutomaticStepUp, "climbing", "AutomaticStepUp");
 
-            OcclusionPrototype = cfg.Player("Camera culling", "CameraCulling", false, "Third person: keep the camera distance and make geometry between camera and body semi-transparent (prototype; roofs and vehicles get a larger window; not inside caves). Off = the camera moves in front of obstacles.");
+            OcclusionPrototype = cfg.Player("Camera culling", "CameraCulling", true, "Third person: keep the camera distance and make geometry between camera and body semi-transparent (prototype; roofs and vehicles get a larger window; not inside caves). Off = the camera moves in front of obstacles.");
             Mig(OcclusionPrototype, "CAMERA", "OcclusionPrototype"); Mig(OcclusionPrototype, "General", "3rd person camera culling"); Mig(OcclusionPrototype, "Occlusion", "3rd person camera culling");
             OcclusionInVehicle = cfg.Player("Camera culling", "CameraCullingInVehicles", false, "Third person while driving: also use the camera culling (needs CameraCulling on).");
             Mig(OcclusionInVehicle, "General", "3rd person camera culling in vehicles"); Mig(OcclusionInVehicle, "Occlusion", "3rd person camera culling in vehicles");
@@ -131,7 +134,6 @@ namespace WildWasteland.Modules.PlayerBody
             VehicleHotkeyHint = cfg.Player("Vehicles", "VehicleHotkeyHint", true, "Show the vehicle hotkeys on the left while driving. Hiding the hints keeps the keys working.");
             Mig(VehicleHotkeyHint, "VEHICLE", "VehicleHotkeyHint");
             IgnitionControlOn = cfg.Player("Vehicles", "IgnitionKey", true, "Adds an \"Ignition\" row to the game's Controls screen (default E): each press performs one ignition/start panel click (ignition on, crank, then stop on standard cars).");
-            RustlinerDoorways = cfg.Player("Vehicles", "RustlinerDoorways", false, "Currently inactive: the Rustliner doorway fix has been withdrawn pending a different implementation. This setting has no effect.");
             LanceIgnoresOwnCar = cfg.Player("Vehicles", "LanceIgnoresOwnCar", true, "A blast lance thrown from the driver's seat flies out of your own car instead of blowing up on it.");
 
             // ---- [Keys]: gameplay keys keep Apocaplayer's defaults (polled in context: third person, climbing, driving)
@@ -152,9 +154,9 @@ namespace WildWasteland.Modules.PlayerBody
             WeaponAdjust = cfg.Tool(Ed, "WeaponAdjustment", false, "Weapon pose editor (third person, weapon drawn): numpad 8/2 6/4 7/1 move the weapon in the hand, 5 move/rotate, 9/3 pick the animation, - / * delete/copy/paste. Aiming: Page Up/Down lift the hands, Home/End tilt the head, Insert/Delete push the hands forward. Saved to config/WildWasteland/PlayerBody/weapon-poses.txt and aim-lift.txt. These keys do nothing while this is off.");
             cfg.Migrate(WeaponAdjust, OldCfg, "Debug", "WeaponAdjustment");
 
-            ThirdDistance = cfg.Tool(Cam, "ThirdPersonDistance", 2.4f, "Third person on foot: camera distance, m (the mouse wheel changes and remembers it).", new AcceptableValueRange<float>(0.8f, 8f));
+            ThirdDistance = cfg.Tool(Cam, "ThirdPersonDistance", 5.44f, "Third person on foot: camera distance, m (the mouse wheel changes and remembers it).", new AcceptableValueRange<float>(0.8f, 8f));
             cfg.Migrate(ThirdDistance, Path.Combine("Apocaplayer", "camera.cfg"), "Camera", "ThirdPersonDistance");
-            ThirdCarDistance = cfg.Tool(Cam, "ThirdPersonCarDistance", 5.5f, "Third person in a car: camera distance, m (mouse wheel).", new AcceptableValueRange<float>(2f, 15f));
+            ThirdCarDistance = cfg.Tool(Cam, "ThirdPersonCarDistance", 15f, "Third person in a car: camera distance, m (mouse wheel).", new AcceptableValueRange<float>(2f, 15f));
             cfg.Migrate(ThirdCarDistance, Path.Combine("Apocaplayer", "camera.cfg"), "Camera", "ThirdPersonCarDistance");
             ThirdHeight = cfg.Tool(Cam, "ThirdHeight", 0.25f, "Third person on foot: camera height above the eyes, m.");
             ThirdShoulder = cfg.Tool(Cam, "ThirdShoulder", 0.45f, "Third person on foot: sideways offset (over the right shoulder), m.");
@@ -169,7 +171,6 @@ namespace WildWasteland.Modules.PlayerBody
             BodyBackDown = cfg.Tool(Fp, "BodyBackDown", 0.08f, "First person: extra distance behind the camera when looking straight down, m (blended in with the pitch).");
             FirstPersonWeaponBack = cfg.Tool(Fp, "FirstPersonWeaponBack", 0.08f, "First person with a weapon drawn: the body moves this much (m) further back.");
             FirstPersonChestLean = cfg.Tool(Fp, "FirstPersonChestLean", 20f, "First person with a weapon drawn: the chest bends back by this many degrees.");
-            FirstPersonJumpKneeCorrection = cfg.Tool(Fp, "FirstPersonJumpKneeCorrection", 1f, "First person on foot (FirstPersonJumpLegs): reduce a jump's forward thigh lift to 30 degrees so the knees stay below the hips. Strength 0 to 1.");
 
             FpCarCamX = Slider(cfg, Seat, "FirstPersonDrivingX", "FirstPersonDrivingCameraX"); FpCarCamY = Slider(cfg, Seat, "FirstPersonDrivingY", "FirstPersonDrivingCameraY"); FpCarCamZ = Slider(cfg, Seat, "FirstPersonDrivingZ", "FirstPersonDrivingCameraZ");
             CarCameraForward = cfg.Tool(Seat, "CarCameraForward", 0.12f, "Driving in first person with the body shown: the view is drawn this far (m) in front of the game's eye.");
@@ -308,7 +309,6 @@ namespace WildWasteland.Modules.PlayerBody
             Scheduler.EveryFrame(this, "Body update", BodyRunner.Tick, Phase.Update);
             Scheduler.EveryFrame(this, "Body late", BodyRunner.LateTick, Phase.LateUpdate);
             Scheduler.EveryFrame(this, "ModAPI characters", BodyRunner.ModApiTick, Phase.LateUpdate);
-            Scheduler.EveryFrame(this, "Step up", BodyRunner.FixedTick, Phase.FixedUpdate);
             Scheduler.Gui(this, "Weapon pose hint + vehicle HUD", BodyRunner.Gui);
             StartEndOfFrame();
 

@@ -32,6 +32,9 @@ namespace WildWasteland.Core.UI
         /// <summary>Owning module (null = Core). Pages of a module that is not running are shown with a note and drawn read-only unless <see cref="ShowWhenModuleOff"/>.</summary>
         public IModule Owner;
         public bool ShowWhenModuleOff;
+        public bool DebugOnly;
+        /// <summary>Editors and in-game tools: drawn first on the Debug page.</summary>
+        public bool IsTool;
         /// <summary>Called when the page becomes visible / the window opens.</summary>
         public virtual void OnShow() { }
         /// <summary>Called every frame while the window is open on this page (before drawing; use for live data).</summary>
@@ -79,16 +82,18 @@ namespace WildWasteland.Core.UI
 
         public override void Draw(ToolLayout l)
         {
-            if (Intro != null) l.Text(Intro);
             if (_count != _file.Count) { _count = _file.Count; _keys.Clear(); foreach (var k in _file.Keys) if (Match(k)) _keys.Add(k); }
+            bool any = false;
+            foreach (var k in _keys) if (l.CanShowEntry(_file[k])) { any = true; break; }
+            if (!any) return;   // every entry hidden (Debug page filter): no intro, no headings
+            if (Intro != null) l.Text(Intro);
             string section = null;
             foreach (var k in _keys)
             {
+                ConfigEntryBase e = _file[k]; if (!l.CanShowEntry(e)) continue;
                 if (k.Section != section) { section = k.Section; l.Heading(section); }
-                ConfigEntryBase e = _file[k]; if (e == null) continue;
                 l.Entry(e);
             }
-            if (_keys.Count == 0) l.Text("(no settings)");
         }
     }
 
@@ -98,10 +103,15 @@ namespace WildWasteland.Core.UI
         public float X, Y, Width;
         public const float Row = 30, LabelWidth = 0.46f;
         internal string Prefix;            // unique key prefix per page for number buffers
+        internal Func<ConfigEntryBase, bool> EntryFilter;
+        internal bool DeduplicateEntries;
+        readonly HashSet<ConfigEntryBase> _drawn = new HashSet<ConfigEntryBase>();
         static ConfigEntryBase _rebinding;
         static GUIStyle _wrap; static Font _wrapFont;
 
-        internal void Begin(float width, string prefix) { X = 0; Y = 4; Width = width; Prefix = prefix; }
+        internal void Begin(float width, string prefix) { X = 0; Y = 4; Width = width; Prefix = prefix; EntryFilter = null; DeduplicateEntries = false; _drawn.Clear(); }
+        internal bool CanShowEntry(ConfigEntryBase e) { return e != null && (EntryFilter == null || EntryFilter(e)) && (!DeduplicateEntries || !_drawn.Contains(e)); }
+        bool BeginEntry(ConfigEntryBase e) { if (!CanShowEntry(e)) return false; if (DeduplicateEntries && GUI.enabled) _drawn.Add(e); return true; }
 
         public Rect Next(float h = Row) { var r = new Rect(X + 8, Y, Width - 16, h); Y += h + 4; return r; }
         public void Space(float h = 8) { Y += h; }
@@ -151,8 +161,19 @@ namespace WildWasteland.Core.UI
 
         public void Toggle(ConfigEntry<bool> e, string label = null)
         {
+            if (!BeginEntry(e)) return;
             bool v = Toggle(label ?? e.Definition.Key, e.Value);
             if (v != e.Value) e.Value = v;
+        }
+
+        public int Choices(string label, int selected, params string[] choices)
+        {
+            var r = Next(28);
+            Ledger.Label(new Rect(r.x, r.y, r.width * 0.34f, r.height), label, Ledger.Body);
+            float x = r.x + r.width * 0.34f, w = (r.width * 0.66f - (choices.Length - 1) * 6) / choices.Length;
+            for (int i = 0; i < choices.Length; i++)
+                if (Ledger.Button(new Rect(x + i * (w + 6), r.y, w, r.height), choices[i], true, i == selected)) selected = i;
+            return selected;
         }
 
         public float Slider(string label, string key, float value, float min, float max)
@@ -166,9 +187,28 @@ namespace WildWasteland.Core.UI
             return value;
         }
 
+        /// <summary>Two rebindable keys on one row: label, key button, second label, second key button.</summary>
+        public void KeyPair(string label, ConfigEntryBase a, string label2, ConfigEntryBase b)
+        {
+            var r = Next(28);
+            Ledger.Label(new Rect(r.x, r.y, r.width * 0.34f, r.height), label, Ledger.Body);
+            float x = r.x + r.width * 0.34f, w = r.width * 0.66f, bw = (w - 6) * 0.3f, lw = (w - 6) * 0.4f;
+            KeyButton(new Rect(x, r.y, bw, r.height), a);
+            Ledger.Label(new Rect(x + bw + 6, r.y, lw, r.height), label2, Ledger.Body, Ledger.Text, TextAnchor.MiddleCenter);
+            KeyButton(new Rect(x + bw + 6 + lw, r.y, w - bw - 6 - lw, r.height), b);
+        }
+
+        static void KeyButton(Rect r, ConfigEntryBase e)
+        {
+            if (e == null) return;
+            bool waiting = ReferenceEquals(_rebinding, e);
+            if (Ledger.Button(r, waiting ? "press a key" : e.BoxedValue.ToString())) _rebinding = waiting ? null : e;
+        }
+
         /// <summary>Generic editor row for any BepInEx entry (bool, numbers with/without range, enum, Key, string, Vector3...).</summary>
         public void Entry(ConfigEntryBase e)
         {
+            if (!BeginEntry(e)) return;
             string label = e.Definition.Key;
             var t = e.SettingType;
             if (t == typeof(bool))
@@ -283,6 +323,7 @@ namespace WildWasteland.Core.UI
             }
         }
         internal static bool Rebinding { get { return _rebinding != null; } }
+        internal static void CancelRebind() { _rebinding = null; }
 
         static string KeyCodeName(Key k)
         {

@@ -27,6 +27,12 @@ namespace WildWasteland.Modules.Patrols
                 var pc = PlayerRef.PlayerCar;
                 var m = pc != null ? pc.GetComponent<PatrolMarker>() : null;
                 if (m != null && !m.PlayerEntered) { m.PlayerEntered = true; PatrolsModule.Verbose("Cleanup: " + pc.name + " is the player's now, never removed"); }
+                if (m != null && m.TemplateName == "Abandoned War Rig" && m.SetupOnly)
+                {
+                    var body = pc.GetComponent<Rigidbody>();
+                    if (body != null && Vector3.ProjectOnPlane(body.velocity, Vector3.up).sqrMagnitude > 1f && Nwh.EngineRunning(pc))
+                    { m.SetupOnly = false; Core.Log.Always("[Patrols] War Rig truck driven by player: normal native car cleanup now applies; tanker remains protected."); }
+                }
             }
 
             if (Time.unscaledTime < _nextTick) return;
@@ -43,6 +49,7 @@ namespace WildWasteland.Modules.Patrols
             foreach (var m in all)
             {
                 if (m == null) continue;
+                if (WarRig.PoiEncounter.Protected(m.gameObject)) continue;
                 if (WorldTraffic.Owns(m)) continue; // traffic unloads its own representations while retaining world records
                 if(WorldTraffic.IsBattleCar(m.gameObject))continue;
                 // a self-destructed chassis goes as soon as the player is far enough away to not see it (regardless of the timer and the cap)
@@ -87,9 +94,14 @@ namespace WildWasteland.Modules.Patrols
         internal static void Remove(PatrolMarker m, string why)
         {
             var car = m.gameObject;
+            if (WarRig.PoiEncounter.Protected(car)) return;
             PatrolsModule.Verbose("Cleanup: removed " + car.name + " (" + why + ")");
             var trailer = TrailerSupport.Attached(car);
-            if (trailer != null) { Register.RemoveTree(trailer); Destroy(trailer); }
+            if (trailer != null)
+            {
+                if (trailer.GetComponent<WarRig.WarRigUnit>() != null) WarRig.PoiEncounter.DetachTankers(car);
+                else { Register.RemoveTree(trailer); Destroy(trailer); }
+            }
             Register.RemoveTree(car);
             Destroy(car);
         }
