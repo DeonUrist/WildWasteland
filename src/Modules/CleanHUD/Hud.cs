@@ -229,9 +229,14 @@ namespace WildWasteland.Modules.CleanHUD
         private void BuildVitals()
         {
             var g = _groups["vitals"];
-            var bolt = R(g, "bolts icon", 22, -36, 52, 52).gameObject.AddComponent<VehicleStatusIcon>();
-            bolt.Kind = 3; bolt.color = Gold; bolt.raycastTarget = false; bolt.rectTransform.localScale = new Vector3(.5f, .5f, 1);
-            var bo = bolt.gameObject.AddComponent<Outline>(); bo.effectColor = Color.black; bo.effectDistance = new Vector2(2, -2);
+            var boltTexture = MapIcons.Get("bolt"); Graphic bolt;
+            if (boltTexture != null) bolt = Raw(g, "bolts icon", 22, -36, 26, 26, boltTexture, Gold);
+            else
+            {
+                var fallback = R(g, "bolts icon", 22, -36, 52, 52).gameObject.AddComponent<VehicleStatusIcon>();
+                fallback.Kind = 3; fallback.color = Gold; fallback.raycastTarget = false; fallback.rectTransform.localScale = new Vector3(.5f, .5f, 1); bolt = fallback;
+            }
+            var bo = bolt.gameObject.AddComponent<Outline>(); bo.effectColor = Color.black; bo.effectDistance = boltTexture != null ? new Vector2(1, -1) : new Vector2(2, -2);
             _boltsNum = Txt(g, "bolts", 56, -38, 240, 30, 24, TextAnchor.MiddleLeft, HudWhite);
             var bn = _boltsNum.gameObject.AddComponent<Outline>(); bn.effectColor = Color.black; bn.effectDistance = new Vector2(1, -1);
             _compact = new Bars { Root = R(g, "compact", 0, 0, 452, 126).gameObject, FillW = 257f, FillH = 23f };

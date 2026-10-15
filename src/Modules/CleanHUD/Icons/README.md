@@ -3,6 +3,8 @@
 Install this folder as `BepInEx/plugins/WildWasteland/CleanHUD/Icons/`.
 These PNG files are loaded from disk, not embedded in WildWasteland.dll.
 
+Replace `bolt.png` to change the bolts currency icon above the health/armor panel. A 128x128 transparent PNG is suitable; it displays at 26x26 HUD units, tinted gold with a black outline. Restart after replacing it.
+
 Replace `building.png`, `other.png`, `camp.png`, `cave.png`, `wreck.png` or `unknown.png` to change location/POI icons on both map and compass. `Building_*` uses `building.png`; unclassified locations use `other.png`. `diamond.png` remains the generic compass API fallback. `player.png` is the map player chevron. Keep the filenames; restart the game after editing. Module off/on also reloads the images.
 
 Use white silhouettes on a transparent PNG background: the game applies faction/marker colors. Higher-resolution PNGs are accepted; draw size is controlled by the UI. The player chevron stays 18 x 21 screen pixels, with a 22 x 25 outline.
