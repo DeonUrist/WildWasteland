@@ -714,6 +714,7 @@ namespace WildWasteland.Modules.CleanHUD
         {
             _accentButtons.Clear();
             _main = R(_rootRt, "main", 0, 0, 1920, 1080);
+            _main.anchorMin = Vector2.zero; _main.anchorMax = Vector2.one; _main.sizeDelta = Vector2.zero;
             const float X = 120, Y = 320, W = 500, RH = 64;
             var rows = new List<KeyValuePair<string, Action>>();
             _languageShown = FindLanguageButton() != null;
@@ -764,11 +765,13 @@ namespace WildWasteland.Modules.CleanHUD
                 }
                 y += RH;
             }
-            Plate(_main, X, 1020, 228, 44);
+            var accents = R(_main, "accents", 0, 0, 228, 44);
+            accents.anchorMin = accents.anchorMax = accents.pivot = new Vector2(.5f, 0); accents.anchoredPosition = new Vector2(0, 16);
+            Plate(accents, 0, 0, 228, 44);
             for (int i = 0; i < AccentTheme.Names.Length; i++)
             {
                 int choice = i;
-                var rt = R(_main, "accent " + AccentTheme.Names[i], X + 16 + i * 40, 1028, 36, 28);
+                var rt = R(accents, "accent " + AccentTheme.Names[i], 16 + i * 40, 8, 36, 28);
                 var hit = rt.gameObject.AddComponent<Image>(); hit.color = Color.clear;
                 var square = R(rt, "square", 6, 2, 24, 24).gameObject.AddComponent<Image>(); square.color = AccentTheme.Colors[i]; square.raycastTarget = false;
                 var frame = Frame(rt, 3, -1, 30, 30, 1.5f, Gold);
