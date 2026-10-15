@@ -24,6 +24,7 @@ namespace WildWasteland.Modules.CleanHUD
         internal static LayoutFile Layout;
         private Hud _hud;
         private Menu _menu;
+        private Coroutine _updateCheck;
         private LoadingScreen _loadingScreen;
         private QuestMap _questMap;
         private float _retry;
@@ -104,6 +105,7 @@ namespace WildWasteland.Modules.CleanHUD
             _loadingScreen = new LoadingScreen();
             ApocasaverLoading.Install(this, _loadingScreen);
             _menu = new Menu(_loadingScreen);
+            _updateCheck = Scheduler.StartCoroutine(Menu.CheckUpdates());
             SaveBus.StateChanged += _loadingScreen.StateChanged;
             Services.VehicleStatus = this;
             Services.Compass = this;
@@ -183,6 +185,7 @@ namespace WildWasteland.Modules.CleanHUD
         public override void Shutdown()
         {
             Running = false; Release();
+            Scheduler.StopCoroutine(_updateCheck); _updateCheck = null;
             ChaseCameraHud.Clear();
             TalkDialogue.Dispose();
             QuestTracker.Clear();

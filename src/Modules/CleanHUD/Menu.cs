@@ -257,6 +257,38 @@ namespace WildWasteland.Modules.CleanHUD
         private static readonly Color Red = new Color(1f, .38f, .32f, 1f);
 
         internal static int BlockCancelFrame = -1;   // GetButtonDown("Cancel") is swallowed up to this frame (sub screen open)
+        private static bool _updateChecked;
+        private static string _updateUrl;
+        private MenuButton _updateButton;
+
+        internal static System.Collections.IEnumerator CheckUpdates()
+        {
+            if (_updateChecked) yield break;
+            using (var req = UnityEngine.Networking.UnityWebRequest.Get("https://api.github.com/repos/DeonUrist/WildWasteland/releases?per_page=100"))
+            {
+                req.timeout = 20;
+                req.SetRequestHeader("User-Agent", "WildWasteland/" + Plugin.VERSION);
+                req.SetRequestHeader("Cache-Control", "no-cache");
+                yield return req.SendWebRequest();
+                _updateChecked = true;
+                if (req.result != UnityEngine.Networking.UnityWebRequest.Result.Success) { CleanHudModule.Warn("WW update check: " + req.error); yield break; }
+                try
+                {
+                    var releases = Json.Parse(req.downloadHandler.text) as List<object>;
+                    if (releases == null) throw new FormatException("expected releases list");
+                    var latest = new Version(Plugin.VERSION);
+                    foreach (var item in releases)
+                    {
+                        var release = item as Dictionary<string, object>; Version version;
+                        string tag = Json.Text(release, "tag_name", "");
+                        if (Json.Bool(release, "draft", false) || !Version.TryParse(tag.TrimStart('v', 'V').Split('-')[0], out version) || version <= latest) continue;
+                        latest = version; _updateUrl = "https://github.com/DeonUrist/WildWasteland/releases/tag/" + Uri.EscapeDataString(tag);
+                    }
+                    CleanHudModule.Log("WW update check: installed " + Plugin.VERSION + (_updateUrl == null ? "; no newer release" : "; update available " + latest));
+                }
+                catch (Exception e) { _updateUrl = null; CleanHudModule.Warn("WW update check: " + e.Message); }
+            }
+        }
 
         private Ctx _ctx;
         private int _sceneHandle = -1;
@@ -362,6 +394,8 @@ namespace WildWasteland.Modules.CleanHUD
             HideVanilla();
             _main.gameObject.SetActive(_screen == "main");
             if (_sub != null) _sub.gameObject.SetActive(_screen != "main");
+            bool showUpdate = _screen == "main" && _modal == null && _updateUrl != null;
+            if (_updateButton != null && _updateButton.gameObject.activeSelf != showUpdate) _updateButton.gameObject.SetActive(showUpdate);
 
             if (_screen != "main" || _modal != null || _seedEdit) BlockCancelFrame = Time.frameCount + 1;
             if (_capRow != null) { TickCapture(); return; }
@@ -396,6 +430,7 @@ namespace WildWasteland.Modules.CleanHUD
             _root = null; _main = _sub = _modal = _status = null; _sound = null; _screen = "main"; _seedEdit = false; _vanillaWatch = null;
             _capRow = null; _capBlock = null; _keyView = _keyContent = _keyThumb = null; _keyHint = null; _warnText = null; _warnChecked = false;
             _modsButton = null; _nextModsScan = 0; _nextFrame.Clear(); _later.Clear(); BlockCancelFrame = -1;
+            _updateButton = null;
         }
 
         private static bool IsActive(string path) { var t = SettingsModel.FindPath(path); return t != null && t.gameObject.activeInHierarchy; }
@@ -611,6 +646,13 @@ namespace WildWasteland.Modules.CleanHUD
             var title = T(head, "title", 120, 120, 1200, 120, 104, TextAnchor.MiddleLeft, Gold, "APOCALYPTER"); title.Spacing = 6; Shade(title, .8f);
             string sub = _ctx == Ctx.Pause ? "PAUSED" : VersionText();
             T(head, "sub", 126, 228, 900, 36, 24, TextAnchor.MiddleLeft, Dim, sub);
+            if (_ctx == Ctx.Title)
+            {
+                _updateButton = CenteredRow(_rootRt, 0, 0, 390, 64, "UPDATE AVAILABLE", 30, () => Application.OpenURL(_updateUrl));
+                var rt = (RectTransform)_updateButton.transform; rt.anchorMin = rt.anchorMax = rt.pivot = Vector2.one; rt.anchoredPosition = new Vector2(-60, -60);
+                T(rt, "mod", 0, 62, 390, 30, 20, TextAnchor.MiddleCenter, Dim, "WILD WASTELAND");
+                _updateButton.gameObject.SetActive(false);
+            }
 
             _status = R(_rootRt, "status", 0, 0, 1920, 1080);
             _status.anchorMin = _status.anchorMax = new Vector2(0, 0); _status.pivot = new Vector2(0, 0); _status.anchoredPosition = Vector2.zero;
