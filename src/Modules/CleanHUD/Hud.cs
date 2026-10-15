@@ -279,7 +279,7 @@ namespace WildWasteland.Modules.CleanHUD
 
         private void TickDriving()
         {
-            bool visible = ChaseCameraHud.Live && Core.GameRefs.InGame && !Core.ApocasetterBridge.InputBlocked && Application.isFocused;
+            bool visible = ChaseCameraHud.Refresh();
             if (_driving.gameObject.activeSelf && !visible) ChaseCameraHud.TraceHidden();
             if (_driving.gameObject.activeSelf != visible) _driving.gameObject.SetActive(visible);
             if (!visible) return;
@@ -761,14 +761,16 @@ namespace WildWasteland.Modules.CleanHUD
             int mi = 0;
             foreach (var s in _shown)
             {
-                var tex = IconFor(s.E.Style.Icon);
+                bool ambiguous = s.E.Owner == "WildWasteland.VehicleGroups" ? CleanHudModule.AmbiguousPatrols.Value
+                    : s.E.Owner == "WildWasteland.Locations" && CleanHudModule.AmbiguousLocations.Value;
+                var tex = IconFor(ambiguous ? "unknown" : s.E.Style.Icon);
                 if (tex == null) continue;
                 var mv = Mark(mi++);
                 mv.Rt.gameObject.SetActive(true);
                 mv.Rt.SetAsLastSibling();
                 float x = cx + s.Rel * ppd;
                 Place(mv.Rt, x - 80f, 13f, 160f, 70f);
-                mv.Icon.texture = tex; mv.Icon.color = s.E.Style.Color;
+                mv.Icon.texture = tex; mv.Icon.color = ambiguous ? Color.white : s.E.Style.Color;
                 mv.Group.alpha = s.Edge ? .55f : 1f;
                 mv.Dist.enabled = s.E.Style.ShowDistance;
                 if (s.E.Style.ShowDistance)
@@ -834,7 +836,7 @@ namespace WildWasteland.Modules.CleanHUD
             _savingWas = saving;
         }
 
-        private void BeforeRender() { if (Valid && _root.activeSelf) _src.Hide(); }
+        private void BeforeRender() { if (Valid && _root.activeSelf) { _src.Hide(); if (_driving.gameObject.activeInHierarchy) ChaseCameraHud.HideNative(); } }
 
         public void Dispose()
         {

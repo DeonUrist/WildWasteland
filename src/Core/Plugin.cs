@@ -36,11 +36,12 @@ namespace WildWasteland
     [BepInDependency("com.denis.apocalypter.partadjustment", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.example.apocalypter.talk", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("local.apocalypterquests", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("com.burner.apocalypter.enginesim", BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string GUID = "com.denis.apocalypter.wildwasteland";
         public const string NAME = "Wild Wasteland";
-        public const string VERSION = "0.1.12";
+        public const string VERSION = "0.1.13";
 
         public static Plugin Instance;
         public static ConfigFile Main, Settings, Tools;
@@ -121,6 +122,7 @@ namespace WildWasteland
             Core.ModuleHost.Add(new Modules.Patrols.PatrolsModule());
             Core.ModuleHost.Add(new Modules.POI.PoiModule());
             Core.ModuleHost.Add(new Modules.QuestsCompat.QuestsCompatModule());
+            Core.ModuleHost.Add(new Modules.EngineSimCompat.EngineSimCompatModule());
         }
 
         static void ApplyAudioVoices(int want)

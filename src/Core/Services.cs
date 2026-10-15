@@ -21,6 +21,7 @@ namespace WildWasteland.Core
         /// <summary>Hit feedback (HUD module, ex GunplayHUD.Api). Null when HUD is off.</summary>
         public static IHitFeedback Hud;
         public static IVehicleStatusDisplay VehicleStatus;
+        public static IVehicleIgnition VehicleIgnition;
         public static ICompassMarkers Compass;
         public static IMapMarkers Map;
         public static IFollowerVehicles FollowerVehicles;
@@ -58,6 +59,14 @@ namespace WildWasteland.Core
         {
             CrewBailedOut = null; VehicleExploded = null;
         }
+    }
+
+    public interface IVehicleIgnition
+    {
+        bool TryPlayer(GameObject car, bool down, bool held, out bool keyOn, out bool running, out bool cranking);
+        bool TryRunning(GameObject car, out bool running);
+        bool TryStart(GameObject car);
+        bool TryStop(GameObject car);
     }
 
     public interface INpcAppearance

@@ -18,6 +18,7 @@ namespace WildWasteland.Modules.CleanHUD
         internal static ConfigEntry<bool> Enabled, ShowNeeds, ShowHealthNumbers, ShowInsanity, MenuEnabled, EnableCheats;
         internal static ConfigEntry<float> Scale;
         internal static ConfigEntry<bool> ShowConvoys, ShowLocations;
+        internal static ConfigEntry<bool> AmbiguousPatrols, AmbiguousLocations;
         internal static ConfigEntry<bool> ShowCompass, MapEnabled;
         internal static ConfigEntry<MapDetail> MapMarkers, MapRoutes;
         internal static LayoutFile Layout;
@@ -42,6 +43,8 @@ namespace WildWasteland.Modules.CleanHUD
             ShowInsanity = Bind(cfg, "HUD", "ShowInsanity", true, "Show insanity in the top right while above zero.");
             ShowConvoys = cfg.Player("HUD", "ShowConvoys", true, "Compass icons and distances for vehicle groups: merchants yellow, Coyotes green, patrols red and convoys orange.");
             ShowLocations = cfg.Player("HUD", "ShowLocations", true, "Compass icons and distances for native locations within 1 km.");
+            AmbiguousPatrols = cfg.Player("HUD", "AmbiguousPatrols", false, "Show compass vehicle groups as neutral question marks, keeping their distances.");
+            AmbiguousLocations = cfg.Player("HUD", "AmbiguousLocations", false, "Show native compass locations as neutral question marks, keeping their distances. Quest flags are unchanged.");
             ShowCompass = cfg.Player("HUD", "Compass", true, "Show the compass, including its direction strip and all markers.");
             MapEnabled = cfg.Player("Map", "Enabled", true, "Enable the native debug map on the game's Map key.");
             MapMarkers = cfg.Player("Map", "Markers", MapDetail.On, "Off hides map markers; Ambiguous shows question marks; On shows their icons and colors. Map icons have no name labels.");

@@ -10,6 +10,12 @@ Budget (initial targets, adjust in docs/decisions.md):
 
 ## What the scheduler measures (F7 -> Debug & performance -> Performance)
 
+### 0.1.13 RC10 / #127 Engine Sim — 2026-10-15 — NOT YET MEASURED
+
+Engine Sim 1.3.0's original Update/FixedUpdate bodies run as named scheduler jobs. Installation/scene-boundary seeds plus native vehicle/sound OnEnable events replace repeated global discovery. Vehicle subtrees and the initial scene listener walk use 500 us slices; inactive sounds are included and destroyed registry entries are pruned twice a second. No recurring whole-scene walk runs during play. Source scan filtering/sorting, part checks, session setup, native simulation threads, DSP audio and vehicle-part physics retain their costs and timing. Newly enabled vehicle discovery adds a slice delay before the next original 0.5 s scan; initial resource and individual scene/component queries cannot be preempted. Existing vehicle hints/status are reused; only switch state changes rebuild hint text. Native worker CPU is outside WW scheduler counters. Engine Sim was not installed locally; no runtime capture or speedup is claimed. Denis compares identical saves/engine count/quality in ModProfiler plus WW Performance, with Engine Sim verbose off because it also triggers a full FSM dump. Full steps: notes/compat-EngineSim.md.
+
+### Scheduler measurements
+
 `Core.Scheduler` times every job with one `Stopwatch` (ticks -> ms), per phase (EarlyUpdate, Update, LateUpdate, LateUpdateLast, EarlyFixedUpdate, FixedUpdate, Gui):
 - per job: average ms/frame (`TotalMs / Frames`), last call ms, worst call ms, calls, exceptions, "(off)" when error isolation switched it off;
 - per module: the sum of its jobs' average ms/frame and its worst single job call;

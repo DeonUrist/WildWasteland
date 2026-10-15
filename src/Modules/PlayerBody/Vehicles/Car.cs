@@ -24,6 +24,7 @@ namespace WildWasteland.Modules.PlayerBody
         private static AudioSource _radioAudio;
         private static float _nextControls, _startRetry;
         private static bool _running, _lightsOn, _brakeOn, _musicPlaying;
+        private static bool _simIgnition, _simKeyOn, _simRunning, _simCranking;
 
         private static readonly string[] RunningStates = { "Start", "wait", "off3", "over3" };
 
@@ -83,6 +84,13 @@ namespace WildWasteland.Modules.PlayerBody
 
         private static void TickIgnition()
         {
+            _simIgnition = false;
+            var ignition = Core.Services.VehicleIgnition;
+            bool input = PlayerBodyModule.IgnitionControlOn.Value && !Core.ApocasetterBridge.InputBlocked && Application.isFocused;
+            if (ignition != null && ignition.TryPlayer(_startCar.gameObject,
+                input && PressedAction(GameBindings.IgnitionAction, PlayerBodyModule.IgnitionKeyCode),
+                input && HeldAction(GameBindings.IgnitionAction, PlayerBodyModule.IgnitionKeyCode), out _simKeyOn, out _simRunning, out _simCranking))
+            { _simIgnition = true; return; }
             if (_start == null || !PlayerBodyModule.IgnitionControlOn.Value || !Active(_start) || Core.ApocasetterBridge.InputBlocked) return;
             if (!PressedAction(GameBindings.IgnitionAction, PlayerBodyModule.IgnitionKeyCode)) return;
             try
@@ -122,6 +130,11 @@ namespace WildWasteland.Modules.PlayerBody
         }
         private static bool PressedAction(string action, KeyCode fallback)
         { return GameBindings.Find(action) != null ? GameBindings.Down(action, KeyCode.None) : Pressed(fallback); }
+        private static bool HeldAction(string action, KeyCode fallback)
+        {
+            var binding = GameBindings.Find(action);
+            return binding != null ? GameBindings.KeyHeld(binding.Key) || GameBindings.KeyHeld(binding.AlternativeKey) : GameBindings.KeyHeld(fallback);
+        }
 
         private static void FindControls(Transform car)
         {
@@ -199,6 +212,7 @@ namespace WildWasteland.Modules.PlayerBody
             string ignitionState = _start != null ? _start.ActiveStateName ?? "" : "";
             _running = _start != null && EngineRunning(ignitionState);
             int ignitionStep = ignitionState == "off" || ignitionState == "over" ? 1 : ignitionState == "off2" || ignitionState == "over2" ? 2 : ignitionState == "off3" || ignitionState == "over3" ? 3 : 0;
+            if (_simIgnition) ignitionStep = _simCranking ? 6 : _simKeyOn ? 5 : 4;
             // LightOn is the action enabled when lights are ON (its useDoor switches them off).
             _lightsOn = Active(_lightOn);
             string brake = _handbrake != null ? _handbrake.ActiveStateName : "";
@@ -218,7 +232,7 @@ namespace WildWasteland.Modules.PlayerBody
             for (int i = 0; same && i < _sigNow.Length; i++) same = _sigNow[i] == _sigLast[i];
             if (same) { _hint = _hintText; return; }
             var hints = new StringBuilder();
-            if (ignition) AddActionHint(hints, ignitionAction, PlayerBodyModule.IgnitionKeyCode, ignitionStep == 1 ? "Ignition On" : ignitionStep == 2 ? "Start Engine" : ignitionStep == 3 ? "Stop Engine" : "Ignition (wait)");
+            if (ignition) AddActionHint(hints, ignitionAction, PlayerBodyModule.IgnitionKeyCode, ignitionStep == 4 ? "Ignition On / Hold to Start" : ignitionStep == 5 ? "Ignition Off / Hold to Start" : ignitionStep == 6 ? "Cranking (release to stop)" : ignitionStep == 1 ? "Ignition On" : ignitionStep == 2 ? "Start Engine" : ignitionStep == 3 ? "Stop Engine" : "Ignition (wait)");
             if (_lightOn != null || _lightOff != null) AddActionHint(hints, "Headlight", KeyCode.None, _lightsOn ? "Headlights Off" : "Headlights On");
             if (_handbrake != null) AddActionHint(hints, "Handbrake", KeyCode.None, _brakeOn ? "Handbrake Release" : "Handbrake Apply");
             if (_radioAudio != null)
@@ -240,6 +254,7 @@ namespace WildWasteland.Modules.PlayerBody
 
         private static bool EngineRunning(string state)
         {
+            if (_simIgnition) return _simRunning;
             if (_engine != null && _isRunning != null)
             {
                 try { return (bool)_isRunning.GetValue(_engine, null) || state == "Start"; } catch (Exception) { }

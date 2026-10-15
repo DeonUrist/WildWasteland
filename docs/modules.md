@@ -19,6 +19,7 @@ Init order = config display order = the order below (providers before consumers)
 
 | `POI` | Points of interest | `in` (Testing, #81) | New native MapMagic integration | `src/Modules/POI/` = `WildWasteland.Modules.POI` | - |
 | `QuestsCompat` | Talk & Quests compatibility | `in` (Testing) | Optional Apocatalker 2.0.0 / Quests 1.8.0 bridge; DLL md5 `518f44ad8318d62bdcb1aff739291e93` / `589c5185d0825ae0a7dd1601b55d6054` | `src/Modules/QuestsCompat/` = `WildWasteland.Modules.QuestsCompat` | None: the two standalone mods must remain installed |
+| `EngineSimCompat` | Engine Sim compatibility | `in` (Testing, #127) | Optional Engine Sim 1.3.0 (`ca2fd63`); standalone DLL/native assets remain installed | `src/Modules/EngineSimCompat/` = `WildWasteland.Modules.EngineSimCompat` | None: Engine Sim remains standalone |
 
 Not separable inside a module (no toggle): motorcycles (bike templates + ES3 prefab resolution) inside Patrols; simple convoy bandits inside NPC (driven by Patrols through the service). War Rig remains a **feature** of Patrols (`WarRig/` folder, two F6 toggles); its new world sites are registered through the POI module.
 
@@ -59,6 +60,7 @@ Modules never reference each other's types. Every dependency below goes through 
 | Provider | Service | Was (standalone API) | Consumers |
 |---|---|---|---|
 | CleanHUD | `Services.VehicleStatus` (`IVehicleStatusDisplay`) | PlayerBody's separate vehicle status drawing | PlayerBody submits ignition, handbrake and cassette/volume state. CleanHUD displays it left of Insanity while enabled; the original display remains the fallback. |
+| EngineSimCompat | `Services.VehicleIgnition` (`IVehicleIgnition`) | Native START FSM and NWH start/stop while Engine Sim owns the engine | PlayerBody forwards its existing ignition key down/hold and reads key/cranking/running state for existing hints and CleanHUD status; Patrols routes startup, restart, running checks and stops to the simulated switch. Source RPM threshold plus key-on state is used while coupled; ordinary vehicles retain their native path. |
 | CleanHUD | `Services.Map` (`IMapMarkers`), existing `Services.Compass` | Quest MapLink's Immersive Map markers | QuestsCompat mirrors quest/turn-in markers to the native map and compass; original Immersive Map integration remains supported. |
 | Patrols | `Services.Camps` (`ICampStatus`, `CampState`) | QuestsCompat delivery recovery | Read-only access to persisted cleared camps and existing loaded/spawner readiness. No new scans or jobs; unavailable/unknown/unloaded camps never count as empty. |
 | CleanHUD | `IMapMarkers.Markers` / `Routes` (`MapDetail`) | Map display choices | Patrols consumes route display mode without a module type reference. CleanHUD handles native debug-map access, map markers and location icons. Compass Off hides the whole strip; map Off disables native MapCheat. New settings.cfg entries: `[CleanHUD / HUD] Compass=true`; `[CleanHUD / Map] Enabled=true, Markers=On, Routes=On` (Routes imports existing DebugMap/hide-route choices once). |

@@ -466,6 +466,7 @@ namespace WildWasteland.Modules.Patrols
         internal static IEnumerator StartUp(GameObject car)
         {
             if (Explode.IsWreck(car)) yield break;
+            if (Core.Services.VehicleIgnition != null && Core.Services.VehicleIgnition.TryStart(car)) { yield return new WaitForSeconds(1.5f); yield break; }
             var start = FindFsm(car, "START", "Start");
             if (start == null) { Core.Log.Warn("[Patrols] " + "No START/Start FSM on " + (car != null ? car.name : "?")); yield break; }
             PatrolsModule.Verbose("START state before: " + start.ActiveStateName);
@@ -1675,12 +1676,14 @@ namespace WildWasteland.Modules.Patrols
 
         internal static bool EngineRunning(GameObject car)
         {
+            bool running; if (Core.Services.VehicleIgnition != null && Core.Services.VehicleIgnition.TryRunning(car, out running)) return running;
             try { var h = Of(car); var r = h != null ? Get(h.Engine, "IsRunning") : null; return r is bool && (bool)r; }
             catch (Exception e) { Core.Log.Warn("[Patrols] " + "EngineRunning: " + e.Message); return false; }
         }
 
         internal static void StartEngine(GameObject car)
         {
+            if (Core.Services.VehicleIgnition != null && Core.Services.VehicleIgnition.TryStart(car)) return;
             try
             {
                 var h = Of(car);
@@ -1695,6 +1698,7 @@ namespace WildWasteland.Modules.Patrols
 
         internal static void StopEngine(GameObject car)
         {
+            if (Core.Services.VehicleIgnition != null && Core.Services.VehicleIgnition.TryStop(car)) return;
             try
             {
                 var h = Of(car);

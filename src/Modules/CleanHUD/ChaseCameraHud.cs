@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
@@ -18,6 +19,12 @@ namespace WildWasteland.Modules.CleanHUD
         private static Func<VehicleController, int, string> _gear;
         private static Action _hide;
         private static Func<bool> _thirdPerson, _specialView;
+        private static Func<bool> _resolve;
+        private static Func<Transform> _car;
+        private static Func<VehicleController, bool> _capture;
+        private static Transform _owner;
+        private static VehicleController _drivingVehicle;
+        private static float _nextVehicleSearch;
         private static object _enabled, _hudEnabled, _size, _gap;
         private static float _nextHiddenLog;
         private static FieldInfo[] _fields;
@@ -26,6 +33,7 @@ namespace WildWasteland.Modules.CleanHUD
         private static VehicleController _vehicle;
         internal static float Speed, Rpm, Fraction;
         internal static bool Live { get { return _ready && _frame == Time.frameCount; } }
+        internal static ConfigEntry<bool> HudEnabled { get { return _ready ? (ConfigEntry<bool>)_hudEnabled : null; } }
         internal static float Scale { get { return Mathf.Clamp(((ConfigEntry<float>)_size).Value, .65f, 1.75f); } }
         internal static float Gap { get { return Mathf.Clamp(((ConfigEntry<float>)_gap).Value, 0, 160); } }
         internal static string Gear { get { return _gear(_vehicle, _selected); } }
@@ -58,6 +66,8 @@ namespace WildWasteland.Modules.CleanHUD
                 _chaseHeading = (Heading)Delegate.CreateDelegate(typeof(Heading), AccessTools.Method(assembly.GetType("ApocaChaseCamera.ChaseView", true), "CompassHeading"));
                 _bodyHeading = (Heading)Delegate.CreateDelegate(typeof(Heading), AccessTools.Method(assembly.GetType("ApocaChaseCamera.ApocaplayerBridge", true), "CompassHeading"));
                 var binding = assembly.GetType("ApocaChaseCamera.CameraBinding", true);
+                _resolve = (Func<bool>)Delegate.CreateDelegate(typeof(Func<bool>), AccessTools.Method(binding, "Resolve"));
+                _car = Expression.Lambda<Func<Transform>>(Expression.Field(null, AccessTools.Field(binding, "Car"))).Compile();
                 _thirdPerson = (Func<bool>)Delegate.CreateDelegate(typeof(Func<bool>), AccessTools.Method(binding, "ThirdPersonVisible"));
                 _specialView = (Func<bool>)Delegate.CreateDelegate(typeof(Func<bool>), AccessTools.Method(binding, "SpecialView"));
                 _enabled = AccessTools.Field(info.Instance.GetType(), "Enabled").GetValue(null);
@@ -66,14 +76,17 @@ namespace WildWasteland.Modules.CleanHUD
                 _gap = AccessTools.Field(info.Instance.GetType(), "HudGap").GetValue(null);
                 if (!(_enabled is ConfigEntry<bool>) || !(_hudEnabled is ConfigEntry<bool>) || !(_size is ConfigEntry<float>) || !(_gap is ConfigEntry<float>)) throw new NotSupportedException("Unknown HUD settings");
                 if (!Core.Patches.Patch(owner, capture, transpiler: AccessTools.Method(typeof(ChaseCameraHud), "CaptureReadings"))) throw new InvalidOperationException("Readings hook unavailable");
+                var vehicle = Expression.Parameter(typeof(VehicleController), "vehicle");
+                var reading = Expression.Variable(snapshot, "reading");
+                _capture = Expression.Lambda<Func<VehicleController, bool>>(Expression.Block(new[] { reading }, Expression.Call(capture, vehicle, reading)), vehicle).Compile();
                 _ready = true;
-                CleanHudModule.Log("ChaseCamera 0.2.5 HUD bridge ready: source speed/RPM/gear, text above weapon UI and rendered compass heading.");
+                CleanHudModule.Log("ChaseCamera 0.2.5 HUD bridge ready: first/third-person source speed/RPM/gear, text above weapon UI and rendered compass heading.");
             }
             catch (Exception e) { _ready = false; CleanHudModule.Warn("ChaseCamera HUD bridge unavailable; retaining its original HUD: " + e.Message); }
         }
 
         // Observe the successful source snapshot without boxing its private struct
-        // or replacing its vehicle discovery, telemetry or visibility rules.
+        // or replacing its telemetry. CleanHUD also captures in first person.
         private static IEnumerable<CodeInstruction> CaptureReadings(IEnumerable<CodeInstruction> instructions, ILGenerator generator)
         {
             var record = AccessTools.Method(typeof(ChaseCameraHud), "Record");
@@ -104,6 +117,22 @@ namespace WildWasteland.Modules.CleanHUD
             if (!_ready || !CleanHudModule.Running) return;
             Speed = speed; Rpm = rpm; Fraction = fraction; _selected = selected; _vehicle = vehicle; _frame = Time.frameCount;
         }
+        internal static bool Refresh()
+        {
+            if (!_ready || !((ConfigEntry<bool>)_enabled).Value || !((ConfigEntry<bool>)_hudEnabled).Value
+                || !Core.GameRefs.InGame || Core.ApocasetterBridge.InputBlocked || !Application.isFocused) return false;
+            if (!_resolve() || _specialView()) { _owner = null; _drivingVehicle = null; return false; }
+            var car = _car();
+            if (_owner != car) { _owner = car; _drivingVehicle = null; _nextVehicleSearch = 0; }
+            if (car == null) return false;
+            if (_drivingVehicle == null && Time.unscaledTime >= _nextVehicleSearch)
+            {
+                _nextVehicleSearch = Time.unscaledTime + .5f;
+                _drivingVehicle = car.GetComponent<VehicleController>();
+                if (_drivingVehicle == null) _drivingVehicle = car.GetComponentInChildren<VehicleController>(true);
+            }
+            return _capture(_drivingVehicle) && Live;
+        }
         internal static void HideNative() { if (Live) _hide(); }
         internal static void TraceHidden()
         {
@@ -125,6 +154,7 @@ namespace WildWasteland.Modules.CleanHUD
             _ready = _attempted = false; _frame = -1; _vehicle = null;
             _gear = null; _hide = null; _chaseHeading = _bodyHeading = null;
             _thirdPerson = _specialView = null; _nextHiddenLog = 0;
+            _resolve = null; _car = null; _capture = null; _owner = null; _drivingVehicle = null; _nextVehicleSearch = 0;
             _enabled = _hudEnabled = _size = _gap = null; _fields = null;
         }
     }

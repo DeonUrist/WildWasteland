@@ -105,7 +105,7 @@ No module-only patches (its single target is the shared `SetFsmFloat.OnEnter` pr
 
 | Target | Kind | Handler | Filter (first line) | Hot? |
 |---|---|---|---|---|
-| `ApocaChaseCamera.DrivingReadings.Capture` (optional, 0.2.5) | transpiler (observation) | `ChaseCameraHud.CaptureReadings` / `Record` | Successful source snapshot; bridge ready + CleanHUD running; original return value retained | Per source driving HUD tick; typed snapshot fields, no boxing, scans or replacement telemetry |
+| `ApocaChaseCamera.DrivingReadings.Capture` (optional, 0.2.5) | transpiler (observation) | `ChaseCameraHud.CaptureReadings` / `Record` | Successful source snapshot; bridge ready + CleanHUD running; original return value retained | Per source driving HUD tick and CleanHUD refresh in either driving view; typed snapshot fields, no boxing or replacement telemetry |
 | `UiTextSetText.OnEnter` | postfix | `MessageHook.Postfix` | `!Active`, null Text, everyFrame; HUD canvas only, timed-state classification cached by FsmState | per UI text state entry |
 | `Apocasaver.AutosavePresentation.Begin` / `.End` (optional, reflected third-party UI methods) | postfix | `ApocasaverLoading.AfterBegin` / `.AfterEnd` | Cached loading screen provider null; display only, exceptions contained | per autosave presentation begin/end |
 | `Apocasaver.SaveNaming.OnGUI` (optional, reflected third-party UI method) | prefix | `ApocasaverLoading.BeforeNameGui` | Running + Clean menus enabled + naming popup open; replaces drawing only, original Confirm/Cancel delegates retain save/input/cursor lifecycle; original popup when off or drawing fails | per source OnGUI callback; no other known patchers |
@@ -134,6 +134,23 @@ Other mods patch these too; if a future module needs them, add a dispatcher: `Ro
 ### POI (#81)
 
 No Harmony patches and no scheduler jobs. Subscribes to native TerrainTile.OnBeforeTilePrepare, OnTileFinalized, OnTileApplied and OnTileMoved; removes subscriptions and restores graph links/nodes on shutdown. Site components only handle trigger/enable events. Patrols supplies vehicle assembly through Services.Poi; it retains the existing temporary build coroutine and native vehicle/NPC behavior.
+
+### Optional Engine Sim compatibility (0.1.13 RC10, #127, Testing)
+
+Only Engine Sim 1.3.0 is adapted. Hook/delegate setup is transactional; an unsupported interface restores standalone behavior. No source DLL/native asset is modified or redistributed.
+
+| Owner | Target | Kind / handler | Frequency / filter |
+|---|---|---|---|
+| EngineSimCompat | EngineSim.EngineManager.Update / FixedUpdate | ScheduledOnly prefix; original callbacks run from named Update / FixedUpdate jobs | Manager identity and dispatch flag; exactly one execution per corresponding scheduler invocation |
+| EngineSimCompat | EngineSim.EngineManager.Scan | CachedScan transpiler substitutes only the RealisticEngineSound discovery array | Original 0.5 s scan, candidate filtering, running preference, distance sorting, MaxEngines and session reconciliation retained |
+| EngineSimCompat | EngineSim.EngineManager.FindListener; EngineSim.Listener.get_Current | FindListener prefix supplies cached active listener | Bridge ready; cached listener snapshot includes scene and persistent roots |
+| EngineSimCompat | EngineSim.IgnitionSwitch.Update | SwitchInput transpiler, BeforeSwitch / AfterSwitch prefix/postfix | Existing source press/hold/release logic; keyboard input scoped to the player's current switch/frame, input/focus gates; bounded AI starter request |
+| EngineSimCompat | EngineSim.IgnitionSwitch.Pointed | CachedCamera transpiler / KeyboardPointed postfix | Core cached camera; matching player keyboard hold counts as pointing |
+| EngineSimCompat | EngineSim.IgnitionSwitch.SetText | SetText prefix writes native Text through cached delegates | Bridge ready; original text retained, no per-update property reflection |
+| EngineSimCompat | EngineSim.DriveCoupling.Release | Released postfix removes pending starter/player ownership | Bridge ready; source releases engine and FSM itself |
+| EngineSimCompat | NWH VehicleController.OnEnable; RealisticEngineSound.OnEnable | VehicleEnabled / SoundEnabled postfixes queue a sliced subtree / register the sound | Bridge ready; scene-boundary seeds include inactive sounds, no recurring whole-scene walk |
+
+The manager jobs fail open to original callbacks/discovery on an uncaught exception. Native simulation threads, DSP audio, WheelCoupling's WaitForFixedUpdate coroutine, Windage/RimFriction physics and Belt.LateUpdate remain owned by Engine Sim. Disabling the module restores original callbacks without stopping source sessions. Engine Sim's own verbose FSM dump is unchanged and is not sliced.
 
 ### Optional Talk/Quests compatibility (0.1.6 RC3, Testing)
 

@@ -263,6 +263,8 @@ namespace WildWasteland.Modules.CleanHUD
         private Canvas _van;              // Canvas_MM or MainMenu_Canvas
         private GameObject _root;
         private RectTransform _rootRt;
+        private RawImage _background;
+        private int _backgroundWidth, _backgroundHeight;
         private readonly Dictionary<CanvasGroup, bool> _added = new Dictionary<CanvasGroup, bool>();
         private struct GroupState { internal float Alpha; internal bool Raycasts, Interactable; }
         private readonly Dictionary<CanvasGroup, GroupState> _original = new Dictionary<CanvasGroup, GroupState>();
@@ -350,6 +352,13 @@ namespace WildWasteland.Modules.CleanHUD
             bool visible = _van.enabled && _van.gameObject.activeInHierarchy;
             if (_root.activeSelf != visible) _root.SetActive(visible);
             if (!visible) { if (_screen != "main" || _modal != null) ResetToMain(); return; }
+            if (_background != null && (_backgroundWidth != Screen.width || _backgroundHeight != Screen.height))
+            {
+                _backgroundWidth = Screen.width; _backgroundHeight = Screen.height;
+                float imageAspect = _background.texture.width / (float)_background.texture.height, screenAspect = _backgroundWidth / (float)Mathf.Max(1, _backgroundHeight);
+                if (screenAspect > imageAspect) { float h = imageAspect / screenAspect; _background.uvRect = new Rect(0, (1 - h) / 2, 1, h); }
+                else { float w = screenAspect / imageAspect; _background.uvRect = new Rect((1 - w) / 2, 0, w, 1); }
+            }
             HideVanilla();
             _main.gameObject.SetActive(_screen == "main");
             if (_sub != null) _sub.gameObject.SetActive(_screen != "main");
@@ -383,6 +392,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (!keepVanilla) { _van = null; _ctx = Ctx.None; }
             RestoreVanilla();
             if (_root != null) UnityEngine.Object.Destroy(_root);
+            _background = null; _backgroundWidth = _backgroundHeight = 0;
             _root = null; _main = _sub = _modal = _status = null; _sound = null; _screen = "main"; _seedEdit = false; _vanillaWatch = null;
             _capRow = null; _capBlock = null; _keyView = _keyContent = _keyThumb = null; _keyHint = null; _warnText = null; _warnChecked = false;
             _modsButton = null; _nextModsScan = 0; _nextFrame.Clear(); _later.Clear(); BlockCancelFrame = -1;
@@ -500,7 +510,28 @@ namespace WildWasteland.Modules.CleanHUD
             var s = g.gameObject.AddComponent<Shadow>(); s.effectColor = new Color(0, 0, 0, a); s.effectDistance = new Vector2(0, -2);
         }
         private static Sprite _plate;
-        internal static void DisposeAssets() { if (_plate != null) UnityEngine.Object.Destroy(_plate); _plate = null; }
+        private static Texture2D _menuBackground;
+        internal static void DisposeAssets()
+        {
+            if (_plate != null) UnityEngine.Object.Destroy(_plate); _plate = null;
+            if (_menuBackground != null) UnityEngine.Object.Destroy(_menuBackground); _menuBackground = null;
+        }
+        private static Texture2D MenuBackground()
+        {
+            if (_menuBackground != null) return _menuBackground;
+            Texture2D texture = null;
+            try
+            {
+                string path = Path.Combine(Core.Assets.Root, "LoadingScreens", "BG_MAIN.png");
+                texture = new Texture2D(2, 2, TextureFormat.RGBA32, false) { name = "CleanHUD.BG_MAIN", hideFlags = HideFlags.DontUnloadUnusedAsset, filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+                if (!texture.LoadImage(File.ReadAllBytes(path), true)) throw new FormatException("PNG could not be decoded");
+                _menuBackground = texture; texture = null;
+                CleanHudModule.Log("Menu background BG_MAIN.png loaded");
+            }
+            catch (Exception e) { CleanHudModule.Warn("Menu background BG_MAIN.png: " + e.Message); }
+            finally { if (texture != null) UnityEngine.Object.Destroy(texture); }
+            return _menuBackground;
+        }
         internal static Sprite PlateSprite()
         {
             if (_plate != null) return _plate;
@@ -566,6 +597,14 @@ namespace WildWasteland.Modules.CleanHUD
             var cs = _root.AddComponent<CanvasScaler>(); cs.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize; cs.referenceResolution = new Vector2(1920, 1080); cs.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
             _root.AddComponent<GraphicRaycaster>();
             _rootRt = (RectTransform)_root.transform;
+
+            var background = MenuBackground();
+            if (background != null)
+            {
+                _background = R(_rootRt, "background", 0, 0, 0, 0).gameObject.AddComponent<RawImage>();
+                var rt = _background.rectTransform; rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; rt.anchoredPosition = rt.sizeDelta = Vector2.zero;
+                _background.texture = background; _background.raycastTarget = false;
+            }
 
             // title / heading (top left)
             var head = R(_rootRt, "head", 0, 0, 1920, 1080);

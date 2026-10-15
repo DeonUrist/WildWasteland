@@ -82,8 +82,8 @@ namespace WildWasteland.Core.UI
             Switch(l, "HP and armor numbers", CleanHudSettings.ShowHealthNumbers);
             Switch(l, "Insanity", CleanHudSettings.ShowInsanity);
             Switch(l, "Compass", CleanHudSettings.ShowCompass);
-            Switch(l, "Convoys on compass", CleanHudSettings.ShowConvoys);
-            Switch(l, "Locations on compass (1 km)", CleanHudSettings.ShowLocations);
+            CompassDetail(l, "Patrols on compass", CleanHudSettings.ShowConvoys, CleanHudSettings.AmbiguousPatrols);
+            CompassDetail(l, "Locations on compass (1 km)", CleanHudSettings.ShowLocations, CleanHudSettings.AmbiguousLocations);
             Switch(l, "Map", CleanHudSettings.MapEnabled);
             CleanHudSettings.MapMarkers.Value = (MapDetail)l.Choices("Map markers", (int)CleanHudSettings.MapMarkers.Value, "Off", "Ambiguous", "On");
             CleanHudSettings.MapRoutes.Value = (MapDetail)l.Choices("Map Routes", (int)CleanHudSettings.MapRoutes.Value, "Off", "Ambiguous", "On");
@@ -98,6 +98,14 @@ namespace WildWasteland.Core.UI
             Switch(l, "Toggle Ironsights", WildWasteland.Modules.Guns.GunsModule.ToggleIronsights);
             l.KeyPair("Shout", WildWasteland.Modules.NPC.NpcModule.ShoutKey, "Shout modifier", WildWasteland.Modules.NPC.NpcModule.ShoutModifier);
             if (!ModuleHost.IsRunning(HudSettings.Instance)) l.Text("Enable Combat HUD in Modules to use these HUD settings.");
+            if (WildWasteland.Modules.CleanHUD.ChaseCameraHud.HudEnabled != null) Switch(l, "ChaseCam HUD", WildWasteland.Modules.CleanHUD.ChaseCameraHud.HudEnabled);
+        }
+
+        static void CompassDetail(ToolLayout l, string label, ConfigEntry<bool> show, ConfigEntry<bool> ambiguous)
+        {
+            int current = !show.Value ? 0 : ambiguous.Value ? 1 : 2;
+            int next = l.Choices(label, current, "Off", "Ambiguous", "On");
+            if (next != current) { ambiguous.Value = next == 1; show.Value = next != 0; }
         }
 
         static void FeedbackSwitch(ToolLayout l, string label, ConfigEntry<bool> entry)
@@ -161,6 +169,7 @@ namespace WildWasteland.Core.UI
                 || ReferenceEquals(e, CleanHudSettings.ShowNeeds) || ReferenceEquals(e, CleanHudSettings.ShowHealthNumbers)
                 || ReferenceEquals(e, CleanHudSettings.ShowInsanity) || ReferenceEquals(e, CleanHudSettings.Scale)
                 || ReferenceEquals(e, CleanHudSettings.ShowConvoys) || ReferenceEquals(e, CleanHudSettings.ShowLocations)
+                || ReferenceEquals(e, CleanHudSettings.AmbiguousPatrols) || ReferenceEquals(e, CleanHudSettings.AmbiguousLocations)
                 || ReferenceEquals(e, CleanHudSettings.ShowCompass) || ReferenceEquals(e, CleanHudSettings.MapEnabled)
                 || ReferenceEquals(e, CleanHudSettings.MapMarkers) || ReferenceEquals(e, CleanHudSettings.MapRoutes)) return false;
             if (ReferenceEquals(e, Player.Character) || ReferenceEquals(e, Player.BodyFirstPerson) || ReferenceEquals(e, Player.FullBodyOnlyOnFoot)
