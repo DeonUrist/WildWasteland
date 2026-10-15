@@ -2,7 +2,7 @@
 
 A BepInEx 5 mod for **Apocalypter** that combines gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
 
-Version **0.1.22 RC19** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
+Version **0.1.23 RC20** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
 
 | Module | What it is | Replaces (remove these from `BepInEx\plugins`) |
 |---|---|---|
@@ -27,14 +27,18 @@ While any of those standalone plugins is still installed, the module that replac
    BepInEx\plugins\WildWasteland\NPC\Models\          dog animation bundles
    BepInEx\plugins\WildWasteland\Guns\Sounds\         knifestab.wav
    BepInEx\plugins\WildWasteland\HUD\Sounds\, Textures\   headshot.mp3, crosshair textures
+   BepInEx\plugins\WildWasteland\CleanHUD\Icons\        editable map, compass and bolts currency PNGs
    BepInEx\plugins\WildWasteland\Patrols\             templates, textures, sounds, layouts, WarRig\ models
    ```
    If an asset is missing, WW falls back to the old plugin folder (`plugins\Apocaplayer\`, `plugins\NPCAI\Models\`, `plugins\Gunplay\Sounds\`, `plugins\GunplayHUD\Sounds\`, `plugins\Apocapatrol\`, `plugins\WarRig\`) or to a copy built into the DLL, and warns in the log. Patrols copies its old data into its new folder on the first run.
-4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.22]` and a summary `Wild Wasteland 0.1.22 modules:` with every module `on`.
+   Preserve your customized `CleanHUD\Icons\` files when updating; copy only missing defaults from the archive.
+4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.23]` and a summary `Wild Wasteland 0.1.23 modules:` with every module `on`.
 
 Engine Sim compatibility (#127, Testing): **Engine Sim is optional; WW works normally without it and the bridge stays idle.** If you want its features, install [Engine Sim 1.3.0](https://github.com/Wad67/Apocalypter-enginesim/releases/tag/v1.3.0) separately, including its native library and impulse responses. WW schedules its manager and supplies a 500 microsecond scene-discovery cache; the original native simulation/audio threads, engine selection, settings and vehicle-part physics remain with Engine Sim. With its experimental simulated drivetrain enabled, the existing Ignition key supports click to toggle and hold to crank; vehicle hints and CleanHUD's existing engine-status icon follow the coupled engine. Patrols start/stop requests use the simulated switch. Turn off the Engine Sim compatibility module to restore the standalone callbacks. Engine Sim is not included in this archive. Its settings remain in its own Apocasetter page and cfg files; only `[EngineSimCompat] Enabled` is added to WW settings.cfg. Performance and in-game verification remain pending.
 
 ## Settings: F6 and F7
+
+RC20: adds the CleanHUD inventory with click-to-drop equipment and F3-style cursor/pause handling, an outlined bolts balance above HP/armor, editable PNG icons, the reduced green player map chevron and map wheel zoom. Vehicle Hints/Icons and Gear/RPM/Speed Hud are grouped in HUD. Includes crew awareness/navigation fixes, return-to-car and foot patrols, independent World traffic markers and grouped Debug switches. New settings and in-game test steps are listed in [RC20 changes](notes/release-0.1.23-RC20.md).
 
 RC19: restores the native HEADLIGHTS hotkey and restricts first-person wheel zoom to an active weapon with its sights fully raised. Includes the local performance pass across scheduling, HUD/map rendering, NPC navigation/detection, traffic, weapon/body updates and Talk/Quests compatibility. Performance gains and in-game behavior still need verification; no settings defaults change. See [RC19 changes and test steps](notes/release-0.1.22-RC19.md).
 
@@ -62,7 +66,7 @@ Module data and sidecars: `BepInEx\config\WildWasteland\<Module>\`.
 
 CleanHUD loading screens use `BepInEx\plugins\WildWasteland\LoadingScreens\Screen1.png`, `Screen2.png`, etc. The `screens.json` in the same folder maps each image filename to its tip text, with defaults for Screens 1–5. Available numbered images are chosen randomly for each new game/save load or Apocasaver autosave; repeats are allowed. JSON edits and added/replaced images apply on the next load; unchanged textures remain cached. The persistent screen keeps the CleanHUD font through scene changes, with LOADING (AUTOSAVING during Apocasaver saves) bottom left and a smaller wrapped tip near top left. Clean menus must be enabled. Missing numbered images are skipped.
 
-CleanHUD controls are in **F7 → Game → HUD** (Clean HUD, Clean menus, Needs, HP and armor numbers, Insanity, Scale). Its module switch and job timings are in **F7 → Modules**; EnableCheats is in Debug. Settings live in `config\WildWasteland\settings.cfg`, under `CleanHUD / HUD` and `CleanHUD / Menu`. Missing settings import the standalone choices even on an existing WW install. Layout and the game key cache copy once into `config\WildWasteland\CleanHUD\`; edits to the new layout reload within two seconds. POI/map icons are editable PNGs in `plugins\WildWasteland\CleanHUD\Icons\` (building, other, camp, cave, wreck, diamond, unknown and player); replace a PNG and restart to update both map and compass. Preserve customized files when updating. Other CleanHUD textures/font assets remain embedded. Disable standalone CleanHUD through Apocasetter and restart to use the built-in module.
+CleanHUD controls are in **F7 → Game → HUD** (Clean HUD, Clean menus, Needs, HP and armor numbers, Insanity, Scale). Its module switch and job timings are in **F7 → Modules**; EnableCheats is in Debug. Settings live in `config\WildWasteland\settings.cfg`, under `CleanHUD / HUD` and `CleanHUD / Menu`. Missing settings import the standalone choices even on an existing WW install. Layout and the game key cache copy once into `config\WildWasteland\CleanHUD\`; edits to the new layout reload within two seconds. POI/map icons are editable PNGs in `plugins\WildWasteland\CleanHUD\Icons\` (building, other, camp, cave, wreck, diamond, unknown and player); `bolt.png` controls the bolts currency icon above HP/armor. Replace a PNG and restart to reload it. Preserve customized files when updating. Other CleanHUD textures/font assets remain embedded. Disable standalone CleanHUD through Apocasetter and restart to use the built-in module.
 
 RC3 adds optional CleanHUD compatibility with **Apocapocket 2.0.10**, which stays a separate plugin and is not included in this archive. CleanHUD shows its three to six logical slots, highlights extra-slot weapons correctly, displays ordinary item icons, and updates key badges after rebinding. Backpack capacity controls the number of shown slots. The row retains its existing placement and scale; switching CleanHUD off restores the native pocket UI. No new config entries or save data. Verification remains Testing; see [test steps](notes/compat-Apocapocket-CleanHUD.md).
 
