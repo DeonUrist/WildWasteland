@@ -553,9 +553,13 @@ namespace WildWasteland.Modules.CleanHUD
             }
             if (!_needsOn) return;
             // water / food / sleep: three equal columns across the bar width (x 22..332), each item centred in its column
+            bool flash = Time.unscaledTime % 1f < .5f;
             for (int i = 0; i < 3; i++)
             {
                 int v = Mathf.RoundToInt(Bindings.Number(i == 0 ? _src.Thirst : i == 1 ? _src.Hunger : _src.Fatigue));
+                var color = v >= 80 && flash ? (v > 90 ? Core.UI.Skin.Red : Core.UI.Skin.Yellow) : HudWhite;
+                _needNum[i].color = color;
+                _needIcon[i].color = v >= 80 ? color : Gold;
                 if (v == _needValues[i]) continue;
                 _needValues[i] = v; _needNum[i].text = v.ToString(CultureInfo.InvariantCulture);
                 float nw = Mathf.Ceil(_needNum[i].preferredWidth), iw = 24f + 6f + nw;
@@ -763,7 +767,7 @@ namespace WildWasteland.Modules.CleanHUD
             foreach (var s in _shown)
             {
                 bool ambiguous = s.E.Owner == "WildWasteland.VehicleGroups" ? CleanHudModule.AmbiguousPatrols.Value
-                    : s.E.Owner == "WildWasteland.Locations" && CleanHudModule.AmbiguousLocations.Value;
+                    : s.E.Owner == "WildWasteland.Locations" && CleanHudModule.AmbiguousLocations.Value && !LocationMarkers.Known(s.E.Target);
                 var tex = IconFor(ambiguous && s.E.Owner == "WildWasteland.Locations" ? "unknown" : s.E.Style.Icon);
                 if (tex == null) continue;
                 var mv = Mark(mi++);

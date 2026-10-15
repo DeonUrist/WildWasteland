@@ -53,9 +53,12 @@ namespace WildWasteland.Modules.CleanHUD
                 _root.anchorMin = Vector2.zero; _root.anchorMax = Vector2.one; _root.offsetMin = _root.offsetMax = Vector2.zero;
                 _root.gameObject.AddComponent<RectMask2D>();
             }
+            MapFrame.Sync(_map);
         }
         internal void Tick()
         {
+            MapFog.Tick(_map, _camera, CleanHudModule.MapEnabled.Value && GameRefs.Menu != null && GameRefs.Menu.ActiveStateName == "play"
+                && _fsm != null && _fsm.isActiveAndEnabled && _fsm.ActiveStateName == "on" && _map != null && _map.gameObject.activeInHierarchy);
             if (_root == null) return;
             bool open = CleanHudModule.Enabled.Value && CleanHudModule.MapEnabled.Value && Markers != MapDetail.Off && GameRefs.Menu != null && GameRefs.Menu.ActiveStateName == "play"
                 && _fsm != null && _fsm.isActiveAndEnabled && _fsm.ActiveStateName == "on" && _camera != null && _map.gameObject.activeInHierarchy;
@@ -69,11 +72,11 @@ namespace WildWasteland.Modules.CleanHUD
                     e.Image = e.Root.gameObject.AddComponent<RawImage>(); e.Image.raycastTarget = false;
                     e.IconTexture = MapIcons.Get(e.Icon) ?? Assets.Tex("g_" + e.Icon);
                 }
-                bool ambiguous = Markers == MapDetail.Ambiguous;
+                bool ambiguous = Markers == MapDetail.Ambiguous && !(e.Owner == LocationMarkers.Owner && LocationMarkers.Known(e.Position));
                 e.Image.texture = ambiguous ? MapIcons.Get("unknown") : e.IconTexture;
                 e.Image.color = ambiguous ? Color.white : e.Color;
-                var p = _camera.WorldToViewportPoint(e.Position());
-                bool visible = p.z > 0 && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1;
+                var scene = e.Position(); var p = _camera.WorldToViewportPoint(scene);
+                bool visible = p.z > 0 && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1 && !(e.Owner == LocationMarkers.Owner && MapFog.Hides(scene));
                 if (e.Root.gameObject.activeSelf != visible) e.Root.gameObject.SetActive(visible);
                 if (visible) e.Root.anchoredPosition = new Vector2(p.x * _map.rect.width - 14, -(1 - p.y) * _map.rect.height + 14);
             }
@@ -87,7 +90,7 @@ namespace WildWasteland.Modules.CleanHUD
         }
         internal void SceneLoaded()
         {
-            RestoreNative();
+            RestoreNative(); MapFrame.Restore(); MapFog.SceneLoaded();
             if (_root != null) UnityEngine.Object.Destroy(_root.gameObject);
             foreach (var e in _entries) e.Root = null;
             _root = _map = null; _camera = null; _fsm = null;

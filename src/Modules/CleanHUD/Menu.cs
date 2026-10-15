@@ -673,10 +673,8 @@ namespace WildWasteland.Modules.CleanHUD
             _githubButton = CenteredRow(_rootRt, 0, 0, 200, 48, "GITHUB", 26, () => Application.OpenURL("https://github.com/DeonUrist/WildWasteland"));
             var githubRect = (RectTransform)_githubButton.transform;
             githubRect.anchorMin = githubRect.anchorMax = githubRect.pivot = new Vector2(1, 0); githubRect.anchoredPosition = new Vector2(-60, 140);
-            foreach (var link in new[] { _discordButton, _githubButton })
-            {
-                Plate(link.transform, 0, 0, 200, 48); var plate = link.transform.GetChild(link.transform.childCount - 1); plate.GetComponent<Image>().raycastTarget = false; plate.SetAsFirstSibling();
-            }
+            Plate(discordRect, 0, 0, 200, 112);
+            var linksPlate = discordRect.GetChild(discordRect.childCount - 1); linksPlate.GetComponent<Image>().raycastTarget = false; linksPlate.SetAsFirstSibling();
 
             _status = R(_rootRt, "status", 0, 0, 1920, 1080);
             _status.anchorMin = _status.anchorMax = new Vector2(0, 0); _status.pivot = new Vector2(0, 0); _status.anchoredPosition = Vector2.zero;

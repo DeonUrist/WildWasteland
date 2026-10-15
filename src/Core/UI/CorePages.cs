@@ -85,6 +85,7 @@ namespace WildWasteland.Core.UI
             CompassDetail(l, "Patrols on compass", CleanHudSettings.ShowConvoys, CleanHudSettings.AmbiguousPatrols);
             CompassDetail(l, "Locations on compass (1 km)", CleanHudSettings.ShowLocations, CleanHudSettings.AmbiguousLocations);
             Switch(l, "Map", CleanHudSettings.MapEnabled);
+            Switch(l, "Fog of war", CleanHudSettings.FogOfWar);
             CleanHudSettings.MapMarkers.Value = (MapDetail)l.Choices("Map markers", (int)CleanHudSettings.MapMarkers.Value, "Off", "Ambiguous", "On");
             CleanHudSettings.MapRoutes.Value = (MapDetail)l.Choices("Map Routes", (int)CleanHudSettings.MapRoutes.Value, "Off", "Ambiguous", "On");
             l.Entry(CleanHudSettings.Scale);
@@ -172,7 +173,8 @@ namespace WildWasteland.Core.UI
                 || ReferenceEquals(e, CleanHudSettings.ShowConvoys) || ReferenceEquals(e, CleanHudSettings.ShowLocations)
                 || ReferenceEquals(e, CleanHudSettings.AmbiguousPatrols) || ReferenceEquals(e, CleanHudSettings.AmbiguousLocations)
                 || ReferenceEquals(e, CleanHudSettings.ShowCompass) || ReferenceEquals(e, CleanHudSettings.MapEnabled)
-                || ReferenceEquals(e, CleanHudSettings.MapMarkers) || ReferenceEquals(e, CleanHudSettings.MapRoutes)) return false;
+                || ReferenceEquals(e, CleanHudSettings.MapMarkers) || ReferenceEquals(e, CleanHudSettings.MapRoutes)
+                || ReferenceEquals(e, CleanHudSettings.FogOfWar)) return false;
             if (ReferenceEquals(e, Player.Character) || ReferenceEquals(e, Player.BodyFirstPerson) || ReferenceEquals(e, Player.FullBodyOnlyOnFoot)
                 || ReferenceEquals(e, Player.EmptyHandArms) || ReferenceEquals(e, Player.FirstPersonArmsOnlyOnFoot) || ReferenceEquals(e, Player.OcclusionPrototype)
                 || ReferenceEquals(e, Player.ThirdPersonOnFoot) || ReferenceEquals(e, Player.ClimbingOn) || ReferenceEquals(e, Patrols.FuryRoad)
