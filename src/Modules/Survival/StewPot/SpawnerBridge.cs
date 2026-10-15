@@ -27,7 +27,7 @@ namespace WildWasteland.Modules.Survival
                 category = AccessTools.Field(entryType, "Category"); group = AccessTools.Field(entryType, "Group");
                 prefab = AccessTools.Field(entryType, "Prefab"); isAsset = AccessTools.Field(entryType, "IsAsset");
                 mod = AccessTools.Field(entryType, "Mod");
-                Core.Patches.Patch(owner, AccessTools.Method(catalog, "Entries"), postfix: AccessTools.Method(typeof(SpawnerBridge), "CatalogBuilt"));
+                Hooks.SpawnerCatalogEntries.Postfix(owner, CatalogBuilt);
                 Core.Log.Always("[Survival] Apocaspawner bridge installed: Stew Pot -> Camp & Farming (Camping).");
             }
         }

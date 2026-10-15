@@ -15,6 +15,7 @@ namespace WildWasteland.Core
         static readonly Dictionary<string, string> _status = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         static readonly List<string> _names = new List<string>();
         static bool _title;
+        internal static bool MenuModalOpen;
         static int _failed;
         static GUIContent _message;
         static readonly GUIContent Heading = new GUIContent("RESTART REQUIRED");
@@ -64,10 +65,10 @@ namespace WildWasteland.Core
 
         internal static void SceneLoaded(Scene scene) { _title = scene.buildIndex == 0; }
         static void Tick() { SceneLoaded(SceneManager.GetActiveScene()); }
-        static bool WantsNotice() { return _title && _message != null; }
+        static bool WantsNotice() { return _title && _message != null && !MenuModalOpen; }
         static void Draw()
         {
-            if (ToolWindow.IsOpen || EditorSession.Busy || ApocasetterBridge.InputBlocked) return;
+            if (MenuModalOpen || ToolWindow.IsOpen || EditorSession.Busy || ApocasetterBridge.InputBlocked) return;
             float scale = Mathf.Min(Screen.width / 1280f, Screen.height / 720f);
             Skin.Ensure(scale);
             float width = 540f * scale, inset = 20f * scale;

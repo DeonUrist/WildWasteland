@@ -38,6 +38,7 @@ Dispatcher semantics = HarmonyX with separate plugins: every prefix handler runs
 | `Fsm.EnterState(FsmState)` | prefix + postfix (never skip) | Guns: `MagazineStatePatch` -> `PerGunAmmo.BeforeState` / `AfterState`; CleanHUD: `PauseCursorFix.AfterEnterState`; Performance: `PollSleep.AfterEnterState`, `CarLod.AfterEnterState` | every state entry of every FSM (x2) | Guns: name length 12; CleanHUD: running, Menu/play on __GameManager__; Performance: tracked FSM / active feature | Apocasaver `AutosaveStatePatch` (postfix) |
 | `ES3Internal.ES3ReferenceMgrBase.GetPrefab(long,bool)` | prefix (first resolver returning a prefab wins) | Patrols: `MotorcycleIntegration.ResolvePrefab` (id 735710202610050001), `PrefabLookup.Resolve` (War Rig, id 735710202610090001); Survival: `SurvivalModule.ResolvePrefab` (Stew Pot, id 7392481500621300201) | per prefab lookup on load | `id != PrefabId` | |
 | `PlayMakerFSM.OnEnable` | postfix (observe) | Patrols: `NativeStormProtection.TrackDust.Postfix`; Performance: `FsmRegistry.OnEnablePost` (PM1 index), `GuiLoopFeature.OnFsmEnabled` (PM5) | per FSM enable | Patrols: `FsmName != "SandPlayer"`; Performance: registry users > 0 / static `On` | |
+| `Apocaspawner.Catalog.Entries` (optional, reflected) | postfix | Survival: `SpawnerBridge.CatalogBuilt`; Patrols: `SpawnerIntegration.CatalogPostfix` | catalog access | Survival: cached returned list/entry reference; Patrols: spawn enabled, entry key | Adds Stew Pot and War Rig through one Core dispatcher; no patch without subscribers |
 | `NWH.Common.FloatingOrigin.FloatingOrigin.Jump` | prefix + postfix (**always patched**) | Core: `Origin.BeforeJump` / `AfterJump` -> `IModule.OnOriginShift(delta)` for every running module (PlayerBody: active climb path; NPC: ghosts, nav boxes, brain/idle/nests/webs positions; Guns: bullets in flight; HUD: floating numbers; Patrols: `TrafficSpace.OriginShift`). No module subscribes to the raw `Hooks.OriginJump`. | per 1000 m jump | delta == zero -> nothing | standalone Apocapatrol (`TrafficSpace.OriginJump`, removed) |
 
 ## 2. Core-only patches (`Core.Patches.Patch(null, ...)`, Harmony id = GUID)
@@ -57,9 +58,8 @@ Not Harmony but worth knowing: `Core.SaveBus` polls `SaveLoadGame.ActiveStateNam
 | Target | Kind | Handler | Filter (first line) | Hot? |
 |---|---|---|---|---|
 | `ES3Internal.ES3Prefab.Awake` | postfix | `SurvivalModule.PrefabAwake` | prefab ID equals 7392481500621300201 | native prefab creation/load; registers live pots, no custom saved components |
-| `Apocaspawner.Catalog.Entries` (optional) | postfix | `SpawnerBridge.CatalogBuilt` | cached returned list/entry reference; reflection only on catalog rebuild | catalog access; adds one Stew Pot entry to Camp & Farming, removes it on shutdown |
 
-Shared GetButtonDown/GetPrefab subscriptions are listed in section 1. Runtime work uses `Survival.StewPot` (LateUpdateLast), `Survival.References` (1 s), and `Survival.Existing pots` (500 us scene discovery on enable/world-ready).
+Shared GetButtonDown/GetPrefab/Apocaspawner catalog subscriptions are listed in section 1. Runtime work uses `Survival.StewPot` (LateUpdateLast), `Survival.References` (1 s), and `Survival.Existing pots` (500 us scene discovery on enable/world-ready).
 
 ### PlayerBody
 
@@ -134,7 +134,7 @@ Shared `GetButtonDown.OnUpdate` prefix: `CancelHook.Prefix`, registered after HU
 | `Explosion.ShouldApplyForce(GameObject)` | postfix | `NativeStormProtection.RadialForce.Postfix` | `__result && rigs loaded` | per explosion force query |
 | `Tornado.OnTriggerStay(Collider)` | prefix (skip) | `NativeStormProtection.Suction.Prefix` | rigs loaded | per tornado contact per physics step |
 | `MotorcycleMod.Factory.Template()` (third party, only when loaded) | postfix | `MotorcycleIntegration.PrepareRearAccess` | - | rare |
-| `Apocaspawner.Catalog.Entries()` / `Apocaspawner.Spawner.Spawn(entry,int)` (third party, only when loaded) | postfix / prefix | `SpawnerIntegration.CatalogPostfix` / `SpawnPrefix` | entry key | on catalog build / spawn |
+| `Apocaspawner.Spawner.Spawn(entry,int)` (third party, only when loaded) | prefix | `SpawnerIntegration.SpawnPrefix` | entry key | on spawn; catalog subscription is listed in section 1 |
 | `ApocaDustStorm.StormShelter.ContainsActor` / `ApocaDustStorm.PlayerStormHazards.Tick` (third party, only when loaded) | prefix | `DustStormBridge.Shelter` / `RefreshOnCrossing` | `broken` flag (one failure stands both down) | per DustStorms tick |
 
 Dropped from Apocapatrol / War Rig: the 6 + 1 Harmony ids, `TrafficSpace.OriginJump` (Core.Origin), WarRig `PatchAll(assembly)`, `Apocasetter.Catalog.OptedIn` postfix (SettingsIntegration), WarRig's separate `CreateObject` / `GetPrefab` patches (now dispatcher subscribers). Non-Harmony hooks: `TerrainTile.OnBeforeTilePrepare / OnTileFinalized`, `Application.quitting += PatrolPersistence.FlushPending`, `SaveBus.StateChanged += PatrolPersistence.OnStateChanged` (subscribed in Init, removed in Shutdown).

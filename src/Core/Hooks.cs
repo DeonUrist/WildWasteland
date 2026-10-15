@@ -139,6 +139,7 @@ namespace WildWasteland.Core
         /// <summary>PlayMakerFSM.OnEnable postfix (after vanilla appended the FSM to FsmList). Postfix handlers only.</summary>
         public static readonly Hook<PlayMakerFSM> FsmEnable = new Hook<PlayMakerFSM>("PlayMakerFSM.OnEnable");
         public static readonly Hook<NWH.Common.FloatingOrigin.FloatingOrigin> OriginJump = new Hook<NWH.Common.FloatingOrigin.FloatingOrigin>("FloatingOrigin.Jump");
+        public static readonly Hook<object> SpawnerCatalogEntries = new Hook<object>("Apocaspawner.Catalog.Entries");
 
         public delegate bool FsmEventPrefix(Fsm fsm, FsmEvent ev, FsmEventData data);
         public sealed class FsmEventHook
@@ -236,6 +237,7 @@ namespace WildWasteland.Core
             RaycastEnter.Remove(owner); RaycastDo.Remove(owner); SmoothLookAtDo.Remove(owner); ActivateGameObjectEnter.Remove(owner); ActivateGameObjectDo.Remove(owner); SetPositionDo.Remove(owner);
             SensorRayHitEnter.Remove(owner); LosEnter3D.Remove(owner); LosUpdate3D.Remove(owner); SensorDetectionsDo.Remove(owner);
             ProcessEvent.Remove(owner); EnterState.Remove(owner); GetPrefab.Remove(owner); OriginJump.Remove(owner);
+            SpawnerCatalogEntries.Remove(owner);
         }
 
         /// <summary>
@@ -268,6 +270,7 @@ namespace WildWasteland.Core
             Use(EnterState.PrefixCount + EnterState.PostfixCount, EnterState.Applied, typeof(P_EnterState), () => EnterState.Applied = true);
             Use(GetPrefab.PrefixCount, GetPrefab.Applied, typeof(P_GetPrefab), () => GetPrefab.Applied = true);
             Use(FsmEnable.PostfixCount, FsmEnable.Applied, typeof(P_FsmEnable), () => FsmEnable.Applied = true);
+            Use(SpawnerCatalogEntries.PostfixCount, SpawnerCatalogEntries.Applied, typeof(P_SpawnerCatalogEntries), () => SpawnerCatalogEntries.Applied = true);
             // FloatingOrigin.Jump is always patched: Core raises IModule.OnOriginShift from it.
             Use(1, OriginJump.Applied, typeof(P_OriginJump), () => OriginJump.Applied = true);
         }
@@ -307,6 +310,7 @@ namespace WildWasteland.Core
             Add(sb, "ES3.GetPrefab", GetPrefab.Applied, GetPrefab.PrefixCount, 0);
             Add(sb, FsmEnable.Target, FsmEnable.Applied, FsmEnable.PrefixCount, FsmEnable.PostfixCount);
             Add(sb, OriginJump.Target, OriginJump.Applied, OriginJump.PrefixCount, OriginJump.PostfixCount);
+            Add(sb, SpawnerCatalogEntries.Target, SpawnerCatalogEntries.Applied, 0, SpawnerCatalogEntries.PostfixCount);
             return sb.ToString();
         }
         static void Add(System.Text.StringBuilder sb, string name, bool applied, int pre, int post)
@@ -316,6 +320,12 @@ namespace WildWasteland.Core
         }
 
         // ---- the actual Harmony patch classes: one per target, each a thin forwarder ----
+        [HarmonyPatch]
+        static class P_SpawnerCatalogEntries
+        {
+            static MethodBase TargetMethod() { return Patches.Method("Apocaspawner.Catalog", "Entries"); }
+            static void Postfix(object __result) { SpawnerCatalogEntries.RunPostfix(__result); }
+        }
         [HarmonyPatch(typeof(CreateObject), "OnEnter")] static class P_CreateObjectEnter { static bool Prefix(CreateObject __instance) { return CreateObjectEnter.RunPrefix(__instance); } static void Postfix(CreateObject __instance) { CreateObjectEnter.RunPostfix(__instance); } }
         [HarmonyPatch(typeof(SendEvent), "OnEnter")] static class P_SendEventEnter { static bool Prefix(SendEvent __instance) { return SendEventEnter.RunPrefix(__instance); } static void Postfix(SendEvent __instance) { SendEventEnter.RunPostfix(__instance); } }
         [HarmonyPatch(typeof(SendEvent), "OnUpdate")] static class P_SendEventUpdate { static bool Prefix(SendEvent __instance) { return SendEventUpdate.RunPrefix(__instance); } }

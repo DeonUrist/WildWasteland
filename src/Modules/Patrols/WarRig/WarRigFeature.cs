@@ -86,7 +86,7 @@ namespace WildWasteland.Modules.Patrols.WarRig
         }
     }
 
-    // Apocaspawner (third party, optional): a "War Rig (tanker)" catalog entry spawning through SpawnNearPlayer. Module patches.
+    // Apocaspawner (third party, optional): shared catalog hook and module-only SpawnNearPlayer patch.
     internal static class SpawnerIntegration
     {
         private static Type entry;
@@ -100,7 +100,7 @@ namespace WildWasteland.Modules.Patrols.WarRig
             var catalog = AccessTools.Method(asm.GetType("Apocaspawner.Catalog"), "Entries");
             var spawn = AccessTools.Method(asm.GetType("Apocaspawner.Spawner"), "Spawn");
             if (entry == null || catalog == null || spawn == null) { Core.Log.Warn("[Patrols] " + "Apocaspawner API changed; natural spawning remains available."); entry = null; return; }
-            Core.Patches.Patch(owner, catalog, postfix: AccessTools.Method(typeof(SpawnerIntegration), nameof(CatalogPostfix)));
+            Core.Hooks.SpawnerCatalogEntries.Postfix(owner, CatalogPostfix);
             Core.Patches.Patch(owner, spawn, prefix: AccessTools.Method(typeof(SpawnerIntegration), nameof(SpawnPrefix)));
         }
 

@@ -87,7 +87,6 @@ namespace WildWasteland.Modules.CleanHUD
             D("GRAPHICS", "RESOLUTION", null, "res");
             D("GRAPHICS", "SCREEN MODE", null, "mode");
             D("GRAPHICS", "QUALITY", null, "quality");
-            D("GRAPHICS", "APPLY DISPLAY", null, "apply");
             F("GRAPHICS", "FIELD OF VIEW", "FOV", 40, 120, 75, "Graphics_Canvas/Graphics/fov/FOV", "0");
             B("GRAPHICS", "AMBIENT OCCLUSION", "ambient_occlusion", true, "Graphics_Canvas/Graphics/ambient occlusion/ambient_occlusion");
             B("GRAPHICS", "BLOOM", "bloom", true, "Graphics_Canvas/Graphics/bloom/bloom");
@@ -240,6 +239,7 @@ namespace WildWasteland.Modules.CleanHUD
         {
             Screen.SetResolution(W, H, (FullScreenMode)Mode);
             QualitySettings.SetQualityLevel(Quality, true);
+            Core.Log.Always("[CleanHUD] Display apply requested: " + ResText + " " + ModeNames[Mode] + ", quality " + QualityText);
             try
             {
                 File.WriteAllText(PathXml, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<Settings xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\r\n" +
@@ -440,6 +440,7 @@ namespace WildWasteland.Modules.CleanHUD
         internal void Teardown() { Teardown(false); }
         private void Teardown(bool keepVanilla)
         {
+            Core.ReplacementGuard.MenuModalOpen = false;
             if (!keepVanilla) { _van = null; _ctx = Ctx.None; }
             RestoreVanilla();
             if (_root != null) UnityEngine.Object.Destroy(_root);
@@ -866,6 +867,7 @@ namespace WildWasteland.Modules.CleanHUD
             var entries = ApocaLanguageMenu.Read(); if (entries.Count == 0) return;
             CloseModal();
             _modal = R(_rootRt, "languages", 0, 0, 1920, 1080);
+            Core.ReplacementGuard.MenuModalOpen = true;
             var blocker = _modal.gameObject.AddComponent<Image>(); blocker.color = Color.clear;
             _modal.gameObject.AddComponent<ClickZone>().OnClick = CloseModal;
             float height = Mathf.Min(660, entries.Count * 40 + 84), x = 660, y = 320;
@@ -1008,6 +1010,7 @@ namespace WildWasteland.Modules.CleanHUD
         {
             CloseModal();
             _modal = R(_rootRt, "modal", 0, 0, 1920, 1080);
+            Core.ReplacementGuard.MenuModalOpen = true;
             _modal.anchorMin = Vector2.zero; _modal.anchorMax = Vector2.one; _modal.sizeDelta = Vector2.zero; _modal.anchoredPosition = Vector2.zero;
             var dim = _modal.gameObject.AddAccent<Image>(); dim.color = new Color(0, 0, 0, .55f); dim.raycastTarget = true;
             var box = R(_modal, "box", 0, 0, 640, yes != null ? 236 : 172);
@@ -1026,6 +1029,7 @@ namespace WildWasteland.Modules.CleanHUD
         {
             if (_modal == null) return;
             UnityEngine.Object.Destroy(_modal.gameObject); _modal = null;
+            Core.ReplacementGuard.MenuModalOpen = false;
             _nextFrame.Add(() => SelectFirst(_screen == "main" ? _main : _sub));
         }
 
@@ -1121,6 +1125,15 @@ namespace WildWasteland.Modules.CleanHUD
                     SettingRow(_sub, RX, y, RW, RH, d);
                     y += RH;
                 }
+            if (_tab == "GRAPHICS")
+            {
+                const float AW = 300, AH = 50;
+                var apply = CenteredRow(_sub, RX + RW - AW, Y + H - AH - 14, AW, AH, "APPLY DISPLAY", 26, () => _display.Apply());
+                apply.Sticky = true; apply.Refresh();
+                apply.GetComponent<Image>().color = new Color(Gold.r, Gold.g, Gold.b, .15f);
+                Frame(apply.transform, 0, 0, AW, AH, 1.5f, Gold);
+                T(_sub, "displayhint", RX + 22, Y + H - AH - 14, RW - AW - 40, AH, 20, TextAnchor.MiddleLeft, Dim, "SELECT DISPLAY OPTIONS, THEN APPLY");
+            }
             if (_tab == "CHEATS")
                 T(_sub, "cheatnote", RX + 22, Y + H - 52, RW - 44, 36, 20, TextAnchor.MiddleLeft, Dim, "CHEATS ENABLED IN WILD WASTELAND SETTINGS");
             _keyLastSel = null;
@@ -1200,10 +1213,6 @@ namespace WildWasteland.Modules.CleanHUD
                     right.raycastTarget = true; right.gameObject.AddComponent<ClickZone>().OnClick = () => { Sound(); step(1); };
                     break;
                 }
-                case "apply":
-                    b = Row(p, x, y, w, h, d.Label, 26, () => _display.Apply(), out lbl);
-                    T(b.transform, "hint", cx, 0, CW, h, 20, TextAnchor.MiddleLeft, Dim, "RESOLUTION, MODE, QUALITY");
-                    break;
                 case "screen":
                     b = Row(p, x, y, w, h, d.Label, 26, () => OpenScreen(d.Path, d.Key), out lbl);
                     T(b.transform, "hint", cx, 0, CW, h, 20, TextAnchor.MiddleLeft, Dim, "THE GAME'S OWN SCREEN");
