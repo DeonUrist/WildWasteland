@@ -12,7 +12,7 @@ namespace WildWasteland.Modules.Patrols
         private readonly System.Collections.Generic.List<MapLabel> _mapLabels=new System.Collections.Generic.List<MapLabel>();
         private readonly System.Collections.Generic.List<Rect> _mapBattles=new System.Collections.Generic.List<Rect>();
         private Vector2 _gameInkSize;
-        private bool _inkNames,_inkHide,_mapWasOpen;
+        private bool _inkNames,_inkHide,_mapWasOpen,_lblHide,_inkOn,_lblOn;
         private readonly Vector3[] _mapCorners=new Vector3[4];
         private Texture2D _skull;
         private Texture2D _mapDot;
@@ -73,7 +73,7 @@ namespace WildWasteland.Modules.Patrols
             bool inGame=Core.GameRefs.InGame;float now=Time.unscaledTime;
             if(inGame&&now<WarRig.WorldSpawning.NaturalNoticeUntil)return true;
             var mapApi=Core.Services.Map;
-            bool traffic=PatrolsModule.WorldTrafficEnabled.Value&&(mapApi!=null?mapApi.Routes!=Core.MapDetail.Off:PatrolsModule.TrafficDebugMap.Value);
+            bool traffic=PatrolsModule.WorldTrafficEnabled.Value&&(RoutesOn||MarkersOn);
             bool reset=_gameInkAt!=0f||_mapWasOpen;
             if((!traffic&&WarRig.WorldSpawning.NaturalRigs.Count==0)||!inGame)return reset;
             bool mapOpen=_mapCheat!=null&&_mapCheat.isActiveAndEnabled&&_mapCheat.ActiveStateName=="on";
@@ -92,7 +92,7 @@ namespace WildWasteland.Modules.Patrols
             var rigs=WarRig.WorldSpawning.NaturalRigs;
             for(int i=rigs.Count-1;i>=0;i--)if(rigs[i]==null)rigs.RemoveAt(i);
             var mapApi=Core.Services.Map;
-            bool traffic=PatrolsModule.WorldTrafficEnabled.Value&&(mapApi!=null?mapApi.Routes!=Core.MapDetail.Off:PatrolsModule.TrafficDebugMap.Value);
+            bool traffic=PatrolsModule.WorldTrafficEnabled.Value&&(RoutesOn||MarkersOn);
             if((!traffic&&rigs.Count==0)||!Core.GameRefs.InGame)
             {_gameInkAt=0f;_mapWasOpen=false;return;}
             bool mapOpen=_mapCheat!=null&&_mapCheat.isActiveAndEnabled&&_mapCheat.ActiveStateName=="on";
@@ -110,35 +110,41 @@ namespace WildWasteland.Modules.Patrols
             var rect=new Rect(_mapCorners[0].x,Screen.height-_mapCorners[1].y,_mapCorners[2].x-_mapCorners[0].x,_mapCorners[1].y-_mapCorners[0].y);
             if(rect.width<1f||rect.height<1f)return;
             var old=GUI.color;GUI.BeginGroup(rect);
-            if(traffic&&(Time.unscaledTime>=_gameInkAt||_gameInkSize!=rect.size||_inkNames!=MapNames||_inkHide!=MapUnknown))
+            bool inkOn=RoutesOn,lblOn=MarkersOn;
+            if(traffic&&(Time.unscaledTime>=_gameInkAt||_gameInkSize!=rect.size||_inkNames!=MapNames||_inkHide!=InkUnknown||_lblHide!=MapUnknown||_inkOn!=inkOn||_lblOn!=lblOn))
             {
-                bool first=_gameInkAt<=0f||_gameInkSize!=rect.size||_inkNames!=MapNames||_inkHide!=MapUnknown;
+                bool first=_gameInkAt<=0f||_gameInkSize!=rect.size||_inkNames!=MapNames||_inkHide!=InkUnknown||_lblHide!=MapUnknown||_inkOn!=inkOn||_lblOn!=lblOn;
                 _gameInkAt=Time.unscaledTime+1f;_gameInkSize=rect.size;
-                _inkNames=MapNames;_inkHide=MapUnknown;
+                _inkNames=MapNames;_inkHide=InkUnknown;_lblHide=MapUnknown;_inkOn=inkOn;_lblOn=lblOn;
                 // Perf: the route texture is redrawn only when its inputs change (journeys/routes/colours, map camera, size, options),
                 // while the fog is being revealed around a moving player, and every 10 s as a safety net (was every second); labels stay 1 Hz
-                if(InkChanged(mapApi,first))
+                if(inkOn&&InkChanged(mapApi,first))
                 {
                 var canvas=new Rect(0,0,Mathf.Min(512f,rect.width),Mathf.Min(512f,rect.height));
                 _gameInk.Begin(Mathf.RoundToInt(canvas.width),Mathf.RoundToInt(canvas.height));
                 foreach(var journey in _journeys)if(!journey.foot)for(int i=1;i<journey.route.Length;i++)   // foot patrols: never inked
-                    InkSegment(mapApi,journey.route[i-1],journey.route[i],canvas,RouteColor(journey));
+                    InkSegment(mapApi,journey.route[i-1],journey.route[i],canvas,RouteColor(journey,InkUnknown));
                 _gameInk.End();
                 }
                 _mapLabels.Clear();_mapBattles.Clear();
-                foreach(var journey in _journeys)if(!Fogged(mapApi,journey.position)&&(!journey.foot||FootLabels))
-                CacheMapLabel(journey.position,rect,RouteColor(journey),journey.foot?FootMapName(journey):MapName(journey),journey.foot);
+                // World traffic markers (their own switch, fog of war respected; "Unknown" with Map markers Ambiguous): moving dots + names
+                // of every traffic group, cars and foot travelers alike. Map Routes only draws the route lines above.
+                if(lblOn)
+                {
+                foreach(var journey in _journeys)if(!Fogged(mapApi,journey.position))
+                CacheMapLabel(journey.position,rect,RouteColor(journey,MapUnknown),MapName(journey),journey.foot);
                 if(first&&Core.Log.Verbose)LogFootDots(mapApi,rect);
                 foreach(var camp in TrafficLocations.Known.Values)if(camp.cleared&&mapApi==null)
                 CacheMapLabel(camp.center,rect,Color.gray,camp.name+" [Cleared]");
                 foreach(var battle in _battles)
                 {if(Fogged(mapApi,battle.position))continue;var p=MapPoint(battle.position,rect);_mapBattles.Add(new Rect(p.x-9f,p.y-9f,18f,18f));}
                 foreach(var merchant in MerchantHost.All)if(merchant!=null&&!Owns(merchant.GetComponent<PatrolMarker>())&&(mapApi==null||!mapApi.Hidden(merchant.transform.position)))
-                CacheMapLabel(TrafficSpace.World(merchant.transform.position),rect,_inkHide?Color.gray:Color.yellow,_inkHide?"Unknown":_inkNames?merchant.Data?.group??"Coyote merchant":"Merchant");
+                CacheMapLabel(TrafficSpace.World(merchant.transform.position),rect,_lblHide?Color.gray:Color.yellow,_lblHide?"Unknown":_inkNames?merchant.Data?.group??"Coyote merchant":"Merchant");
+                }
             }
             if(traffic)
             {
-                GUI.color=Color.white;GUI.DrawTexture(new Rect(0,0,rect.width,rect.height),_gameInk.Texture);
+                if(inkOn){GUI.color=Color.white;GUI.DrawTexture(new Rect(0,0,rect.width,rect.height),_gameInk.Texture);}
                 foreach(var label in _mapLabels)DrawMapLabel(label);
                 GUI.color=Color.white;foreach(var battle in _mapBattles)GUI.DrawTexture(battle,Skull());
             }
@@ -164,7 +170,7 @@ namespace WildWasteland.Modules.Patrols
             foreach(var journey in _journeys)
             {
                 if(journey.foot)continue;   // not inked: their walking never re-inks the routes
-                var c=RouteColor(journey);
+                var c=RouteColor(journey,InkUnknown);
                 sig=sig*31+(journey.route!=null?System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(journey.route)*7+journey.route.Length:0);
                 sig=sig*31+((c.r<<16)|(c.g<<8)|c.b);
             }
@@ -196,7 +202,7 @@ namespace WildWasteland.Modules.Patrols
                 if(!journey.foot)continue;n++;var p=MapPoint(journey.position,rect);
                 bool inside=p.x>=0f&&p.y>=0f&&p.x<=rect.width&&p.y<=rect.height;
                 PatrolsModule.Verbose("Map: foot patrol "+journey.name+" at "+TrafficLocations.FlatDistance(journey.position,pw).ToString("0")+" m from you, map point "+p.x.ToString("0")+","+p.y.ToString("0")+
-                    " of "+rect.width.ToString("0")+"x"+rect.height.ToString("0")+(inside?" (on the map)":" (outside the shown area)")+(Fogged(mapApi,journey.position)?", in fog":"")+(FootLabels?"":", hidden: Map routes not On"));
+                    " of "+rect.width.ToString("0")+"x"+rect.height.ToString("0")+(inside?" (on the map)":" (outside the shown area)")+(Fogged(mapApi,journey.position)?", in fog":"")+(MarkersOn?"":", hidden: World traffic markers off"));
             }
             if(n==0)PatrolsModule.Verbose("Map: no foot patrols in world traffic");
         }
@@ -226,11 +232,6 @@ namespace WildWasteland.Modules.Patrols
         }
         private void CacheMapLabel(Vector3 world,Rect rect,Color color,string text,bool foot=false)
         {var p=MapPoint(world,rect);_mapLabels.Add(new MapLabel{rect=new Rect(p.x+7f,p.y-13f,260f,26f),color=color,text=text,foot=foot});}
-        // foot patrols: a bigger coloured dot with a thick black outline and "(on foot)", so they never read as one of the car groups
-        // (car and foot groups share the editor's group names); the string is cached per journey name
-        private readonly System.Collections.Generic.Dictionary<string,string> _footNames=new System.Collections.Generic.Dictionary<string,string>();
-        private string FootMapName(TrafficJourney journey)
-        {var n=journey.name??"Patrol";string s;if(!_footNames.TryGetValue(n,out s)){s=n+" (on foot)";if(_footNames.Count>64)_footNames.Clear();_footNames[n]=s;}return s;}
         private void DrawMapLabel(MapLabel label)
         {
             if(_mapLabelStyle==null)_mapLabelStyle=new GUIStyle(GUI.skin.label){fontSize=15,wordWrap=false,normal={textColor=Color.white}};
@@ -260,14 +261,16 @@ namespace WildWasteland.Modules.Patrols
         {var p=_gameMap.WorldToViewportPoint(TrafficSpace.Scene(world));return new Vector2(p.x*rect.width,(1f-p.y)*rect.height);}
         internal static string MapName(TrafficJourney journey)
         {return MapUnknown?"Unknown":MapNames&&!string.IsNullOrEmpty(journey.name)?journey.name:journey.merchant?"Merchant":journey.convoy?"Convoy":"Patrol";}
-        private static bool MapUnknown {get{return Core.Services.Map!=null?Core.Services.Map.Routes==Core.MapDetail.Ambiguous:PatrolsModule.HideRouteType.Value;}}
-        // foot patrols show a dot + "<Faction> <Group>" only with Map Routes On (hidden with Ambiguous / Off);
-        // without CleanHUD's map service the old Real patrol names / hide route type switches decide
-        private static bool FootLabels {get{return MapNames;}}   // Routes On only: a coloured dot with a black outline + "<Faction> <Group>"
-        private static bool MapNames {get{return Core.Services.Map!=null?Core.Services.Map.Routes==Core.MapDetail.On:PatrolsModule.RealPatrolNames.Value;}}
-        internal static Color32 RouteColor(TrafficJourney journey)
+        // Map Routes (Off / Ambiguous / On): the route lines only. World traffic markers (Off / On): the moving dots + names, whose
+        // ambiguity follows Map markers (Ambiguous = gray "Unknown"). Without CleanHUD's map service the old debug switches decide both.
+        private static bool RoutesOn {get{var m=Core.Services.Map;return m!=null?m.Routes!=Core.MapDetail.Off:PatrolsModule.TrafficDebugMap.Value;}}
+        private static bool MarkersOn {get{var m=Core.Services.Map;return m!=null?m.TrafficMarkers:PatrolsModule.TrafficDebugMap.Value;}}
+        private static bool InkUnknown {get{var m=Core.Services.Map;return m!=null?m.Routes==Core.MapDetail.Ambiguous:PatrolsModule.HideRouteType.Value;}}
+        private static bool MapUnknown {get{var m=Core.Services.Map;return m!=null?m.Markers==Core.MapDetail.Ambiguous:PatrolsModule.HideRouteType.Value;}}
+        private static bool MapNames {get{var m=Core.Services.Map;return m!=null?m.Markers!=Core.MapDetail.Ambiguous:PatrolsModule.RealPatrolNames.Value;}}
+        internal static Color32 RouteColor(TrafficJourney journey,bool unknown)
         {
-            if(MapUnknown)return new Color32(150,150,150,255);
+            if(unknown)return new Color32(150,150,150,255);
             if(journey.merchant)return new Color32(255,220,50,255);
             if(TrafficFactions.Normalize(journey.faction)=="Coyotes")return journey.convoy?new Color32(110,210,255,255):new Color32(80,220,100,255);
             return journey.convoy?new Color32(255,150,40,255):new Color32(255,80,80,255);

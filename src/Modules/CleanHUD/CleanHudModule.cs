@@ -21,7 +21,7 @@ namespace WildWasteland.Modules.CleanHUD
         internal static ConfigEntry<bool> AmbiguousPatrols, AmbiguousLocations;
         internal static ConfigEntry<bool> ShowCompass, MapEnabled;
         internal static ConfigEntry<MapDetail> MapMarkers, MapRoutes;
-        internal static ConfigEntry<bool> FogOfWar;
+        internal static ConfigEntry<bool> FogOfWar, MapTrafficMarkers;
         internal static ConfigEntry<float> FogRadius, FogEdge, FogOpacity;
         internal static LayoutFile Layout;
         private Hud _hud;
@@ -51,8 +51,9 @@ namespace WildWasteland.Modules.CleanHUD
             ShowCompass = cfg.Player("HUD", "Compass", true, "Show the compass, including its direction strip and all markers.");
             MapEnabled = cfg.Player("Map", "Enabled", true, "Enable the native debug map on the game's Map key.");
             MapMarkers = cfg.Player("Map", "Markers", MapDetail.Ambiguous, "Off hides map markers; Ambiguous shows question marks until locations are discovered within 100 m; On shows their icons and colors. Discoveries are saved. Map icons have no name labels.");
+            MapTrafficMarkers = cfg.Player("Map", "TrafficMarkers", true, "World traffic markers: the moving dots and names of patrols, convoys, merchants and foot travelers. They respect the fog of war; with Markers Ambiguous they show as gray Unknown.");
             bool savedRoutes = Legacy.Get(cfg.Main.ConfigFilePath, cfg.Section("Map"), "Routes") != null;
-            MapRoutes = cfg.Player("Map", "Routes", MapDetail.Ambiguous, "Off hides traffic routes; Ambiguous shows gray unknown routes; On shows faction colors and full names.");
+            MapRoutes = cfg.Player("Map", "Routes", MapDetail.Off, "Route lines of world traffic only (the moving markers are World traffic markers). Off hides them; Ambiguous draws them gray; On in faction colors.");
             if (!savedRoutes)
             {
                 string section = "Patrols / Traffic tuning";

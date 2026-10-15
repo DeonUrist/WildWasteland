@@ -14,7 +14,7 @@ namespace WildWasteland.Modules.CleanHUD
         internal Text UIText;
         internal Text[] CodexTexts;
         internal Text Health, Armor, ArmorMax, AmmoInWeapon, AmmoReserve, NativeFontSource, Thirst, Hunger, Fatigue, Sanity;
-        internal FsmInt Grenades;
+        internal FsmInt Grenades, Money;
         internal Transform[] SlotHolders = new Transform[3];
         internal PlayMakerFSM Weapons, Bandage, FirstAid;
         internal Transform PlayerCamera;
@@ -81,6 +81,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (PlayerCamera == null) { var f = SceneCache.Fsm("PlayerCamera", "GrabItem"); if (f != null) PlayerCamera = f.transform; }
             if (Grenades == null) { var f = SceneCache.Fsm("__GameManager__", "Ammo"); if (f != null) Grenades = f.FsmVariables.FindFsmInt("ammo_grenade"); }
             if (Grenades == null) Grenades = FsmVariables.GlobalVariables.FindFsmInt("ammo_grenade");
+            if (Money == null) Money = FsmVariables.GlobalVariables.FindFsmInt("Money");
             if (Weapons != null) for (int i = 0; i < 3; i++)
             {
                 if (_selected[i] == null) _selected[i] = Weapons.FsmVariables.FindFsmBool(i == 0 ? "weapon1_Bool" : i == 1 ? "weapon2_Bool" : "weapon3_Bool");

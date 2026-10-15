@@ -10,6 +10,18 @@ namespace WildWasteland.Modules.CleanHUD
         protected override void OnPopulateMesh(VertexHelper vh)
         {
             vh.Clear();
+            if (Kind == 3)
+            {
+                Stroke(vh, new Vector2(7, 35), new Vector2(13, 45)); Stroke(vh, new Vector2(13, 45), new Vector2(25, 45));
+                Stroke(vh, new Vector2(25, 45), new Vector2(31, 35)); Stroke(vh, new Vector2(31, 35), new Vector2(25, 25));
+                Stroke(vh, new Vector2(25, 25), new Vector2(13, 25)); Stroke(vh, new Vector2(13, 25), new Vector2(7, 35));
+                Ring(vh, new Vector2(19, 35), 4, 0, 360);
+                Stroke(vh, new Vector2(25, 29), new Vector2(44, 10)); Stroke(vh, new Vector2(29, 33), new Vector2(48, 14));
+                Stroke(vh, new Vector2(44, 10), new Vector2(48, 14));
+                Stroke(vh, new Vector2(32, 22), new Vector2(38, 28)); Stroke(vh, new Vector2(36, 18), new Vector2(42, 24));
+                Stroke(vh, new Vector2(40, 14), new Vector2(46, 20));
+                return;
+            }
             if (Kind == 0)
             {
                 Ring(vh, new Vector2(16, 36), 10, 0, 360);

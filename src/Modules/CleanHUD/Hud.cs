@@ -53,6 +53,8 @@ namespace WildWasteland.Modules.CleanHUD
             internal float HpFrac = -1, ArFrac = -1;
         }
         private Bars _compact, _needs, _bars;
+        private Text _boltsNum;
+        private int _boltsValue = int.MinValue;
         private RawImage _sanIcon;
         private Text _sanNum;
         private RectTransform _vehicle;
@@ -227,6 +229,11 @@ namespace WildWasteland.Modules.CleanHUD
         private void BuildVitals()
         {
             var g = _groups["vitals"];
+            var bolt = R(g, "bolts icon", 22, -36, 52, 52).gameObject.AddComponent<VehicleStatusIcon>();
+            bolt.Kind = 3; bolt.color = Gold; bolt.raycastTarget = false; bolt.rectTransform.localScale = new Vector3(.5f, .5f, 1);
+            var bo = bolt.gameObject.AddComponent<Outline>(); bo.effectColor = Color.black; bo.effectDistance = new Vector2(2, -2);
+            _boltsNum = Txt(g, "bolts", 56, -38, 240, 30, 24, TextAnchor.MiddleLeft, HudWhite);
+            var bn = _boltsNum.gameObject.AddComponent<Outline>(); bn.effectColor = Color.black; bn.effectDistance = new Vector2(1, -1);
             _compact = new Bars { Root = R(g, "compact", 0, 0, 452, 126).gameObject, FillW = 257f, FillH = 23f };
             var c = _compact.Root.transform;
             Raw(c, "panel", -40, -40, 532, 206, Assets.Tex("panel_vitals"), Color.white);
@@ -551,6 +558,7 @@ namespace WildWasteland.Modules.CleanHUD
 
         private void TickVitals()
         {
+            if (_src.Money != null && _src.Money.Value != _boltsValue) { _boltsValue = _src.Money.Value; _boltsNum.text = _boltsValue.ToString(CultureInfo.InvariantCulture); }
             float hpV = Bindings.Number(_src.Health), arV = Bindings.Number(_src.Armor), max = Bindings.Number(_src.ArmorMax);
             float hp = Mathf.Clamp01(hpV / 100f);
             float ar = max > 0 ? Mathf.Clamp01(arV / max) : 0f;

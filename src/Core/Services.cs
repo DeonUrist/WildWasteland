@@ -251,6 +251,8 @@ namespace WildWasteland.Core
         bool Hidden(Vector3 scene);
         /// <summary>True while the native map is shown (other mouse-wheel users stand down).</summary>
         bool Open { get; }
+        /// <summary>Map setting "World traffic markers": the moving traffic dots + names (fog of war respected; ambiguity from Markers).</summary>
+        bool TrafficMarkers { get; }
         /// <summary>Map camera zoom factor: 1 = native view, smaller = zoomed in (min about 0.667).</summary>
         float Zoom { get; }
     }
