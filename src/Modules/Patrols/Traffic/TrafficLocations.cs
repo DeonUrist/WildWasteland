@@ -45,25 +45,60 @@ namespace WildWasteland.Modules.Patrols
         private const BindingFlags Flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
 
         internal static void Reset()
-        { Known.Clear(); Points.Clear(); ExaminedPoints.Clear(); Roots.Clear(); Mapped.Clear(); Scan.Clear(); MapQueue.Clear();QueuedMaps.Clear();_nextScan = _nextBake = 0f; _structures.Clear();_discoveryReady=false; Revision++; }
+        { Known.Clear(); Points.Clear(); ExaminedPoints.Clear(); Roots.Clear(); Mapped.Clear(); Scan.Clear(); Shallow.Clear(); MapQueue.Clear();QueuedMaps.Clear();_nextScan = _nextBake = _nextDeep = 0f; _tileApplied = false; _structures.Clear();_discoveryReady=false; Revision++; }
+
+        // Perf: deep scene walk on scene load / tile apply / every 60 s (was every 15 s); the 15 s cadence keeps a roots-only pass
+        // (ObserveRoot camp-resident candidates, root camps/POIs). Time-budgeted per frame instead of a fixed 200 nodes.
+        private static readonly Stack<Transform> Shallow = new Stack<Transform>();
+        private static readonly System.Diagnostics.Stopwatch Budget = new System.Diagnostics.Stopwatch();
+        private static readonly long BudgetTicks = (long)(System.Diagnostics.Stopwatch.Frequency * 0.0003);
+        private static float _nextDeep;
+        private static volatile bool _tileApplied;
+        private static readonly List<GameObject> RootBuffer = new List<GameObject>();
+        internal static void TileApplied() { _tileApplied = true; }   // TrafficRoads forwards MapMagic TerrainTile.OnTileApplied
+        private static bool MaybeCoyote(string n)
+        {
+            // exact pre-filter for PrefabName(n) == "Camp_1x": PrefabName only strips a trailing suffix and trims whitespace
+            if (n == null) return false; int i = 0; while (i < n.Length && char.IsWhiteSpace(n[i])) i++;
+            return n.Length - i >= 7 && string.CompareOrdinal(n, i, "Camp_1", 0, 6) == 0;
+        }
 
         internal static void Tick()
         {
-            if (Scan.Count == 0 && Time.unscaledTime >= _nextScan)
+            if (_tileApplied)
+            {
+                // MapMagic applied a tile: deep rescan shortly (objects finish spawning), queued behind a scan already running
+                _tileApplied = false; float due = Time.unscaledTime + 3f;
+                if (_nextDeep > due) _nextDeep = due; if (_nextScan > due) _nextScan = due;
+            }
+            if (Scan.Count == 0 && Shallow.Count == 0 && Time.unscaledTime >= _nextScan)
             {
                 _nextScan = Time.unscaledTime + 15f;
+                bool deep = Time.unscaledTime >= _nextDeep;
+                if (deep) _nextDeep = Time.unscaledTime + 60f;
                 for (int i = 0; i < SceneManager.sceneCount; i++)
-                { var scene = SceneManager.GetSceneAt(i); if (scene.isLoaded) foreach (var root in scene.GetRootGameObjects()) Scan.Push(root.transform); }
+                {
+                    var scene = SceneManager.GetSceneAt(i); if (!scene.isLoaded) continue;
+                    RootBuffer.Clear(); scene.GetRootGameObjects(RootBuffer);
+                    foreach (var root in RootBuffer) (deep ? Scan : Shallow).Push(root.transform);
+                }
+                RootBuffer.Clear();
             }
-            bool remembered=false;
-            for (int i = 0; i < 200 && Scan.Count > 0; i++)
+            bool remembered=false;Budget.Reset();Budget.Start();
+            while (Scan.Count > 0 || Shallow.Count > 0)
             {
-                var t = Scan.Pop(); if (t == null) continue;
-                if(t.parent==null)TrafficCamps.ObserveRoot(t);
-                RememberPoi(t);
-                if (IsCamp(t.name)) { Remember(t, null); remembered=true;break; }
-                for (int c = 0; c < t.childCount; c++) Scan.Push(t.GetChild(c));
+                bool deep = Scan.Count > 0;
+                var t = deep ? Scan.Pop() : Shallow.Pop(); if (t == null) continue;
+                string name = t.name; bool root = t.parent == null;
+                if(root)TrafficCamps.ObserveRoot(t);
+                RememberPoi(t, name);
+                if (IsCamp(name)) { Remember(t, null); remembered=true;break; }
+                // vehicles (scene roots) never hold camps/POIs: skip their part hierarchies
+                if (deep && !(root && t.GetComponent<NWH.VehiclePhysics2.VehicleController>() != null))
+                    for (int c = 0; c < t.childCount; c++) Scan.Push(t.GetChild(c));
+                if (Budget.ElapsedTicks >= BudgetTicks) break;
             }
+            Budget.Stop();
             if(Scan.Count==0)_discoveryReady=true;
             if(!remembered&&MapQueue.Count>0)
             {
@@ -92,12 +127,12 @@ namespace WildWasteland.Modules.Patrols
         { return name != null && name.StartsWith("Camp_", StringComparison.OrdinalIgnoreCase) && name.Length > 5 && char.IsDigit(name[5]); }
 
         internal static bool CoyoteCamp(string name)
-        {var n=TemplateExporter.PrefabName(name);return n=="Camp_10"||n=="Camp_15"||n=="Camp_16";}
+        {if(!MaybeCoyote(name))return false;var n=TemplateExporter.PrefabName(name);return n=="Camp_10"||n=="Camp_15"||n=="Camp_16";}
         internal static bool PoiName(string name)
         {return CoyoteCamp(name)||name.StartsWith("Building_",StringComparison.OrdinalIgnoreCase)||name.StartsWith("GasStation",StringComparison.OrdinalIgnoreCase)||name.StartsWith("Shop_",StringComparison.OrdinalIgnoreCase);}
-        private static void RememberPoi(Transform root)
+        private static void RememberPoi(Transform root,string name)
         {
-            if(!PoiName(root.name))return;string id=Identity(root);if(Points.ContainsKey(id)||!ExaminedPoints.Add(id))return;
+            if(!PoiName(name))return;string id=Identity(root);if(Points.ContainsKey(id)||!ExaminedPoints.Add(id))return;
             // Inspect a POI only on first discovery, in the existing incremental scene scan.
             var nodes=root.GetComponentsInChildren<Transform>(true);
             if(nodes.Any(t=>t.name.StartsWith("EnemySpawn_Scrapyard",StringComparison.OrdinalIgnoreCase)))return;
@@ -207,13 +242,15 @@ namespace WildWasteland.Modules.Patrols
             int n = Physics.SphereCastNonAlloc(from, radius, d / length, Hits, length,
                 Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
             if (n == Hits.Length) return false; // overflow cannot certify clearance
+            GameObject trailer = null; bool trailerKnown = false;   // Perf: looked up once per call (was twice per hit)
             for (int i = 0; i < n; i++)
             {
                 var h = Hits[i];
                 if (h.collider == null || h.distance > length || h.distance <= 0f) continue;
                 if (h.collider is TerrainCollider) continue;
+                if (car != null && !h.collider.transform.IsChildOf(car.transform) && !trailerKnown) { trailerKnown = true; trailer = TrailerSupport.Attached(car); }
                 if (car != null && (h.collider.transform.IsChildOf(car.transform)
-                    || (TrailerSupport.Attached(car) != null && h.collider.transform.IsChildOf(TrailerSupport.Attached(car).transform)))) continue;
+                    || (trailer != null && h.collider.transform.IsChildOf(trailer.transform)))) continue;
                 if (h.collider.gameObject.layer == 9 || h.collider.GetComponentInParent<PatrolMarker>() != null) continue;
                 return false;
             }

@@ -120,7 +120,22 @@ namespace WildWasteland.Modules.PlayerBody
         // (2.1.8) standing and crouched have their own values: the key is the clip + "@crouch" when crouched; a crouched aim without its own entry
         // starts from the standing one (so a tuned weapon doesn't jump back to the default)
         public static string Key(string clip, bool crouched) { return crouched ? clip + "@crouch" : clip; }
+        // (WW perf) resolved per (weapon, clip, crouched) until the next Set/Load (Revision): Get ran a few concats per call, every frame.
+        // The returned arrays are never written by the callers (edits Clone first); Default(clip) is shared per clip from here on.
+        private static readonly Dictionary<string, Dictionary<string, float[]>>[] _got = { new Dictionary<string, Dictionary<string, float[]>>(), new Dictionary<string, Dictionary<string, float[]>>() };
+        private static int _gotRevision = int.MinValue;
         public static float[] Get(string weapon, string clip, bool crouched)
+        {
+            if (weapon == null || clip == null) return Resolve(weapon, clip, crouched);
+            if (_gotRevision != Revision) { _got[0].Clear(); _got[1].Clear(); _gotRevision = Revision; }
+            var byWeapon = _got[crouched ? 1 : 0];
+            Dictionary<string, float[]> byClip;
+            if (!byWeapon.TryGetValue(weapon, out byClip)) byWeapon[weapon] = byClip = new Dictionary<string, float[]>();
+            float[] r;
+            if (!byClip.TryGetValue(clip, out r)) byClip[clip] = r = Resolve(weapon, clip, crouched);
+            return r;
+        }
+        private static float[] Resolve(string weapon, string clip, bool crouched)
         {
             float[] v;
             string k = weapon + "|" + Key(clip, crouched), k0 = weapon + "|" + clip;
@@ -177,6 +192,38 @@ namespace WildWasteland.Modules.PlayerBody
 
         // ---- two-bone IK: the new elbow position so the hand reaches t, the arm bending in the plane it bends in now
         //   s, e, h = shoulder, elbow, hand positions; returns the elbow (the caller turns the upper arm onto it, then the forearm onto t)
+        // (WW perf) the same math on plain doubles, no arrays (same operations in the same order as the array version below)
+        public static void Elbow(double sx, double sy, double sz, double ex, double ey, double ez, double hx, double hy, double hz, double tx, double ty, double tz,
+                                 out double rx, out double ry, out double rz)
+        {
+            rx = ex; ry = ey; rz = ez;
+            double dx = sx - ex, dy = sy - ey, dz = sz - ez;
+            double a = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+            dx = ex - hx; dy = ey - hy; dz = ez - hz;
+            double b = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+            double stx = tx - sx, sty = ty - sy, stz = tz - sz;
+            double stl = Math.Sqrt(stx * stx + sty * sty + stz * stz), c = stl;
+            if (c < 1e-6 || a < 1e-6 || b < 1e-6) return;
+            c = Math.Max(Math.Abs(a - b) + 1e-4, Math.Min(a + b - 1e-4, c));
+            double k = 1.0 / stl;
+            double ux = stx * k, uy = sty * k, uz = stz * k;
+            double sex = ex - sx, sey = ey - sy, sez = ez - sz;
+            double dot = sex * ux + sey * uy + sez * uz;
+            double px = sex - ux * dot, py = sey - uy * dot, pz = sez - uz * dot;
+            double pl = Math.Sqrt(px * px + py * py + pz * pz);
+            if (pl < 1e-6)
+            {
+                double m = -uy;
+                px = 0.0 - ux * m; py = -1.0 - uy * m; pz = 0.0 - uz * m;
+                pl = Math.Sqrt(px * px + py * py + pz * pz);
+                if (pl < 1e-6) return;
+            }
+            k = 1.0 / pl;
+            px = px * k; py = py * k; pz = pz * k;
+            double cosA = Math.Max(-1.0, Math.Min(1.0, (a * a + c * c - b * b) / (2 * a * c))), sinA = Math.Sqrt(1 - cosA * cosA);
+            double ka = a * cosA, kb = a * sinA;
+            rx = sx + (ux * ka + px * kb); ry = sy + (uy * ka + py * kb); rz = sz + (uz * ka + pz * kb);
+        }
         public static double[] Elbow(double[] s, double[] e, double[] h, double[] t)
         {
             double a = Dist(s, e), b = Dist(e, h);

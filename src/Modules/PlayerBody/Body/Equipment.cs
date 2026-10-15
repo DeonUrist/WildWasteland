@@ -22,6 +22,8 @@ namespace WildWasteland.Modules.PlayerBody
             // (was LocalBounds = GetComponentsInChildren<MeshFilter> every frame for mounts 1 and 2)
             public bool PosedValid, PosedBackpack;
             public Bounds Posed;
+            // (WW perf) what Show last wrote to Renderers (-1 = nothing yet): written again only when it changes
+            public int ShownOn = -1; public ShadowCastingMode ShownMode;
         }
         private readonly Body _body;
         private readonly EquipmentInventory _inventory = new EquipmentInventory();
@@ -78,19 +80,51 @@ namespace WildWasteland.Modules.PlayerBody
             }
         }
 
+        // (WW perf) the inventory is read 10 times a second (unscaled), and at once when the drawn weapon, the vanilla Weapons FSM state or the
+        // PlayerCamera changes (was every frame: slot Finds + FirstItem + QuickItems Finds). Worst case: a slot change without a draw shows ~0.1 s late.
+        private float _nextRead;
+        private string _readDrawn, _readState;
+        private Transform _seenCamera, _readCamera, _quick, _quickPack, _quickBino, _quickFlash;
         public void Tick()
         {
-            if (_inventory.Read())
+            string drawn = Game.DrawnWeapon, state = _inventory.WeaponState;
+            var cam = Game.PlayerCamera;
+            float now = Time.unscaledTime;
+            if (now >= _nextRead || !ReferenceEquals(drawn, _readDrawn) || !ReferenceEquals(state, _readState) || !ReferenceEquals(cam, _seenCamera))
             {
-                Select(_inventory.Items, _chosen, _slots);
-                var quick = Game.PlayerCamera != null ? Game.PlayerCamera.Find("QuickItems") : null;
-                _chosen[0] = EquipmentInventory.FirstItem(quick != null ? quick.Find("Backpack_Item") : null);
-                var binocular = EquipmentInventory.FirstItem(quick != null ? quick.Find("Binocular_Item") : null);
-                if (binocular != null) { _chosen[7] = binocular; _slots[7] = -1; }
-                _chosen[FlashIndex] = EquipmentInventory.FirstItem(quick != null ? quick.Find("Flashlight_Item") : null); _slots[FlashIndex] = -1;
-                for (int i = 0; i < _mounts.Length; i++) Update(i, _chosen[i], _slots[i]);
+                _nextRead = now + 0.1f; _readDrawn = drawn; _readState = state; _seenCamera = cam;
+                if (_inventory.Read())
+                {
+                    Select(_inventory.Items, _chosen, _slots);
+                    if (!ReferenceEquals(cam, _readCamera) || _quick == null) { _readCamera = cam; _quick = cam != null ? cam.Find("QuickItems") : null; _quickPack = _quickBino = _quickFlash = null; }
+                    var quick = _quick;
+                    if (quick != null)
+                    {
+                        if (_quickPack == null) _quickPack = quick.Find("Backpack_Item");
+                        if (_quickBino == null) _quickBino = quick.Find("Binocular_Item");
+                        if (_quickFlash == null) _quickFlash = quick.Find("Flashlight_Item");
+                    }
+                    _chosen[0] = EquipmentInventory.FirstItem(quick != null ? _quickPack : null);
+                    var binocular = EquipmentInventory.FirstItem(quick != null ? _quickBino : null);
+                    if (binocular != null) { _chosen[7] = binocular; _slots[7] = -1; }
+                    _chosen[FlashIndex] = EquipmentInventory.FirstItem(quick != null ? _quickFlash : null); _slots[FlashIndex] = -1;
+                    for (int i = 0; i < _mounts.Length; i++) Update(i, _chosen[i], _slots[i]);
+                }
+                _readState = _inventory.WeaponState;   // (Read may have re-found the Weapons FSM)
             }
             for (int i = 0; i < _mounts.Length; i++) { Position(i); Show(i); }
+        }
+
+        // (WW perf) each bone's neutral (bind pose) rotation, computed once (was a Matrix4x4 from Bindposes per mount per frame)
+        private static readonly System.Collections.Generic.Dictionary<string, Quaternion> _neutral = new System.Collections.Generic.Dictionary<string, Quaternion>();
+        private static Quaternion Neutral(string bone)
+        {
+            Quaternion q;
+            if (_neutral.TryGetValue(bone, out q)) return q;
+            float[] bind = Bindposes.Human[bone];
+            var matrix = Matrix4x4.identity;
+            for (int row = 0; row < 3; row++) for (int col = 0; col < 4; col++) matrix[row, col] = bind[row * 4 + col];
+            return _neutral[bone] = matrix.rotation;
         }
 
         private void Update(int i, GameObject item, int slot)
@@ -98,7 +132,7 @@ namespace WildWasteland.Modules.PlayerBody
             var mount = _mounts[i]; mount.Slot = slot;
             if (ReferenceEquals(mount.Item, item) && (item == null || mount.Visual != null)) return;
             if (mount.Anchor != null) { mount.Anchor.gameObject.SetActive(false); UnityEngine.Object.Destroy(mount.Anchor.gameObject); }
-            mount.Item = item; mount.Visual = null; mount.Anchor = null; mount.Renderers = null; mount.PosedValid = false;
+            mount.Item = item; mount.Visual = null; mount.Anchor = null; mount.Renderers = null; mount.PosedValid = false; mount.ShownOn = -1;
             if (i == 0) _packDepth = _packWidth = 0;
             if (i == FlashIndex) _glow = null;   // destroyed with the old anchor
             if (item == null) return;
@@ -172,18 +206,15 @@ namespace WildWasteland.Modules.PlayerBody
 
         private void PositionFlashlight(Mount mount, bool mirror)
         {
-            string bone = _flashPolice ? "Hips" : "Spine2";
+            string bone = _flashPolice ? "mixamorig:Hips" : "mixamorig:Spine2";
             Transform parent;
-            if (!_body.Bones.TryGetValue("mixamorig:" + bone, out parent)) return;
+            if (!_body.Bones.TryGetValue(bone, out parent)) return;
             if (mount.Anchor.parent != parent) mount.Anchor.SetParent(parent, false);
             float left = mirror ? 1f : -1f;   // the character's left
             Vector3 offset = _flashPolice
                 ? new Vector3(left * .19f, -.06f, .05f)                                          // on the left of the belt, along the hip
                 : new Vector3(left * .09f, .04f, .12f + mount.Bounds.size.z * .5f);         // left chest, against the jacket (1.6.2: 3 cm lower, 2 cm forward)
-            float[] bind = Bindposes.Human["mixamorig:" + bone];
-            var matrix = Matrix4x4.identity;
-            for (int row = 0; row < 3; row++) for (int col = 0; col < 4; col++) matrix[row, col] = bind[row * 4 + col];
-            Quaternion neutral = matrix.rotation;
+            Quaternion neutral = Neutral(bone);
             mount.Anchor.localRotation = neutral;
             mount.Anchor.localPosition = neutral * offset;
         }
@@ -193,9 +224,9 @@ namespace WildWasteland.Modules.PlayerBody
             var mount = _mounts[i]; if (mount.Anchor == null) return;
             bool mirror = _body.Root.transform.localScale.x < 0;
             if (i == FlashIndex) { PositionFlashlight(mount, mirror); return; }
-            string bone = i <= 2 ? "Spine2" : i <= 4 ? ((i == 3) != mirror ? "RightUpLeg" : "LeftUpLeg") : "Hips";
+            string bone = i <= 2 ? "mixamorig:Spine2" : i <= 4 ? ((i == 3) != mirror ? "mixamorig:RightUpLeg" : "mixamorig:LeftUpLeg") : "mixamorig:Hips";
             Transform parent;
-            if (!_body.Bones.TryGetValue("mixamorig:" + bone, out parent)) return;
+            if (!_body.Bones.TryGetValue(bone, out parent)) return;
             if (mount.Anchor.parent != parent) mount.Anchor.SetParent(parent, false);
             float side = (i % 2 == 1 ? 1f : -1f) * (mirror ? -1f : 1f);
             bool backpack = _mounts[0].Visual != null;
@@ -223,10 +254,7 @@ namespace WildWasteland.Modules.PlayerBody
                 : i <= 4 ? new Vector3(side * .11f, -.15f, .015f)
                 : i <= 6 ? new Vector3(side * .20f, -.09f, .04f)
                 : new Vector3(0, .03f, -.20f);
-            float[] bind = Bindposes.Human["mixamorig:" + bone];
-            var matrix = Matrix4x4.identity;
-            for (int row = 0; row < 3; row++) for (int col = 0; col < 4; col++) matrix[row, col] = bind[row * 4 + col];
-            Quaternion neutral = matrix.rotation;
+            Quaternion neutral = Neutral(bone);
             mount.Anchor.localRotation = neutral;
             mount.Anchor.localPosition = neutral * offset;
         }
@@ -260,10 +288,17 @@ namespace WildWasteland.Modules.PlayerBody
             var mount = _mounts[i]; if (mount.Visual == null) return;
             bool drawn = !ModAPI.PlayerWeaponStowed && mount.Slot >= 0 && mount.Slot == _inventory.Drawn
                 || i == 7 && Game.BinocularInUse;
-            foreach (var renderer in mount.Renderers)
+            int on = !drawn && (_visible || _shadow) ? 1 : 0;
+            var mode = _visible ? ShadowCastingMode.On : ShadowCastingMode.ShadowsOnly;
+            if (on != mount.ShownOn || mode != mount.ShownMode)   // (WW perf) only on change (these copies are ours: nothing else writes them)
             {
-                renderer.enabled = !drawn && (_visible || _shadow);
-                renderer.shadowCastingMode = _visible ? ShadowCastingMode.On : ShadowCastingMode.ShadowsOnly;
+                mount.ShownOn = on; mount.ShownMode = mode;
+                foreach (var renderer in mount.Renderers)
+                {
+                    if (renderer == null) continue;
+                    renderer.enabled = on == 1;
+                    renderer.shadowCastingMode = mode;
+                }
             }
             if (i == FlashIndex && _glow != null)
             {

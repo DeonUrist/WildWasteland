@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
 using HutongGames.PlayMaker;
@@ -136,30 +137,44 @@ namespace WildWasteland.Modules.PlayerBody
             return binding != null ? GameBindings.KeyHeld(binding.Key) || GameBindings.KeyHeld(binding.AlternativeKey) : GameBindings.KeyHeld(fallback);
         }
 
+        // (WW perf) the three part transforms are kept per car while they are still inside it (FindDeep read every transform's name of the
+        // whole car three times every 2 s); FSM lists through one reused List
+        private static Transform _ctlCar, _ctlLights, _ctlBrake, _ctlRadio;
+        private static readonly List<PlayMakerFSM> _ctlFsms = new List<PlayMakerFSM>();
+        private static Transform Part(Transform car, Transform cached, string name)
+        {
+            return cached != null && cached.IsChildOf(car) ? cached : Game.FindDeep(car, name);
+        }
         private static void FindControls(Transform car)
         {
             _lightOn = _lightOff = _handbrake = _radioOnOff = _play = _stop = _volume = null;
             _radioAudio = null;
-            var lights = Game.FindDeep(car, "switch_lights");
-            if (lights != null) foreach (var f in lights.GetComponents<PlayMakerFSM>())
+            if (!ReferenceEquals(_ctlCar, car)) { _ctlCar = car; _ctlLights = _ctlBrake = _ctlRadio = null; }
+            var lights = _ctlLights = Part(car, _ctlLights, "switch_lights");
+            if (lights != null) { lights.GetComponents(_ctlFsms); foreach (var f in _ctlFsms)
             {
                 if (f.FsmName == "LightOn") _lightOn = f;
                 if (f.FsmName == "LightOff") _lightOff = f;
-            }
-            var brake = Game.FindDeep(car, "handbrake");
-            if (brake != null) foreach (var f in brake.GetComponents<PlayMakerFSM>()) if (f.FsmName == "Handbrake") _handbrake = f;
-            var radio = Game.FindDeep(car, "hinge_radio");
+            } }
+            var brake = _ctlBrake = Part(car, _ctlBrake, "handbrake");
+            if (brake != null) { brake.GetComponents(_ctlFsms); foreach (var f in _ctlFsms) if (f.FsmName == "Handbrake") _handbrake = f; }
+            var radio = _ctlRadio = Part(car, _ctlRadio, "hinge_radio");
+            _ctlFsms.Clear();
             if (radio == null) return;
-            foreach (var f in radio.GetComponentsInChildren<PlayMakerFSM>(true))
+            radio.GetComponentsInChildren(true, _ctlFsms);
+            foreach (var f in _ctlFsms)
                 if (f.FsmName == "OnOff" && f.gameObject.activeInHierarchy && f.GetComponent<AudioSource>() != null)
                 { _radioOnOff = f; _radioAudio = f.GetComponent<AudioSource>(); break; }
+            _ctlFsms.Clear();
             if (_radioOnOff == null) return;
-            foreach (var f in _radioOnOff.GetComponentsInChildren<PlayMakerFSM>(true))
+            _radioOnOff.GetComponentsInChildren(true, _ctlFsms);
+            foreach (var f in _ctlFsms)
             {
-                if (f.name == "PlayStop" && f.FsmName == "Play") _play = f;
-                if (f.name == "PlayStop" && f.FsmName == "Stop") _stop = f;
-                if (f.name == "Volume" && f.FsmName == "Volume") _volume = f;
+                if (f.FsmName == "Play" && f.name == "PlayStop") _play = f;
+                if (f.FsmName == "Stop" && f.name == "PlayStop") _stop = f;
+                if (f.FsmName == "Volume" && f.name == "Volume") _volume = f;
             }
+            _ctlFsms.Clear();
         }
 
         private static float RadioVolume { get { return _radioAudio != null ? _radioAudio.volume : 0f; } }
@@ -321,6 +336,7 @@ namespace WildWasteland.Modules.PlayerBody
         }
 
         private static GUIStyle _hintStyle;
+        internal static bool GuiWanted { get { return PlayerBodyModule.Running && Game.Ready && Game.InCar && !Game.Dead && !Game.Paused; } }
         public static void OnGUI()
         {
             if (!PlayerBodyModule.Running || !Game.Ready || !Game.InCar || Game.Dead || Game.Paused) return;

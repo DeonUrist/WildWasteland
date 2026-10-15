@@ -19,7 +19,8 @@ namespace WildWasteland.Modules.CleanHUD
         internal PlayMakerFSM Weapons, Bandage, FirstAid;
         internal Transform PlayerCamera;
         private readonly Dictionary<Graphic, float> _hidden = new Dictionary<Graphic, float>();
-        private bool _hiddenCaptured;
+        private bool _hiddenCaptured, _culled;
+        private readonly Dictionary<Graphic, bool> _cull = new Dictionary<Graphic, bool>();   // original cullTransparentMesh
         private int _pocketUiRevision = -1;
         internal Transform HudRoot;
         internal readonly ApocapocketInventory Pocket = new ApocapocketInventory();
@@ -103,15 +104,31 @@ namespace WildWasteland.Modules.CleanHUD
                 }
             }
             ApocapocketInventory.CaptureUi(this, HudRoot);
+            _culled = false;
         }
 
-        internal void CaptureExtra(Graphic g) { float a; if (!_hidden.TryGetValue(g, out a) || a == 0f) { a = g.canvasRenderer.GetAlpha(); _hidden[g] = a == 0f ? 1f : a; } }
+        internal void CaptureExtra(Graphic g) { float a; if (!_hidden.TryGetValue(g, out a) || a == 0f) { a = g.canvasRenderer.GetAlpha(); _hidden[g] = a == 0f ? 1f : a; _culled = false; } }
 
         private static string PathOf(Transform t) { string p = t.name; while (t.parent != null) { t = t.parent; p = t.name + "/" + p; } return p; }
 
-        internal void Hide() { foreach (var pair in _hidden) if (pair.Key != null && pair.Key.canvasRenderer.GetAlpha() != 0f) pair.Key.canvasRenderer.SetAlpha(0f); }
+        internal void Hide()
+        {
+            // Hidden graphics are also culled (not drawn at all) while their alpha is 0; Restore puts the original flag back.
+            if (!_culled)
+            {
+                _culled = true;
+                foreach (var pair in _hidden) if (pair.Key != null)
+                { var r = pair.Key.canvasRenderer; if (!_cull.ContainsKey(pair.Key)) _cull.Add(pair.Key, r.cullTransparentMesh); r.cullTransparentMesh = true; }
+            }
+            foreach (var pair in _hidden) if (pair.Key != null && pair.Key.canvasRenderer.GetAlpha() != 0f) pair.Key.canvasRenderer.SetAlpha(0f);
+        }
         internal void RefreshHiddenIfNeeded() { if (!_hiddenCaptured || _pocketUiRevision != ApocapocketInventory.UiRevision) Refresh(); }
-        internal void Restore() { foreach (var pair in _hidden) if (pair.Key != null) pair.Key.canvasRenderer.SetAlpha(pair.Value); }
+        internal void Restore()
+        {
+            foreach (var pair in _hidden) if (pair.Key != null) pair.Key.canvasRenderer.SetAlpha(pair.Value);
+            foreach (var pair in _cull) if (pair.Key != null) pair.Key.canvasRenderer.cullTransparentMesh = pair.Value;
+            _culled = false;
+        }
 
         internal bool Visible
         {

@@ -8,6 +8,9 @@ namespace WildWasteland.Modules.NPC
     // pairwise); once BOTH are idle again (back home / standing) and no longer overlapping, the collisions are switched back on.
     // Every 0.25 s over the registered NPCs; only pairs within 30 m are looked at (farther ones can't touch). Unity drops an ignore when a
     // collider is deactivated, so the ignored pairs are re-applied every 3 s.
+    // (WW perf, N9) new pairs only within 6 m (two runners close at most ~3.5 m in one 0.25 s tick: a pair is made before they touch);
+    // the re-apply goes round: each tick 1/12 of the pairs (each pair every 3 s, as before), and only a pair within 3 m (farther ones
+    // can't touch; their turn comes again within 3 s).
     // (1.1.0) Only in corridors: a pair is made when at least one of the two stands on a map cell next to a wall / obstacle (Nav.NearWall)
     // - a doorway, a passage between huts, a cave tunnel. In the open they bump as before (the brain's AvoidFriends passes them).
     internal static class Passthrough
@@ -17,7 +20,9 @@ namespace WildWasteland.Modules.NPC
         private static readonly List<Senses.Agent> _list = new List<Senses.Agent>();
         private static readonly List<bool> _narrow = new List<bool>();
         private static readonly List<long> _drop = new List<long>();
-        private static float _nextReapply;
+        private static int _round;
+        private static readonly List<Collider> _colBuf = new List<Collider>();
+        private const float NewPairRange = 6f, ReapplyRange = 3f;
 
         public static void OnSceneLoaded() { _cols.Clear(); _pairs.Clear(); }
 
@@ -39,9 +44,11 @@ namespace WildWasteland.Modules.NPC
             Collider[] c;
             int id = a.Owner.GetInstanceID();
             if (_cols.TryGetValue(id, out c) && c.Length > 0 && c[0] != null) return c;
-            var l = new List<Collider>();
-            foreach (var col in a.Owner.GetComponentsInChildren<Collider>(true)) if (col != null && !col.isTrigger) l.Add(col);
-            c = l.ToArray();
+            _colBuf.Clear(); a.Owner.GetComponentsInChildren<Collider>(true, _colBuf);
+            int n = 0; for (int i = 0; i < _colBuf.Count; i++) if (_colBuf[i] != null && !_colBuf[i].isTrigger) n++;
+            c = new Collider[n]; n = 0;
+            for (int i = 0; i < _colBuf.Count; i++) if (_colBuf[i] != null && !_colBuf[i].isTrigger) c[n++] = _colBuf[i];
+            _colBuf.Clear();
             _cols[id] = c;
             return c;
         }
@@ -49,14 +56,13 @@ namespace WildWasteland.Modules.NPC
         private static void Set(Senses.Agent a, Senses.Agent b, bool ignore)
         {
             var ca = Cols(a); var cb = Cols(b);
-            foreach (var x in ca) foreach (var y in cb) if (x != null && y != null) Physics.IgnoreCollision(x, y, ignore);
+            for (int i = 0; i < ca.Length; i++) { var x = ca[i]; if (x == null) continue; for (int k = 0; k < cb.Length; k++) { var y = cb[k]; if (y != null) Physics.IgnoreCollision(x, y, ignore); } }
         }
 
         private static long Key(int a, int b) { if (a > b) { int t = a; a = b; b = t; } return ((long)a << 32) ^ (uint)b; }
 
         public static void Tick()      // (WW) a 0.25 s Interval job (game time), was gated here
         {
-            float now = Time.time;
             bool on = NpcModule.FriendsPassThrough.Value && Senses.On;
             if (!on)
             {
@@ -65,8 +71,7 @@ namespace WildWasteland.Modules.NPC
             }
             _list.Clear(); _narrow.Clear();
             foreach (var a in Senses.AllAgents) if (a.Owner != null && a.T.parent == null) { _list.Add(a); _narrow.Add(Nav.NearWall(a.T.position)); }
-            bool reapply = now >= _nextReapply;
-            if (reapply) _nextReapply = now + 3f;
+            int round = _round = (_round + 1) % 12;
             // existing pairs: dead ones go, re-enable when both idle and apart, re-apply the ignore now and then
             _drop.Clear();
             foreach (var kv in _pairs)
@@ -79,7 +84,11 @@ namespace WildWasteland.Modules.NPC
                     if (d.sqrMagnitude > 1.2f * 1.2f) { Set(a, b, false); _drop.Add(kv.Key); }
                     continue;
                 }
-                if (reapply) Set(a, b, true);
+                if ((int)((ulong)kv.Key % 12UL) == round)
+                {
+                    Vector3 d2 = a.T.position - b.T.position;
+                    if (d2.sqrMagnitude <= ReapplyRange * ReapplyRange) Set(a, b, true);
+                }
             }
             foreach (var k in _drop) _pairs.Remove(k);
             // new pairs: same faction, close, at least one busy
@@ -92,7 +101,7 @@ namespace WildWasteland.Modules.NPC
                 {
                     var b = _list[j];
                     if (a.Tag != b.Tag) continue;
-                    if ((b.T.position - pa).sqrMagnitude > 30f * 30f) continue;
+                    if ((b.T.position - pa).sqrMagnitude > NewPairRange * NewPairRange) continue;
                     if (!ba && !Busy(b)) continue;
                     if (!_narrow[i] && !_narrow[j]) continue;      // open ground: no walking through each other
                     long key = Key(a.Owner.GetInstanceID(), b.Owner.GetInstanceID());

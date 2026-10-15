@@ -63,7 +63,7 @@ namespace WildWasteland.Modules.PlayerBody
 
         // ---- weapon poses, per clip name
         private readonly Dictionary<string, float> _poseWn = new Dictionary<string, float>();
-        private string _poseListFor = null;
+        private string _poseListFor = null; private Props.Kind _poseListKind; private bool _poseListSet;
         private bool _aimingNow, _shootingNow;
 
         private static bool Has(string clip) { return Anims.Get(clip) != null; }
@@ -128,6 +128,11 @@ namespace WildWasteland.Modules.PlayerBody
                 foreach (var t in go.GetComponentsInChildren<Transform>(true)) if (t.name.StartsWith("mixamorig:")) copy[t.name] = t;
                 var an = go.GetComponent<Animator>();
                 an.applyRootMotion = false; an.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                // (WW perf, F2) the copy's NPC controller is never used: this rig is posed only by _rigGraph (Manual, Evaluate right before its
+                // bones are read in RigApply / SampleFeet, writing every humanoid muscle), and nothing reads its state machine. With the
+                // controller the Animator also ran Flexa's state machine + a full humanoid pass on the copy every frame (AlwaysAnimate) for
+                // nothing. ModCharacter's upper rig already does the same.
+                an.runtimeAnimatorController = null;
                 if (!Bones.TryGetValue("mixamorig:Spine", out _rigSpine) || !copy.TryGetValue("mixamorig:Spine", out _rigSpineCopy)) { UnityEngine.Object.Destroy(go); return; }
                 foreach (var kv in Bones)
                 {
@@ -288,15 +293,15 @@ namespace WildWasteland.Modules.PlayerBody
             }
             if (Mathf.Abs(v[1]) > 0.01f) Turn("mixamorig:Head", Vector3.right, v[1] * w);
         }
-        private static double[] D3(Vector3 p) { return new double[] { p.x, p.y, p.z }; }
         private void LiftArm(string upper, string lower, string hand, Vector3 d)
         {
             Transform s, e, h;
             if (!Bones.TryGetValue(upper, out s) || !Bones.TryGetValue(lower, out e) || !Bones.TryGetValue(hand, out h)) return;
             var hr = h.rotation;
             var t = h.position + d;
-            var ne = AimLift.Elbow(D3(s.position), D3(e.position), D3(h.position), D3(t));
-            var E = new Vector3((float)ne[0], (float)ne[1], (float)ne[2]);
+            Vector3 sp = s.position, ep = e.position, hp = h.position; double nx, ny, nz;   // (WW perf) no double[] per call
+            AimLift.Elbow(sp.x, sp.y, sp.z, ep.x, ep.y, ep.z, hp.x, hp.y, hp.z, t.x, t.y, t.z, out nx, out ny, out nz);
+            var E = new Vector3((float)nx, (float)ny, (float)nz);
             s.rotation = Quaternion.FromToRotation(e.position - s.position, E - s.position) * s.rotation;
             e.rotation = Quaternion.FromToRotation(h.position - e.position, t - e.position) * e.rotation;
             h.rotation = hr;
@@ -437,9 +442,8 @@ namespace WildWasteland.Modules.PlayerBody
         // the clips the drawn weapon can show, for WeaponAdjustment (numpad 9/3) - every one with its own pose entry
         private void SetPoseList(Props.Kind kind, string weapon)
         {
-            string key = kind + "|" + weapon;
-            if (key == _poseListFor) return;
-            _poseListFor = key;
+            if (_poseListSet && kind == _poseListKind && string.Equals(weapon ?? "", _poseListFor, StringComparison.Ordinal)) return;   // (WW perf) was kind+"|"+weapon per frame
+            _poseListSet = true; _poseListKind = kind; _poseListFor = weapon ?? "";
             var l = new List<string>();
             string idle = "Idle";
             if (kind == Props.Kind.Rifle)
@@ -623,7 +627,7 @@ namespace WildWasteland.Modules.PlayerBody
             _cocking = cockNow;
             if (_reloading || kind != Props.Kind.Rifle) _pumpUntil = 0f;
             bool pumping = Time.time < _pumpUntil;
-            bool pvReload = _previewName != null && _previewName.EndsWith("Reload");
+            bool pvReload = _previewName != null && _previewName.EndsWith("Reload", StringComparison.Ordinal);
             if (pvReload) reloadingNow = true;
             if (reloadingNow && !_reloading) { _reloadStart = Time.time; }
             if (pvReload) { var rc = Anims.Get(_previewName); if (rc != null && Time.time - _reloadStart > rc.length) _reloadStart = Time.time; }

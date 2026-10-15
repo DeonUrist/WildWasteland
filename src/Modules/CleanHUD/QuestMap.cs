@@ -20,7 +20,10 @@ namespace WildWasteland.Modules.CleanHUD
         private PlayMakerFSM _fsm;
         private Camera _camera;
         private RectTransform _map, _root;
-        private bool _captured, _nativeEnabled;
+        private bool _captured, _nativeEnabled, _cameraNative, _fsmOn;
+        private Camera _owned;
+        private float _nextLookup;
+        private readonly List<RawImage> _consumers = new List<RawImage>();
         public MapDetail Markers { get { return CleanHudModule.MapMarkers.Value; } }
         public MapDetail Routes { get { return CleanHudModule.MapRoutes.Value; } }
         public int Add(string owner, Func<Vector3> position, string icon, Color color, string label)
@@ -32,21 +35,29 @@ namespace WildWasteland.Modules.CleanHUD
         public void RemoveAll(string owner)
         { for (int i = _entries.Count - 1; i >= 0; i--) if (_entries[i].Owner == owner) { Destroy(_entries[i]); _ids.Remove(_entries[i].Id); _entries.RemoveAt(i); } }
         private static void Destroy(Entry e) { if (e.Root != null) UnityEngine.Object.Destroy(e.Root.gameObject); e.Root = null; }
-        internal void FindMap()
+        internal void FindMap() { FindMap(false); }
+        // GameObject.Find and the FSM action walk back off to 5 s after a miss; opening the map forces a lookup.
+        private void FindMap(bool force)
         {
             if (_fsm == null) _fsm = FsmUtil.Find(GameRefs.GameManager, "MapCheat");
-            if (_fsm != null && !_captured) { _captured = true; _nativeEnabled = _fsm.enabled; }
+            if (_fsm != null && !_captured) { _captured = true; _nativeEnabled = _fsm.enabled; force = true; }
             ApplyEnabled();
-            if (_map == null && _fsm != null)
+            if ((_map == null || _camera == null) && _fsm != null && (force || Time.unscaledTime >= _nextLookup))
+            {
                 foreach (var state in _fsm.FsmStates) foreach (var action in state.Actions)
                 {
                     var activate = action as ActivateGameObject; if (activate == null) continue;
-                    var go = _fsm.Fsm.GetOwnerDefaultTarget(activate.gameObject); if (go == null || go.name != "MapCheatUI") continue;
-                    foreach (var t in go.GetComponentsInChildren<RectTransform>(true)) if (t.name == "RawImage_Map") { _map = t; break; }
+                    var go = _fsm.Fsm.GetOwnerDefaultTarget(activate.gameObject); if (go == null) continue;
+                    // MapCheat_Camera may sit under an inactive object while the map is closed; GameObject.Find misses it then.
+                    if (_camera == null) foreach (var c in go.GetComponentsInChildren<Camera>(true)) if (c.name == "MapCheat_Camera") { _camera = c; break; }
+                    if (_map == null && go.name == "MapCheatUI")
+                        foreach (var t in go.GetComponentsInChildren<RectTransform>(true)) if (t.name == "RawImage_Map") { _map = t; break; }
                 }
-            if (_camera == null)
-            {
-                var go = GameObject.Find("MapCheat_Camera"); if (go != null) _camera = go.GetComponent<Camera>();
+                if (_camera == null)
+                {
+                    var go = GameObject.Find("MapCheat_Camera"); if (go != null) _camera = go.GetComponent<Camera>();
+                }
+                if (_map == null || _camera == null) _nextLookup = Time.unscaledTime + 5f;
             }
             if (_map != null && _root == null)
             {
@@ -56,13 +67,48 @@ namespace WildWasteland.Modules.CleanHUD
             }
             MapFrame.Sync(_map);
         }
+        // The native map camera renders a 1024x1024 target every frame even while the map is closed: it only renders while
+        // the map is shown (or while another UI shows its target). Projection helpers keep working on a disabled camera.
+        private void DriveCamera(bool shown)
+        {
+            if (!ReferenceEquals(_camera, _owned))
+            {
+                RestoreCamera();
+                if (_camera == null) return;
+                _owned = _camera; _cameraNative = _camera.enabled; FindConsumers();
+            }
+            if (_owned == null) return;
+            bool want = shown;
+            for (int i = 0; i < _consumers.Count && !want; i++) want = _consumers[i] != null && _consumers[i].isActiveAndEnabled;
+            if (_owned.enabled == want) return;
+            _owned.enabled = want;
+            if (want && _owned.gameObject.activeInHierarchy) _owned.Render();
+        }
+        private void FindConsumers()
+        {
+            _consumers.Clear();
+            var target = _owned.targetTexture; if (target == null) return;
+            foreach (var image in UnityEngine.Object.FindObjectsOfType<RawImage>(true))
+                if (image.texture == target && image.name != "RawImage_Map") _consumers.Add(image);
+            if (_consumers.Count > 0) CleanHudModule.Log("Map camera target is also shown by " + _consumers.Count + " other image(s); the camera renders while any is visible");
+        }
+        private void RestoreCamera()
+        {
+            if (_owned != null && _owned.enabled != _cameraNative) _owned.enabled = _cameraNative;
+            _owned = null; _consumers.Clear();
+        }
         internal void Tick()
         {
-            MapFog.Tick(_map, _camera, CleanHudModule.MapEnabled.Value && GameRefs.Menu != null && GameRefs.Menu.ActiveStateName == "play"
-                && _fsm != null && _fsm.isActiveAndEnabled && _fsm.ActiveStateName == "on" && _map != null && _map.gameObject.activeInHierarchy);
+            bool fsmOn = _fsm != null && _fsm.isActiveAndEnabled && _fsm.ActiveStateName == "on";
+            if (fsmOn && !_fsmOn && (_map == null || _camera == null)) FindMap(true);
+            _fsmOn = fsmOn;
+            bool mapShown = fsmOn && (_map == null || _map.gameObject.activeInHierarchy);
+            DriveCamera(mapShown);
+            bool play = GameRefs.Menu != null && GameRefs.Menu.ActiveStateName == "play";
+            MapFog.Tick(_map, _camera, CleanHudModule.MapEnabled.Value && play && mapShown && _map != null);
             if (_root == null) return;
-            bool open = CleanHudModule.Enabled.Value && CleanHudModule.MapEnabled.Value && Markers != MapDetail.Off && GameRefs.Menu != null && GameRefs.Menu.ActiveStateName == "play"
-                && _fsm != null && _fsm.isActiveAndEnabled && _fsm.ActiveStateName == "on" && _camera != null && _map.gameObject.activeInHierarchy;
+            bool open = CleanHudModule.Enabled.Value && CleanHudModule.MapEnabled.Value && Markers != MapDetail.Off && play
+                && mapShown && _camera != null;
             if (_root.gameObject.activeSelf != open) _root.gameObject.SetActive(open);
             if (!open) return;
             foreach (var e in _entries)
@@ -91,7 +137,7 @@ namespace WildWasteland.Modules.CleanHUD
         }
         internal void SceneLoaded()
         {
-            RestoreNative(); MapFrame.Restore(); MapFog.SceneLoaded();
+            RestoreNative(); RestoreCamera(); _fsmOn = false; _nextLookup = 0; MapFrame.Restore(); MapFog.SceneLoaded();
             if (_root != null) UnityEngine.Object.Destroy(_root.gameObject);
             foreach (var e in _entries) e.Root = null;
             _root = _map = null; _camera = null; _fsm = null;

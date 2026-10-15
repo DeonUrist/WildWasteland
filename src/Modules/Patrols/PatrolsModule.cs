@@ -175,13 +175,14 @@ namespace WildWasteland.Modules.Patrols
             Scheduler.EveryFrame(this, "TemplateMenu.LateTick", () => { if (_menu != null) _menu.LateTick(); }, Phase.LateUpdate);
             Scheduler.EveryFrame(this, "TemplateExporter.LateTick", () => { if (_exporter != null) _exporter.LateTick(); }, Phase.LateUpdate);
 
-            Scheduler.Gui(this, "Patrol.Gui", () => { if (_patrol != null) _patrol.Gui(); });
-            Scheduler.Gui(this, "TemplateMenu.Gui", () => { if (_menu != null) _menu.Gui(); });
-            Scheduler.Gui(this, "TemplateExporter.Gui", () => { if (_exporter != null) _exporter.Gui(); });
-            Scheduler.Gui(this, "TurretSpotter.Gui", () => { if (_spotter != null) _spotter.Gui(); });
-            Scheduler.Gui(this, "BusPassengerPoseEditor.Gui", () => { if (_busPose != null) _busPose.Gui(); });
-            Scheduler.Gui(this, "WorldTraffic.Gui", () => { if (_traffic != null) _traffic.Gui(); });
-            Scheduler.Gui(this, "MerchantEditor.Gui", () => { if (_merchantEditor != null) _merchantEditor.Gui(); });
+            // (WW perf) each with a predicate (built once here): IMGUI stops when none of them (and no other module) has anything to draw
+            Scheduler.Gui(this, "Patrol.Gui", () => { if (_patrol != null) _patrol.Gui(); }, () => _patrol != null && Patrol.GuiWanted());
+            Scheduler.Gui(this, "TemplateMenu.Gui", () => { if (_menu != null) _menu.Gui(); }, () => _menu != null && _menu.IsOpen);
+            Scheduler.Gui(this, "TemplateExporter.Gui", () => { if (_exporter != null) _exporter.Gui(); }, () => _exporter != null && _exporter.GuiWanted());
+            Scheduler.Gui(this, "TurretSpotter.Gui", () => { if (_spotter != null) _spotter.Gui(); }, () => _spotter != null && _spotter.GuiWanted());
+            Scheduler.Gui(this, "BusPassengerPoseEditor.Gui", () => { if (_busPose != null) _busPose.Gui(); }, () => _busPose != null && BusPassengerPoseEditor.Active);
+            Scheduler.Gui(this, "WorldTraffic.Gui", () => { if (_traffic != null) _traffic.Gui(); }, () => _traffic != null && _traffic.GuiWanted());
+            Scheduler.Gui(this, "MerchantEditor.Gui", () => { if (_merchantEditor != null) _merchantEditor.Gui(); }, () => _merchantEditor != null && MerchantEditor.Enabled);
         }
 
         void RegisterHotkeys()

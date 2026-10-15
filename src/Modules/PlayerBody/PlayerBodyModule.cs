@@ -311,7 +311,7 @@ namespace WildWasteland.Modules.PlayerBody
             Scheduler.EveryFrame(this, "Body update", BodyRunner.Tick, Phase.Update);
             Scheduler.EveryFrame(this, "Body late", BodyRunner.LateTick, Phase.LateUpdate);
             Scheduler.EveryFrame(this, "ModAPI characters", BodyRunner.ModApiTick, Phase.LateUpdate);
-            Scheduler.Gui(this, "Weapon pose hint + vehicle HUD", BodyRunner.Gui);
+            Scheduler.Gui(this, "Weapon pose hint + vehicle HUD", BodyRunner.Gui, BodyRunner.GuiWanted);   // (WW perf) OnGUI only while one of them shows
             StartEndOfFrame();
 
             // keys polled in context (third person / climbing / driving); registered so [Keys] conflicts are reported
@@ -341,6 +341,7 @@ namespace WildWasteland.Modules.PlayerBody
             try { GunPose.Flush(); AimLift.SaveIfDirty(); } catch (Exception e) { Warn("saving poses: " + e.Message); }
             try { ClimbingController.StopInstance(); } catch (Exception e) { Warn("climbing: " + e.Message); }
             try { BodyRunner.TearDown(); } catch (Exception e) { Error(e); }
+            Perf.StopGc();
             try { IgnitionControl.Remove(); } catch (Exception e) { Warn("ignition row: " + e.Message); }
             try { AimTransition.RestoreAll(); } catch (Exception e) { Warn("aim transition: " + e.Message); }
             try { ModAPI.OnSceneLoaded(); } catch (Exception e) { Warn("ModAPI: " + e.Message); }

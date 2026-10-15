@@ -39,9 +39,11 @@ namespace WildWasteland.Modules.CleanHUD.Api
             internal bool Anchored;
             internal Marker Style;
             internal bool Broken;
+            internal string IconKey; internal int IconRevision; internal Texture Icon;   // HUD's resolved icon for IconKey
         }
 
         internal static readonly List<Entry> Entries = new List<Entry>();
+        internal static int IconRevision;   // bumped whenever CustomIcons changes or the HUD's icon cache is rebuilt
         internal static readonly Dictionary<string, Texture2D> CustomIcons = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
         private static int _next = 1;
 
@@ -96,6 +98,7 @@ namespace WildWasteland.Modules.CleanHUD.Api
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentException("key");
             if (icon == null) CustomIcons.Remove(key); else CustomIcons[key] = icon;
+            IconRevision++;
         }
 
         // MapMagic root used for AddAnchored; null until the world exists.

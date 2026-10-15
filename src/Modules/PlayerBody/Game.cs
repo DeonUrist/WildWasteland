@@ -17,7 +17,7 @@ namespace WildWasteland.Modules.PlayerBody
         public static PlayMakerFSM GrenadeFsm;      // PlayerCamera/QuickItems/grenade [Attack]: on -> (Throw Grenade) -> checkGrenade -> fire 0.4 s -> wait 0.35 s -> throw      // PlayerCamera/WeaponsArm/Parent: one child per first-person weapon, the drawn one active
         private static float _nextFind;
 
-        public static void Reset() { _rb = null; _rbFor = null; _jumpFsm = _kickFsm = null; _reloadFsms.Clear(); _perRound.Clear(); _arms.Clear(); _attackFsms.Clear(); _adsFsm = null; GrenadeFsm = null; Player = null; InCarFsm = MovementFsm = null; CameraHolder = PlayerCamera = WeaponsParent = null; Cam = null; _nextFind = 0f; }
+        public static void Reset() { _drawnFrame = -1; _drawnParent = _drawnChild = null; _deadFrame = -1; _healthVar = null; _healthVarFor = null; _rb = null; _rbFor = null; _jumpFsm = _kickFsm = null; _reloadFsms.Clear(); _perRound.Clear(); _arms.Clear(); _attackFsms.Clear(); _adsFsm = null; GrenadeFsm = null; Player = null; InCarFsm = MovementFsm = null; CameraHolder = PlayerCamera = WeaponsParent = null; Cam = null; _nextFind = 0f; }
 
         public static bool Ready
         {
@@ -68,22 +68,33 @@ namespace WildWasteland.Modules.PlayerBody
         }
 
         // The game dies below 0.4 health, then spends five seconds in playerDeath.
+        // (WW perf) asked ~10 times a frame: the answer is kept for the frame, the Health variable per FSM (was FindFsmFloat by name per call)
+        private static int _deadFrame = -1; private static bool _dead; private static GameObject _deadPlayer;
+        private static FsmFloat _healthVar; private static PlayMakerFSM _healthVarFor;
         public static bool Dead
         {
             get
             {
                 if (Player == null) return false;
-                if (_healthFsm == null || _healthFsm.gameObject != Player)
-                {
-                    _healthFsm = null;
-                    foreach (var f in Player.GetComponents<PlayMakerFSM>())
-                        if (f.FsmName == "Health") { _healthFsm = f; break; }
-                }
-                if (_healthFsm == null || !_healthFsm.Fsm.Initialized) return false;
-                var health = _healthFsm.FsmVariables.FindFsmFloat("Health");
-                return _healthFsm.ActiveStateName == "playerDeath" || _healthFsm.ActiveStateName == "backToMenu"
-                    || health != null && health.Value < 0.4f;
+                if (_deadFrame == Time.frameCount && ReferenceEquals(_deadPlayer, Player)) return _dead;
+                _dead = DeadNow(); _deadFrame = Time.frameCount; _deadPlayer = Player;
+                return _dead;
             }
+        }
+        private static bool DeadNow()
+        {
+            if (_healthFsm == null || _healthFsm.gameObject != Player)
+            {
+                _healthFsm = null;
+                foreach (var f in Player.GetComponents<PlayMakerFSM>())
+                    if (f.FsmName == "Health") { _healthFsm = f; break; }
+            }
+            if (_healthFsm == null || !_healthFsm.Fsm.Initialized) return false;
+            if (!ReferenceEquals(_healthVarFor, _healthFsm) || _healthVar == null) { _healthVarFor = _healthFsm; _healthVar = _healthFsm.FsmVariables.FindFsmFloat("Health"); }
+            var health = _healthVar;
+            string st = _healthFsm.ActiveStateName;
+            return st == "playerDeath" || st == "backToMenu"
+                || health != null && health.Value < 0.4f;
         }
 
         public static bool InCar
@@ -129,17 +140,28 @@ namespace WildWasteland.Modules.PlayerBody
         }
 
         // the drawn first-person weapon (name of the active child of WeaponsArm/Parent), "" when none
+        // (WW perf) asked 8-10 times a frame: the answer is kept for the frame (re-read when WeaponsParent changes) and each child's name is read
+        // once (Transform.name made a new string per call)
+        private static int _drawnFrame = -1; private static string _drawn = ""; private static Transform _drawnParent, _drawnChild;
+        private static readonly Dictionary<int, string> _childNames = new Dictionary<int, string>();
         public static string DrawnWeapon
         {
             get
             {
-                if (WeaponsParent == null || !WeaponsParent.gameObject.activeInHierarchy) return "";
-                for (int i = 0; i < WeaponsParent.childCount; i++)
+                var wp = WeaponsParent;
+                // a hit is re-validated (the weapon FSMs may switch it later in the same frame): the drawn child still active, or with none a fresh scan
+                if (_drawnFrame == Time.frameCount && ReferenceEquals(_drawnParent, wp) && !ReferenceEquals(_drawnChild, null) && _drawnChild != null && _drawnChild.gameObject.activeInHierarchy) return _drawn;
+                _drawnFrame = Time.frameCount; _drawnParent = wp; _drawn = ""; _drawnChild = null;
+                if (wp == null || !wp.gameObject.activeInHierarchy) return _drawn;
+                for (int i = 0; i < wp.childCount; i++)
                 {
-                    var c = WeaponsParent.GetChild(i);
-                    if (c.gameObject.activeSelf && c.name != "kick") return c.name;
+                    var c = wp.GetChild(i);
+                    if (!c.gameObject.activeSelf) continue;
+                    string n; int id = c.GetInstanceID();
+                    if (!_childNames.TryGetValue(id, out n)) { if (_childNames.Count > 256) _childNames.Clear(); _childNames[id] = n = c.name; }
+                    if (n != "kick") { _drawn = n; _drawnChild = c; break; }
                 }
-                return "";
+                return _drawn;
             }
         }
 
@@ -211,6 +233,8 @@ namespace WildWasteland.Modules.PlayerBody
         // The renderer list is refreshed every second (weapons/items create theirs when first drawn).
         private static readonly List<Renderer> _fpArmRenderers = new List<Renderer>();
         private static float _fpArmsScan;
+        private static readonly List<SkinnedMeshRenderer> _fpScan = new List<SkinnedMeshRenderer>();
+        private static readonly Dictionary<long, bool> _fpVerdict = new Dictionary<long, bool>();
         private static Transform _fpArmsHolder;
         public static bool GameArmsShown
         {
@@ -222,12 +246,24 @@ namespace WildWasteland.Modules.PlayerBody
                     _fpArmsScan = Time.unscaledTime + 1f;
                     _fpArmsHolder = CameraHolder;
                     _fpArmRenderers.Clear();
-                    foreach (var r in CameraHolder.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                    CameraHolder.GetComponentsInChildren<SkinnedMeshRenderer>(true, _fpScan);   // (WW perf) List overload, verdict memo per renderer+material
+                    for (int k = 0; k < _fpScan.Count; k++)
                     {
-                        if (r == null || r.sharedMaterial == null || !r.sharedMaterial.name.StartsWith("Player2")) continue;
-                        if (r.name.IndexOf("leg", StringComparison.OrdinalIgnoreCase) >= 0) continue;
-                        _fpArmRenderers.Add(r);
+                        var r = _fpScan[k];
+                        if (r == null) continue;
+                        var m = r.sharedMaterial;
+                        if (m == null) continue;
+                        int mid = m.GetInstanceID(); long key = ((long)r.GetInstanceID() << 32) ^ (uint)mid;
+                        bool arm;
+                        if (!_fpVerdict.TryGetValue(key, out arm))
+                        {
+                            arm = m.name.StartsWith("Player2") && r.name.IndexOf("leg", StringComparison.OrdinalIgnoreCase) < 0;
+                            if (_fpVerdict.Count > 2048) _fpVerdict.Clear();
+                            _fpVerdict[key] = arm;
+                        }
+                        if (arm) _fpArmRenderers.Add(r);
                     }
+                    _fpScan.Clear();
                 }
                 for (int i = 0; i < _fpArmRenderers.Count; i++)
                 {
@@ -254,12 +290,14 @@ namespace WildWasteland.Modules.PlayerBody
                 known = true;
                 if (IsReload(an.GetCurrentAnimatorStateInfo(0))) return true;
                 if (an.IsInTransition(0) && IsReload(an.GetNextAnimatorStateInfo(0))) return true;
-                foreach (var ci in an.GetCurrentAnimatorClipInfo(0))
+                an.GetCurrentAnimatorClipInfo(0, _clipInfo);   // (WW perf) List overload: no array per frame
+                foreach (var ci in _clipInfo)
                     if (ci.clip != null && ci.weight > 0.5f && ci.clip.name.IndexOf("reload", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             }
             catch (Exception) { }
             return false;
         }
+        private static readonly List<AnimatorClipInfo> _clipInfo = new List<AnimatorClipInfo>();
         private static bool IsReload(AnimatorStateInfo s) { return ReloadPhaseOf(s) != 0; }
         // (2.1.8) the arms' reload states: "reload" (one magazine / one round), and for the break-action / bolt guns (rochester_m24, redmark_m11)
         // "reload 1" (open), "reload 2" (one round, again per round), "reload 3" / "reload 4" (close). 1 = opening, 2 = loading, 3 = closing

@@ -37,9 +37,10 @@ namespace WildWasteland.Modules.Guns
             MoveBolt(ref s);
         }
 
-        private static void MoveBolt(ref Shot s)
+        private static void MoveBolt(ref Shot s) { MoveBoltAt(ref s, s.Pos); }
+        private static void MoveBoltAt(ref Shot s, Vector3 pos)
         {
-            if (s.Visual != null) s.Visual.SetPositionAndRotation(s.Pos - s.Dir * (_boltMesh.bounds.max.z * _boltScale.z), Quaternion.LookRotation(s.Dir));
+            if (s.Visual != null) s.Visual.SetPositionAndRotation(pos - s.Dir * (_boltMesh.bounds.max.z * _boltScale.z), Quaternion.LookRotation(s.Dir));
         }
 
         private static void LandBolt(ref Shot s, Vector3 point, Vector3 normal, Transform target, bool soft)

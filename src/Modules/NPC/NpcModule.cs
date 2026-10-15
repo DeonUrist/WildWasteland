@@ -96,7 +96,7 @@ namespace WildWasteland.Modules.NPC
             Scheduler.EveryFrame(this, "Burrow.Late", Burrow.LateTick, Phase.LateUpdate);
             Scheduler.EveryFrame(this, "Pounce.Late", Pounce.LateTick, Phase.LateUpdate);
             Scheduler.EveryFrame(this, "DogBite.Late", DogBite.LateTick, Phase.LateUpdate);
-            _overlay = Scheduler.Gui(this, "Overlay", DebugOverlay.OnGUI);
+            _overlay = Scheduler.Gui(this, "Overlay", DebugOverlay.OnGUI, OverlayWanted);   // (WW perf) the job is also disabled while ShowNavigation is off
             _overlay.Enabled = ShowNav.Value;
             ShowNav.SettingChanged += OnShowNavChanged;
 
@@ -106,6 +106,7 @@ namespace WildWasteland.Modules.NPC
             Log.LogInfo("NPC Overhaul 1.9.15 port started");
         }
 
+        static bool OverlayWanted() { return Running; }   // = DebugOverlay.OnGUI's own gate (it also prunes Nav's stale markers, so no finer test)
         void OnShowNavChanged(object s, EventArgs a) { if (_overlay != null) _overlay.Enabled = ShowNav.Value; }
 
         public override void Shutdown()
@@ -147,7 +148,7 @@ namespace WildWasteland.Modules.NPC
         /// <summary>Clears every registry / cache (the old Plugin.SceneLoaded chain). Init and Shutdown call it too.</summary>
         static void ResetAll()
         {
-            Aim.OnSceneLoaded(); WeaponRanges.OnSceneLoaded(); Brain.OnSceneLoaded(); Senses.OnSceneLoaded(); Nav.OnSceneLoaded(); Idle.OnSceneLoaded();
+            Aim.OnSceneLoaded(); WeaponRanges.OnSceneLoaded(); VanillaEvents.OnSceneLoaded(); Brain.OnSceneLoaded(); Senses.OnSceneLoaded(); Nav.OnSceneLoaded(); Idle.OnSceneLoaded();
             Passthrough.OnSceneLoaded(); Burrow.OnSceneLoaded(); Pounce.OnSceneLoaded(); Webs.OnSceneLoaded(); Nests.OnSceneLoaded(); Ambush.OnSceneLoaded(); DogBite.OnSceneLoaded();
         }
 

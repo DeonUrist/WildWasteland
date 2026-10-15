@@ -40,7 +40,7 @@ namespace WildWasteland.Modules.PlayerBody
         {
             _dir = PlayerBodyModule.DataDir;
             Directory.CreateDirectory(_dir);
-            _builtin.Clear(); _legacy.Clear(); _legacyBase.Clear(); _live = null; _liveKey = null;
+            _builtin.Clear(); _legacy.Clear(); _legacyBase.Clear(); _live = null; _liveKey = null; Dirty();
             EditorTarget = 0; _binding = -1;
             _file = Path.Combine(_dir, "weapon-poses.txt");
             _export = Path.Combine(_dir, "BuiltinPoses.generated.cs");
@@ -70,7 +70,7 @@ namespace WildWasteland.Modules.PlayerBody
 
         private static void LoadUser()
         {
-            _user.Clear();
+            _user.Clear(); Dirty();
             if (!File.Exists(_file)) return;
             foreach (var raw in File.ReadAllLines(_file))
             {
@@ -180,7 +180,7 @@ namespace WildWasteland.Modules.PlayerBody
                 if (!own) off = line ?? new float[6];
                 Vector3 p = basePos + new Vector3(off[0], off[1], off[2]) * 0.01f;
                 Quaternion r = baseRot * Quaternion.Euler(off[3], off[4], off[5]);
-                _user[weapon + "|" + a] = Abs(p, r);
+                _user[weapon + "|" + a] = Abs(p, r); Dirty();
                 if (own) n++;
             }
             Save();
@@ -192,6 +192,20 @@ namespace WildWasteland.Modules.PlayerBody
             var e = r.eulerAngles;
             return new[] { p.x * 100f, p.y * 100f, p.z * 100f, Mathf.DeltaAngle(0f, e.x), Mathf.DeltaAngle(0f, e.y), Mathf.DeltaAngle(0f, e.z) };
         }
+        // (WW perf) the same into a caller's reused float[6] (no garbage per frame)
+        public static float[] Abs(Vector3 p, Quaternion r, float[] into)
+        {
+            var e = r.eulerAngles;
+            into[0] = p.x * 100f; into[1] = p.y * 100f; into[2] = p.z * 100f;
+            into[3] = Mathf.DeltaAngle(0f, e.x); into[4] = Mathf.DeltaAngle(0f, e.y); into[5] = Mathf.DeltaAngle(0f, e.z);
+            return into;
+        }
+        private static readonly float[] _blendDef = new float[6];   // Blend/BlendFor's default (only read inside the call)
+
+        // (WW perf) resolved (weapon, clip) -> file/built-in entry (null = none), so Own doesn't build "weapon|clip" per call per frame;
+        // cleared whenever _user/_builtin change (Dirty)
+        private static readonly Dictionary<string, Dictionary<string, float[]>> _own = new Dictionary<string, Dictionary<string, float[]>>();
+        private static void Dirty() { _own.Clear(); }
 
         private static string _liveKey;
         private static float[] _live;
@@ -200,12 +214,16 @@ namespace WildWasteland.Modules.PlayerBody
         public static float[] Own(string weapon, string clip)
         {
             if (string.IsNullOrEmpty(clip)) return null;
-            string k = weapon + "|" + clip;
-            if (_live != null && _liveKey == k) return _live;
+            if (weapon == null) weapon = "";   // (weapon + "|" made null "")
+            if (_live != null && _liveWeapon == weapon && _livePose == clip) return _live;   // (= _liveKey == weapon|clip)
+            Dictionary<string, float[]> byClip;
+            if (!_own.TryGetValue(weapon, out byClip)) _own[weapon] = byClip = new Dictionary<string, float[]>();
             float[] v;
-            if (_user.TryGetValue(k, out v)) return v;
-            if (_builtin.TryGetValue(k, out v)) return v;
-            return null;
+            if (byClip.TryGetValue(clip, out v)) return v;
+            string k = weapon + "|" + clip;
+            if (!_user.TryGetValue(k, out v) && !_builtin.TryGetValue(k, out v)) v = null;
+            byClip[clip] = v;
+            return v;
         }
 
         // ---------------- the drawn weapon's clips (set by Body): the numpad cycle, and the kind's idle clip = the fallback for untuned ones
@@ -220,6 +238,7 @@ namespace WildWasteland.Modules.PlayerBody
         {
             if (v == null) _user.Remove(weapon + "|" + clip);
             else _user[weapon + "|" + clip] = (float[])v.Clone();
+            Dirty();
         }
 
         public static bool HasPose(string weapon, string clip) { return !string.IsNullOrEmpty(weapon) && Own(weapon, clip) != null; }
@@ -236,7 +255,7 @@ namespace WildWasteland.Modules.PlayerBody
         }
         public static void BlendFor(string weapon, Dictionary<string, float> w, string idleName, Vector3 defPos, Quaternion defRot, out Vector3 pos, out Quaternion rot)
         {
-            var def = Abs(defPos, defRot);
+            var def = Abs(defPos, defRot, _blendDef);
             pos = Vector3.zero; float sum = 0f; var q = Vector4.zero; Quaternion first = Quaternion.identity; bool any = false;
             foreach (var kv in w)
             {
@@ -262,7 +281,7 @@ namespace WildWasteland.Modules.PlayerBody
         // blend of the clips' poses by weight -> hand-local position (m) and rotation
         public static void Blend(string weapon, Dictionary<string, float> w, Vector3 defPos, Quaternion defRot, out Vector3 pos, out Quaternion rot)
         {
-            var def = Abs(defPos, defRot);
+            var def = Abs(defPos, defRot, _blendDef);
             pos = Vector3.zero; float sum = 0f; var q = Vector4.zero; Quaternion first = Quaternion.identity; bool any = false;
             foreach (var kv in w)
             {
@@ -285,7 +304,7 @@ namespace WildWasteland.Modules.PlayerBody
         {
             string k = weapon + "|" + clip;
             if (_liveKey != k) Flush();
-            _liveKey = k; _live = v; _liveWeapon = weapon; _livePose = clip;
+            _liveKey = k; _live = v; _liveWeapon = weapon ?? ""; _livePose = clip;
         }
         private static string _liveWeapon, _livePose;
 
@@ -377,7 +396,16 @@ namespace WildWasteland.Modules.PlayerBody
         public static void Note(string s) { _note = s ?? ""; }
         public static string AimLine = "";      // (2.1.7) Body's aim-lift line under the hint
         private static string _status = "";
-        public static void Status(string s) { _status = s ?? ""; }
+        public static void Status(string s) { _status = s ?? ""; _statusSig = -1; }
+        // (WW perf) Body's status line, rebuilt only when one of its parts changes (was a concat + ToLowerInvariant every frame)
+        private static int _statusSig = -1;
+        public static void Status(Props.Kind kind, bool reloading, bool firing, bool aiming)
+        {
+            int sig = (int)kind * 8 + (reloading ? 4 : 0) + (firing ? 2 : 0) + (aiming ? 1 : 0);
+            if (sig == _statusSig) return;
+            _statusSig = sig;
+            _status = (kind == Props.Kind.Pistol ? "pistol" : kind == Props.Kind.Rifle ? "rifle" : kind.ToString().ToLowerInvariant()) + " animations" + (reloading ? ", RELOADING" : "") + (firing ? ", firing" : aiming ? ", aiming" : "");
+        }
 
         // (WW) what the editor works on right now, for the F7 "Weapon pose editor" page
         internal static string CurrentWeapon = "", CurrentPose = "";

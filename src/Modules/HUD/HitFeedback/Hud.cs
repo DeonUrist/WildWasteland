@@ -133,6 +133,8 @@ namespace WildWasteland.Modules.HUD
             _lineStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.UpperRight, fontStyle = FontStyle.Bold };
         }
 
+        // OnGUI's own early-out (it also expires the floaters/lines, so it keeps running until both lists are empty); Flush fills them in LateUpdate
+        internal static bool GuiWanted() { return _floaters.Count > 0 || _lines.Count > 0 || Time.unscaledTime < _markerUntil; }
         public static void OnGUI()
         {
             if (Event.current.type != EventType.Repaint) return;

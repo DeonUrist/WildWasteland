@@ -47,12 +47,19 @@ namespace WildWasteland.Modules.NPC
             public int CompScan, CompCur, CompCurSize; public Stack<int> CompStack; public List<int> CompSizes;   // phase 2 progress
             public readonly Dictionary<long, Field> Fields = new Dictionary<long, Field>();
             public Core.NavStructure Pub;                // (WW) the Core.Services.Npc view of it (reused, refreshed by Structures())
+            // (WW perf, N2) per cell, bit b = the move to neighbour b (loop order dz -1..1, dx -1..1) is allowed (Move: step + no corner
+            // cutting) / is a hop; made after the bake for MaxStep = MaskStep, used while that holds and no _relax / _noHop is on
+            public byte[] Mv, Hop; public float MaskStep;
+            public byte[] MvB, HopB; public float MaskStepB; public int MaskNext;     // the masks being made (a slice per frame)
         }
 
         // (WW perf) a route field is expanded lazily: Build stops once the asking cell is settled and keeps its heap (H) to resume later
         // (Expand); Settled = the key of the last cell popped: every cell with Dist <= Settled is final (Dijkstra), H == null = complete
-        internal sealed class Field { public float[] Dist; public float Made; public bool GoalInside; public int GoalCell; public Heap H; public float Settled; }
+        // (WW perf) Pin: a field a sliced exit pick (PickJob) is still expanding / reading - never evicted while pinned
+        internal sealed class Field { public float[] Dist; public float Made; public bool GoalInside; public int GoalCell; public Heap H; public float Settled; public bool Pin; }
         // distance arrays are big (W*H floats); fields that expire give theirs back here, Build takes one from here when it fits
+        // (WW perf) pools of 32 (was 8: with 32 cached fields per structure an eviction burst threw most arrays away as garbage)
+        private const int PoolCap = 32;
         private static readonly Dictionary<int, Stack<float[]>> _pool = new Dictionary<int, Stack<float[]>>();
         private static readonly Stack<Heap> _heaps = new Stack<Heap>();
         private static float[] Rent(int n)
@@ -66,9 +73,25 @@ namespace WildWasteland.Modules.NPC
             if (f == null || f.Dist == null) return;
             Stack<float[]> st;
             if (!_pool.TryGetValue(f.Dist.Length, out st)) _pool[f.Dist.Length] = st = new Stack<float[]>();
-            if (st.Count < 8) st.Push(f.Dist);
-            f.Dist = null;
-            if (f.H != null) { if (_heaps.Count < 8) _heaps.Push(f.H); f.H = null; }
+            if (st.Count < PoolCap) st.Push(f.Dist);
+            f.Dist = null; f.Pin = false;
+            if (f.H != null) { if (_heaps.Count < PoolCap) _heaps.Push(f.H); f.H = null; }
+        }
+        // (WW perf) the per-structure cache: entries older than FieldSeconds go once there are 16; at 32 the least recently MADE one goes, one
+        // at a time (was: everything cleared at 32 - a rebuild storm for every NPC on the next think)
+        private static void MakeRoom(Structure s, float now, float life)
+        {
+            if (s.Fields.Count < 16) return;
+            _expired.Clear();
+            foreach (var kv in s.Fields) if (now - kv.Value.Made >= life && !kv.Value.Pin) _expired.Add(kv.Key);
+            foreach (var k in _expired) { Return(s.Fields[k]); s.Fields.Remove(k); }
+            while (s.Fields.Count >= 32)
+            {
+                long oldest = 0; float om = float.MaxValue; bool any = false;
+                foreach (var kv in s.Fields) if (!kv.Value.Pin && kv.Value.Made < om) { om = kv.Value.Made; oldest = kv.Key; any = true; }
+                if (!any) break;
+                Return(s.Fields[oldest]); s.Fields.Remove(oldest);
+            }
         }
         private static readonly List<long> _expired = new List<long>();
         internal static bool LogOn { get { return NpcModule.BrainLog != null && NpcModule.BrainLog.Value; } }
@@ -94,7 +117,7 @@ namespace WildWasteland.Modules.NPC
 
         internal static bool On { get { return NpcModule.Running && NpcModule.NavEnabled.Value; } }
 
-        public static void OnSceneLoaded() { _needed = null; Needed = false; _structures.Clear(); _known.Clear(); _baking = null; _debug.Clear(); _floorCols.Clear(); _exits.Clear(); _relaxedFields.Clear(); _pool.Clear(); _heaps.Clear(); _player = null; _sweep.Clear(); _nodeKind.Clear(); _outPlans.Clear(); _outMemo.Clear(); _compRing.Clear(); }
+        public static void OnSceneLoaded() { _needed = null; Needed = false; _structures.Clear(); _known.Clear(); _baking = null; _debug.Clear(); _floorCols.Clear(); _exits.Clear(); _relaxedFields.Clear(); _pool.Clear(); _heaps.Clear(); _player = null; _sweep.Clear(); _swept = false; _nodeKind.Clear(); _outPlans.Clear(); _outMemo.Clear(); _compRing.Clear(); PickReset(); _maskQueue.Clear(); }
 
         // ---------- discovery + baking (per frame) ----------
         public static void Tick()
@@ -102,11 +125,13 @@ namespace WildWasteland.Modules.NPC
             if (!On) return;
             float now = Time.unscaledTime;
             var player = Player();
+            try { PickStep(); } catch (Exception e) { NpcModule.Log.LogError("Nav: exit pick: " + e); PickReset(); }   // (WW perf) the sliced exit pick (T5)
+            try { MaskTick(); } catch (Exception e) { NpcModule.Log.LogError("Nav: move masks: " + e); _maskQueue.Clear(); }   // (WW perf) the move masks (N2)
             if (player == null) return;
             float udt = Time.unscaledDeltaTime;
             if (udt > 0f && udt < 0.5f) _dtAvg = _dtAvg <= 0f ? udt : _dtAvg + (udt - _dtAvg) * 0.1f;
             // discovery: a slow walk over the scene hierarchy, a few hundred nodes per frame (each node's name read once and remembered by id)
-            try { SweepStep(now); } catch (Exception e) { NpcModule.Log.LogError("Nav: discovery: " + e); _sweep.Clear(); _nextSweep = now + 5f; }
+            try { SweepStep(now, player.position); } catch (Exception e) { NpcModule.Log.LogError("Nav: discovery: " + e); _sweep.Clear(); _nextSweep = now + 5f; }
             if (now >= _nextPick) { _nextPick = now + 0.5f; Pick(player.position, now); }
             if (_baking != null)
             {
@@ -182,11 +207,16 @@ namespace WildWasteland.Modules.NPC
         private static float _nextSweep; private static int _sweepAdded;
         private const int SweepNodesPerFrame = 250;
 
-        private static void SweepStep(float now)
+        // (WW perf) after a full pass the next one waits 15 s, or 2 s once the player is > 30 m from where the last pass began (new MapMagic
+        // tiles come with movement; structures made by CreateObject are taken at once by Spawned)
+        private static Vector3 _sweepFrom; private static bool _swept;
+        private static void SweepStep(float now, Vector3 pp)
         {
             if (_sweep.Count == 0)
             {
                 if (now < _nextSweep) return;
+                if (_swept && now < _nextSweep + 13f && (pp - _sweepFrom).sqrMagnitude <= 30f * 30f) return;
+                _sweepFrom = pp; _swept = true;
                 int gone = _structures.RemoveAll(s => s.Root == null);      // despawned camps: drop their grids and cached routes
                 if (gone > 0) { _compRing.Clear(); if (NpcModule.NavLog.Value) NpcModule.Log.LogInfo("Nav: " + gone + " structure(s) gone"); }   // _compRing holds whole structures (grids)
                 if (_baking != null && _baking.Root == null) _baking = null;
@@ -263,7 +293,7 @@ namespace WildWasteland.Modules.NPC
 
         private static bool IsStructure(string name)
         {
-            string p = name.StartsWith("Camp_") ? "Camp_" : name.StartsWith("Building_") ? "Building_" : name.StartsWith("Cave_") ? "Cave_" : null;
+            string p = name.StartsWith("Camp_", StringComparison.Ordinal) ? "Camp_" : name.StartsWith("Building_", StringComparison.Ordinal) ? "Building_" : name.StartsWith("Cave_", StringComparison.Ordinal) ? "Cave_" : null;
             if (p == null || name.Length <= p.Length || !char.IsDigit(name[p.Length])) return false;
             for (int i = p.Length; i < name.Length; i++) { char c = name[i]; if (!char.IsDigit(c)) return c == '(' || c == ' '; }
             return true;
@@ -402,6 +432,7 @@ namespace WildWasteland.Modules.NPC
                         }
                 }
                 s.Baked = true; _baking = null;
+                QueueMasks(s);
                 _msPerCell = Mathf.Clamp(_msPerCell + (s.BakeMs / Math.Max(1, n) - _msPerCell) * 0.5f, 0.005f, 0.2f);   // learned for the next estimates
                 int floorCols = 0;
                 foreach (var kv in s.FloorHits) if (kv.Value >= FloorColCells && _floorCols.Add(kv.Key)) floorCols++;
@@ -588,7 +619,6 @@ namespace WildWasteland.Modules.NPC
 
         // the nearest walkable cell within r cells (an NPC hugging a wall stands in a blocked cell)
         // the cell an NPC really stands in / next to: nearest cells first, not in a tiny island, with no wall between the NPC and the cell
-        private static readonly List<int> _cand = new List<int>();
         private static int NearestReachable(Structure s, Vector3 pos, int x, int z, int r)
         {
             if (x >= 0 && z >= 0 && x < s.W && z < s.H)
@@ -596,27 +626,41 @@ namespace WildWasteland.Modules.NPC
                 int own = z * s.W + x;
                 if (!float.IsNaN(s.FloorY[own]) && BigArea(s, own)) return own;      // the usual case: standing on a mapped cell
             }
-            _cand.Clear();
-            for (int dz = -r; dz <= r; dz++)
-                for (int dx = -r; dx <= r; dx++)
-                {
-                    int cx = x + dx, cz = z + dz;
-                    if (cx < 0 || cz < 0 || cx >= s.W || cz >= s.H) continue;
-                    int i = cz * s.W + cx;
-                    if (float.IsNaN(s.FloorY[i]) || !BigArea(s, i)) continue;
-                    _cand.Add(i);
-                }
-            _cand.Sort((a, b) => Dist2(s, a, x, z).CompareTo(Dist2(s, b, x, z)));
-            int tried = 0;
-            foreach (int i in _cand)
+            // (WW perf) the cells of the (2r+1)^2 square nearest first from a precomputed offset table (was: a list sorted with a capturing lambda
+            // per call); equal distances in row order
+            Offsets(); int first = -1, tried = 0; long r2 = 2L * r * r;
+            for (int k = 0; k < _offD2.Length && _offD2[k] <= r2; k++)
             {
+                int dx = _offDx[k], dz = _offDz[k];
+                if (dx < -r || dx > r || dz < -r || dz > r) continue;
+                int cx = x + dx, cz = z + dz;
+                if (cx < 0 || cz < 0 || cx >= s.W || cz >= s.H) continue;
+                int i = cz * s.W + cx;
+                if (float.IsNaN(s.FloorY[i]) || !BigArea(s, i)) continue;
+                if (first < 0) first = i;
+                if (tried >= 12) break;
                 Vector3 c = CellCenter(s, i % s.W, i / s.W, s.FloorY[i]);
                 if (!Physics.Linecast(new Vector3(pos.x, c.y + 0.5f, pos.z), c + Vector3.up * 0.5f, BakeMask, QueryTriggerInteraction.Ignore)) return i;
-                if (++tried >= 12) break;
+                tried++;
             }
-            return _cand.Count > 0 ? _cand[0] : -1;
+            return first;
         }
-        private static int Dist2(Structure s, int i, int x, int z) { int dx = i % s.W - x, dz = i / s.W - z; return dx * dx + dz * dz; }
+
+        // (WW perf) cell offsets within +-OffsetMax, nearest first (squared distance), equal distances in row order (dz, then dx)
+        private const int OffsetMax = 80;
+        private static int[] _offDx, _offDz; private static long[] _offD2;
+        private static int[] Offsets()
+        {
+            if (_offDx != null) return _offDx;
+            int side = 2 * OffsetMax + 1, n = side * side;
+            var key = new long[n]; var idx = new int[n];
+            for (int k = 0; k < n; k++) { int dx = k % side - OffsetMax, dz = k / side - OffsetMax; key[k] = ((long)(dx * dx + dz * dz) << 20) + k; idx[k] = k; }
+            Array.Sort(key, idx);
+            var ox = new int[n]; var oz = new int[n]; var od = new long[n];
+            for (int k = 0; k < n; k++) { ox[k] = idx[k] % side - OffsetMax; oz[k] = idx[k] / side - OffsetMax; od[k] = key[k] >> 20; }
+            _offDz = oz; _offD2 = od; _offDx = ox;
+            return _offDx;
+        }
 
         private static int NearestWalkable(Structure s, int x, int z, int r)
         {
@@ -699,6 +743,71 @@ namespace WildWasteland.Modules.NPC
                 if (!Step(s, i, j)) return true;
             }
             return false;
+        }
+
+        // ---------- (WW perf, N2) move masks ----------
+        // Expand / Downhill / GridSight / OutClear ask Step/EdgeKind up to 12 times per cell; the answers depend only on the map, the bake's
+        // edge bits and MaxStep, so they are worked out once per structure after its bake (a slice per frame, 0.5 ms) and read as bits.
+        // Until they exist, after MaxStep was changed live (rebuilt then), or under _relax / _noHop the old calls run - the same answers.
+        private static readonly List<Structure> _maskQueue = new List<Structure>();
+        private static readonly Stopwatch _maskSw = new Stopwatch();
+        private static readonly int[] _bitOf = { 0, 1, 2, 3, -1, 4, 5, 6, 7 };     // [(dz + 1) * 3 + dx + 1] -> bit
+        private static readonly int[] _dOff = new int[8]; private static readonly bool[] _dDiag = { true, false, true, false, false, true, false, true };
+        private static void QueueMasks(Structure s) { if (!_maskQueue.Contains(s)) _maskQueue.Add(s); }
+        private static bool MaskOk(Structure s)
+        {
+            if (s.Mv == null || _relax || _noHop || s.Phase < 2 || s.Edges == null) return false;
+            if (Mathf.Max(0.1f, NpcModule.NavMaxStep.Value) == s.MaskStep) return true;
+            s.Mv = null; s.Hop = null; QueueMasks(s);      // MaxStep changed live: made again, the old calls meanwhile
+            return false;
+        }
+        private static void MaskTick()
+        {
+            if (_maskQueue.Count == 0) return;
+            var s = _maskQueue[0];
+            if (s.Root == null || !s.Baked || s.FloorY == null || s.Edges == null || s.Phase < 2) { s.MvB = s.HopB = null; _maskQueue.RemoveAt(0); return; }
+            _maskSw.Reset(); _maskSw.Start();
+            if (BuildMasks(s, 0.5)) _maskQueue.RemoveAt(0);
+            _maskSw.Stop();
+        }
+        internal static void MasksNow(Structure s) { _maskSw.Reset(); _maskSw.Start(); BuildMasks(s, double.MaxValue); _maskSw.Stop(); }     // (offline harness) at once
+        private static bool BuildMasks(Structure s, double budgetMs)
+        {
+            float step = Mathf.Max(0.1f, NpcModule.NavMaxStep.Value);
+            int n = s.W * s.H, W = s.W, H = s.H;
+            if (s.MvB == null || s.MaskStepB != step || s.MvB.Length != n) { s.MvB = new byte[n]; s.HopB = new byte[n]; s.MaskNext = 0; s.MaskStepB = step; }
+            bool relax = _relax, noHop = _noHop; _relax = false; _noHop = false;
+            try
+            {
+                while (s.MaskNext < n)
+                {
+                    int end = Math.Min(n, s.MaskNext + 256);
+                    for (int i = s.MaskNext; i < end; i++)
+                    {
+                        if (float.IsNaN(s.FloorY[i])) continue;
+                        int x = i % W, z = i / W, mv = 0, hop = 0;
+                        for (int dz = -1; dz <= 1; dz++)
+                            for (int dx = -1; dx <= 1; dx++)
+                            {
+                                if (dx == 0 && dz == 0) continue;
+                                int cx = x + dx, cz = z + dz;
+                                if (cx < 0 || cz < 0 || cx >= W || cz >= H) continue;
+                                int j = cz * W + cx, b = _bitOf[(dz + 1) * 3 + dx + 1];
+                                int k = EdgeKind(s, i, j);
+                                if (k == 0) continue;
+                                if (dx != 0 && dz != 0) { if (!Step(s, i, z * W + cx) || !Step(s, i, cz * W + x)) continue; }
+                                else if (k == 2) hop |= 1 << b;
+                                mv |= 1 << b;
+                            }
+                        s.MvB[i] = (byte)mv; s.HopB[i] = (byte)hop;
+                    }
+                    s.MaskNext = end;
+                    if (s.MaskNext < n && _maskSw.Elapsed.TotalMilliseconds >= budgetMs) return false;
+                }
+            }
+            finally { _relax = relax; _noHop = noHop; }
+            s.Mv = s.MvB; s.Hop = s.HopB; s.MaskStep = step; s.MvB = s.HopB = null;
+            return true;
         }
 
         // one step on the grid as a body takes it: a diagonal step also needs both cells beside it passable from here - no corner cutting
@@ -904,15 +1013,16 @@ namespace WildWasteland.Modules.NPC
             int x1 = Mathf.FloorToInt((goal.x - s.Box.min.x) / s.Cell), z1 = Mathf.FloorToInt((goal.z - s.Box.min.z) / s.Cell);
             int dx = Math.Abs(x1 - x0), dz = Math.Abs(z1 - z0), sx = x0 < x1 ? 1 : -1, sz = z0 < z1 ? 1 : -1, err = dx - dz;
             int prev = a, guard = 2 * (s.W + s.H) + 4;
+            byte[] mv = MaskOk(s) ? s.Mv : null;
             while (guard-- > 0)
             {
                 if (x0 == x1 && z0 == z1) return true;
-                int e2 = 2 * err;
+                int e2 = 2 * err, ox = x0, oz = z0;
                 if (e2 > -dz) { err -= dz; x0 += sx; }
                 if (e2 < dx) { err += dx; z0 += sz; }
                 if (x0 < 0 || z0 < 0 || x0 >= s.W || z0 >= s.H) return true;     // out of the footprint: open ground from here
                 int i = z0 * s.W + x0;
-                if (!Move(s, prev, i)) return false;
+                if (mv != null ? (mv[prev] & (1 << _bitOf[(z0 - oz + 1) * 3 + x0 - ox + 1])) == 0 : !Move(s, prev, i)) return false;
                 prev = i;
             }
             return true;
@@ -940,6 +1050,7 @@ namespace WildWasteland.Modules.NPC
                 {
                     bool fresh = attempt > 0 || (p != null && p.Exit >= 0);   // drifted off its line / plan gone stale / exit doesn't connect: an exit from here (after a failed search: the area's memo)
                     int exit = PickOutExit(owner, s, from, goal, fresh);
+                    if (exit == Pending) { handled = false; return false; }      // (WW perf) the pick is being worked out (PickJob): the old way meanwhile
                     p = new OutPlan { S = s, Goal = goal, Exit = exit, Made = now };
                     if (owner != null)
                     {
@@ -973,58 +1084,210 @@ namespace WildWasteland.Modules.NPC
             long key = (space << 40) | (long)(uint)exit;
             float life = Mathf.Max(0.2f, NpcModule.NavFieldSeconds.Value);
             Field f;
-            if (s.Fields.TryGetValue(key, out f) && now - f.Made < Mathf.Max(FixedLife, life)) { Expand(s, f, until); return f; }
+            if (s.Fields.TryGetValue(key, out f) && (f.Pin || now - f.Made < Mathf.Max(FixedLife, life))) { Expand(s, f, until); return f; }
             if (f != null) { Return(f); s.Fields.Remove(key); }
-            if (s.Fields.Count >= 16)
-            {
-                _expired.Clear();
-                foreach (var kv in s.Fields) if (now - kv.Value.Made >= life) _expired.Add(kv.Key);
-                foreach (var k in _expired) { Return(s.Fields[k]); s.Fields.Remove(k); }
-                if (s.Fields.Count >= 32) { foreach (var kv in s.Fields) Return(kv.Value); s.Fields.Clear(); }
-            }
+            MakeRoom(s, now, life);
             f = Build(s, Vector3.zero, true, exit, until);
             s.Fields[key] = f;
             return f;
         }
 
-        // the exit for an outside goal: the cheapest (map path + straight line) cell of the NPC's area with a clear line out
+        // (WW perf, T5) One pick is a whole-area Dijkstra from the NPC's cell, a key per reachable cell and up to MaxOutTests line walks: tens
+        // of ms. It runs as a PickJob, resumed by Nav.Tick under PickBudgetMs a frame (one job at a time, a queue de-duplicated by structure +
+        // cell + 8 m goal bucket, and per area + bucket for the shared memo); until it is done PickOutExit answers Pending and OutNext takes
+        // the old (pre-1.6) way, exactly as when no exit was found. A finished pick goes into _outMemo exactly as the direct pick did (not
+        // for "fresh" picks), and is handed to the NPC that asked for it even after it walked on a few cells (one outstanding job per NPC).
+        // The candidates are taken cheapest first from a heap instead of a full sort (same order; equal costs: the lower cell first).
+        private const int Pending = -2;
+        private const float PickBudgetMs = 1f;
+        internal static bool PickInline;     // (offline equivalence harness) the whole pick at once, inside the call, as before
+        private sealed class PickJob
+        {
+            public Structure S; public int From, Comp, GKey; public Vector3 Goal; public long Key, MemoKey; public bool Memo, Fresh;
+            public GameObject Who; public int Stage, Scan, Cnt, Total, Tested, Exit = -1; public float LastKey; public Field F; public double Ms; public int Frames;
+        }
+        private sealed class PickDone { public Structure S; public int Exit, GKey; public float Until; }
+        private static readonly List<PickJob> _pickQueue = new List<PickJob>();
+        private static readonly Dictionary<long, PickJob> _pickByKey = new Dictionary<long, PickJob>();     // queued + running
+        private static readonly Dictionary<long, PickDone> _pickDone = new Dictionary<long, PickDone>();
+        private static readonly Dictionary<int, long> _pickWait = new Dictionary<int, long>();               // NPC -> the job it waits for
+        private static PickJob _pickRun;
+        private static readonly Stopwatch _pickSw = new Stopwatch();
+        internal static int PickQueued { get { return _pickQueue.Count + (_pickRun != null ? 1 : 0); } }
+
+        private static void PickReset()
+        {
+            if (_pickRun != null && _pickRun.F != null) _pickRun.F.Pin = false;
+            _pickRun = null; _pickQueue.Clear(); _pickByKey.Clear(); _pickDone.Clear(); _pickWait.Clear();
+        }
+
+        // the exit for an outside goal: the cheapest (map path + straight line) cell of the NPC's area with a clear line out; Pending while
+        // its job runs
         private static int PickOutExit(GameObject owner, Structure s, int from, Vector3 goal, bool fresh)
         {
             int comp = s.Comp != null ? s.Comp[from] : 0;
             int gkey = Mathf.FloorToInt(goal.x / OutReplan) * 73856093 ^ Mathf.FloorToInt(goal.z / OutReplan) * 19349663;
-            long key = ((long)s.Root.GetInstanceID() << 40) ^ ((long)(comp & 0xFFFFF) << 20) ^ (long)(gkey & 0xFFFFF);
+            int rid = s.Root.GetInstanceID();
+            long key = ((long)rid << 40) ^ ((long)(comp & 0xFFFFF) << 20) ^ (long)(gkey & 0xFFFFF);
             float now = Time.time;
+            int id = owner != null ? owner.GetInstanceID() : 0;
             OutMemo m;
-            if (!fresh && _outMemo.TryGetValue(key, out m) && m.S == s && now < m.Until && (m.Exit < 0 || (m.Exit != from && !float.IsNaN(s.FloorY[m.Exit])))) return m.Exit;
-            var sw = Stopwatch.StartNew();
-            var mine = ExitField(s, from, now, 3, -1);      // (WW perf) the whole field from the NPC's cell, shared with ExitCell and every NPC on that cell
-            int n = s.W * s.H, cnt = 0;
-            if (_ocKeys.Length < n) { _ocKeys = new float[n]; _ocIdx = new int[n]; }
-            for (int i = 0; i < n; i++)
+            if (!fresh && _outMemo.TryGetValue(key, out m) && m.S == s && now < m.Until && (m.Exit < 0 || (m.Exit != from && !float.IsNaN(s.FloorY[m.Exit])))) { if (owner != null) _pickWait.Remove(id); return m.Exit; }
+            if (PickInline)
             {
-                float d = mine.Dist[i];
-                if (float.IsInfinity(d) || !BigArea(s, i)) continue;
-                Vector3 c = CellCenter(s, i % s.W, i / s.W, 0f);
-                _ocKeys[cnt] = d + new Vector2(goal.x - c.x, goal.z - c.z).magnitude; _ocIdx[cnt] = i; cnt++;
+                var ij = new PickJob { S = s, From = from, Comp = comp, GKey = gkey, Goal = goal, MemoKey = key, Memo = !fresh, Fresh = fresh, Who = owner };
+                while (!PickRun(ij, now, double.MaxValue)) { }
+                return ij.Exit;
             }
-            Array.Sort(_ocKeys, _ocIdx, 0, cnt);
-            int exit = -1, tested = 0;
-            for (int k = 0; k < cnt && tested < MaxOutTests; k++)
+            long jk = ((long)rid << 40) ^ ((long)(from & 0xFFFFF) << 20) ^ (long)(gkey & 0xFFFFF);
+            PickDone dn; PickJob j;
+            // the job this NPC already waits for (asked from the cell it stood on then): its answer, or keep waiting - one job per NPC
+            long wk;
+            if (owner != null && _pickWait.TryGetValue(id, out wk))
             {
-                tested++;
-                if (_ocIdx[k] == from) continue;          // its own line was just found blocked
-                if (OutClear(s, _ocIdx[k], goal)) { exit = _ocIdx[k]; break; }
+                if (_pickDone.TryGetValue(wk, out dn) && dn.S == s && dn.GKey == gkey && now < dn.Until) { _pickWait.Remove(id); return dn.Exit; }
+                if (_pickByKey.TryGetValue(wk, out j) && j.S == s && j.GKey == gkey) { if (!fresh) j.Memo = true; else j.Fresh = true; return Pending; }
+                _pickWait.Remove(id);
             }
-            if (!fresh)
+            if (_pickDone.TryGetValue(jk, out dn) && dn.S == s && now < dn.Until) return dn.Exit;     // another NPC on this cell asked a moment ago
+            if (!_pickByKey.TryGetValue(jk, out j) && !fresh)
+            {
+                // the area's memo is being worked out from another NPC's cell (as the direct pick: the first one asking decides for the area)
+                if (_pickRun != null && _pickRun.Memo && _pickRun.MemoKey == key && _pickRun.S == s) j = _pickRun;
+                else foreach (var q in _pickQueue) if (q.Memo && q.MemoKey == key && q.S == s) { j = q; break; }
+            }
+            if (j == null)
+            {
+                if (_pickQueue.Count >= 32) return Pending;       // a flood: the old way meanwhile, asked again next think
+                j = new PickJob { S = s, From = from, Comp = comp, GKey = gkey, Goal = goal, Key = jk, MemoKey = key, Who = owner };
+                _pickQueue.Add(j); _pickByKey[jk] = j;
+            }
+            if (!fresh) j.Memo = true; else j.Fresh = true;
+            if (owner != null) { if (_pickWait.Count > 256) _pickWait.Clear(); _pickWait[id] = j.Key; }
+            return Pending;
+        }
+
+        // Nav.Tick: the running pick, PickBudgetMs a frame
+        private static void PickStep()
+        {
+            if (_pickRun == null && _pickQueue.Count == 0) return;
+            float now = Time.time;
+            _pickSw.Reset(); _pickSw.Start();
+            while (_pickSw.Elapsed.TotalMilliseconds < PickBudgetMs)
+            {
+                if (_pickRun == null)
+                {
+                    if (_pickQueue.Count == 0) break;
+                    _pickRun = _pickQueue[0]; _pickQueue.RemoveAt(0);
+                    var q = _pickRun; OutMemo m;
+                    // only the area memo was wanted and another job made it meanwhile: nothing to do
+                    if (!q.Fresh && _outMemo.TryGetValue(q.MemoKey, out m) && m.S == q.S && now < m.Until) { _pickByKey.Remove(q.Key); _pickRun = null; continue; }
+                }
+                var j = _pickRun;
+                if (j.S.Root == null || !j.S.Baked || j.S.FloorY == null) { if (j.F != null) j.F.Pin = false; _pickByKey.Remove(j.Key); _pickRun = null; continue; }
+                double left = PickBudgetMs - _pickSw.Elapsed.TotalMilliseconds;
+                double t0 = _pickSw.Elapsed.TotalMilliseconds;
+                bool done = PickRun(j, now, left);
+                j.Ms += _pickSw.Elapsed.TotalMilliseconds - t0;
+                if (!done) { j.Frames++; break; }
+                j.Frames++;
+                _pickByKey.Remove(j.Key); _pickRun = null;
+                if (_pickDone.Count > 64) { _expired.Clear(); foreach (var kv in _pickDone) if (now >= kv.Value.Until) _expired.Add(kv.Key); foreach (var k in _expired) _pickDone.Remove(k); if (_pickDone.Count > 64) _pickDone.Clear(); }
+                _pickDone[j.Key] = new PickDone { S = j.S, Exit = j.Exit, GKey = j.GKey, Until = now + 5f };
+            }
+            _pickSw.Stop();
+        }
+
+        // one slice of a pick (budget in ms; double.MaxValue = to the end). True when done (j.Exit set, memo stored, logged).
+        private static bool PickRun(PickJob j, float now, double budget)
+        {
+            var s = j.S; int n = s.W * s.H;
+            var sw = _pickSw; bool timed = budget < double.MaxValue; double start = timed ? sw.Elapsed.TotalMilliseconds : 0d;
+            Stopwatch own = null;
+            if (!timed) own = Stopwatch.StartNew();
+            while (true)
+            {
+                if (timed && sw.Elapsed.TotalMilliseconds - start >= budget) return false;
+                if (j.Stage == 0)
+                {
+                    // (WW perf) the whole field from the NPC's cell, shared with ExitCell and every NPC on that cell (cache key space 3);
+                    // fetched settled at its own cell only, then expanded here a slice at a time - pinned meanwhile
+                    j.F = ExitField(s, j.From, now, 3, j.From); j.F.Pin = true;
+                    if (_ocKeys.Length < n) { _ocKeys = new float[n]; _ocIdx = new int[n]; }
+                    j.Stage = 1; continue;
+                }
+                if (j.Stage <= 2 && (j.F == null || j.F.Dist == null)) { j.Stage = 0; j.Scan = 0; j.Cnt = 0; continue; }    // evicted after all (scene): from the start
+                if (j.Stage == 1)
+                {
+                    if (ExpandCore(s, j.F, -1, timed ? 512 : int.MaxValue)) { j.Stage = 2; j.Scan = 0; j.Cnt = 0; }
+                    continue;
+                }
+                if (j.Stage == 2)
+                {
+                    float[] dist = j.F.Dist; Vector3 goal = j.Goal;
+                    int end = timed ? Math.Min(n, j.Scan + 4096) : n, cnt = j.Cnt;
+                    for (int i = j.Scan; i < end; i++)
+                    {
+                        float d = dist[i];
+                        if (float.IsInfinity(d) || !BigArea(s, i)) continue;
+                        Vector3 c = CellCenter(s, i % s.W, i / s.W, 0f);
+                        _ocKeys[cnt] = d + new Vector2(goal.x - c.x, goal.z - c.z).magnitude; _ocIdx[cnt] = i; cnt++;
+                    }
+                    j.Cnt = cnt; j.Scan = end;
+                    if (end >= n) { j.F.Pin = false; j.Total = j.Cnt; j.Scan = j.Cnt / 2; j.Stage = 3; }     // the distances are read: the field is the cache's again
+                    continue;
+                }
+                if (j.Stage == 3)
+                {
+                    // a min-heap over (cost, cell), built bottom-up (sift-down from the middle), a slice at a time
+                    int stop = timed ? Math.Max(-1, j.Scan - 1024) : -1;
+                    for (int i = j.Scan; i > stop; i--) SiftDown(i, j.Cnt);
+                    j.Scan = stop;
+                    if (stop < 0) { j.Stage = 4; j.Tested = 0; j.Exit = -1; }
+                    continue;
+                }
+                // stage 4: cheapest first, the first cell (not the NPC's own) with a clear line out; at most MaxOutTests
+                int tests = 0;
+                while (j.Cnt > 0 && j.Tested < MaxOutTests)
+                {
+                    int ci = _ocIdx[0]; float ck = _ocKeys[0];
+                    j.Cnt--; _ocIdx[0] = _ocIdx[j.Cnt]; _ocKeys[0] = _ocKeys[j.Cnt]; SiftDown(0, j.Cnt);
+                    j.Tested++; j.LastKey = ck;
+                    if (ci == j.From) continue;          // its own line was just found blocked
+                    if (OutClear(s, ci, j.Goal)) { j.Exit = ci; j.Cnt = 0; break; }
+                    if (timed && (++tests & 7) == 0 && sw.Elapsed.TotalMilliseconds - start >= budget) return false;
+                }
+                if (j.Cnt > 0 && j.Tested < MaxOutTests && j.Exit < 0) return false;
+                break;
+            }
+            if (j.Memo)
             {
                 if (_outMemo.Count > 64) _outMemo.Clear();
-                _outMemo[key] = new OutMemo { S = s, Exit = exit, Until = now + 5f };
+                _outMemo[j.MemoKey] = new OutMemo { S = s, Exit = j.Exit, Until = now + 5f };
             }
             if (LogOn)
-                NpcModule.Log.LogInfo("Nav: " + (owner != null ? owner.name : "?") + " way out of " + s.Name + " toward " + goal.x.ToString("0") + "," + goal.z.ToString("0") + ": "
-                    + (exit < 0 ? "no cell with a clear line out (old routing)" : "exit cell " + (exit % s.W) + "," + (exit / s.W) + ", path + line " + _ocKeys[tested - 1].ToString("0") + " m")
-                    + " (" + tested + "/" + cnt + " cells tested, " + sw.Elapsed.TotalMilliseconds.ToString("0.0") + " ms" + (fresh ? ", from here" : "") + ")");
-            return exit;
+            {
+                double ms = timed ? j.Ms + (sw.Elapsed.TotalMilliseconds - start) : own.Elapsed.TotalMilliseconds;
+                NpcModule.Log.LogInfo("Nav: " + (j.Who != null ? j.Who.name : "?") + " way out of " + s.Name + " toward " + j.Goal.x.ToString("0") + "," + j.Goal.z.ToString("0") + ": "
+                    + (j.Exit < 0 ? "no cell with a clear line out (old routing)" : "exit cell " + (j.Exit % s.W) + "," + (j.Exit / s.W) + ", path + line " + j.LastKey.ToString("0") + " m")
+                    + " (" + j.Tested + "/" + j.Total + " cells tested, " + ms.ToString("0.0") + " ms" + (timed ? " over " + (j.Frames + 1) + " frame(s)" : "") + (j.Fresh && !j.Memo ? ", from here" : "") + ")");
+            }
+            return true;
+        }
+
+        // the candidate heap: ordered by cost, equal costs by cell index
+        private static bool Less(int a, int b) { float ka = _ocKeys[a], kb = _ocKeys[b]; return ka < kb || (ka == kb && _ocIdx[a] < _ocIdx[b]); }
+        private static void SiftDown(int i, int cnt)
+        {
+            while (true)
+            {
+                int l = 2 * i + 1; if (l >= cnt) return;
+                int r = l + 1, m = r < cnt && Less(r, l) ? r : l;
+                if (!Less(m, i)) return;
+                float tk = _ocKeys[i]; _ocKeys[i] = _ocKeys[m]; _ocKeys[m] = tk;
+                int ti = _ocIdx[i]; _ocIdx[i] = _ocIdx[m]; _ocIdx[m] = ti;
+                i = m;
+            }
         }
 
         // down the field up to 16 cells: the farthest cell still in grid sight (next to an obstacle: no farther than the first such cell)
@@ -1261,6 +1524,7 @@ namespace WildWasteland.Modules.NPC
         private static int Downhill(Structure s, Field f, int i)
         {
             int x = i % s.W, z = i / s.W; float best = f.Dist[i]; int bi = -1;
+            int m = MaskOk(s) ? s.Mv[i] : -1;
             for (int dz = -1; dz <= 1; dz++)
                 for (int dx = -1; dx <= 1; dx++)
                 {
@@ -1268,8 +1532,12 @@ namespace WildWasteland.Modules.NPC
                     int cx = x + dx, cz = z + dz;
                     if (cx < 0 || cz < 0 || cx >= s.W || cz >= s.H) continue;
                     int j = cz * s.W + cx;
-                    if (!Step(s, i, j)) continue;
-                    if (dx != 0 && dz != 0 && (!Step(s, i, z * s.W + cx) || !Step(s, i, cz * s.W + x))) continue;
+                    if (m >= 0) { if ((m & (1 << _bitOf[(dz + 1) * 3 + dx + 1])) == 0) continue; }
+                    else
+                    {
+                        if (!Step(s, i, j)) continue;
+                        if (dx != 0 && dz != 0 && (!Step(s, i, z * s.W + cx) || !Step(s, i, cz * s.W + x))) continue;
+                    }
                     if (f.Dist[j] < best) { best = f.Dist[j]; bi = j; }
                 }
             return bi;
@@ -1281,14 +1549,15 @@ namespace WildWasteland.Modules.NPC
             int x0 = a % s.W, z0 = a / s.W, x1 = b % s.W, z1 = b / s.W;
             int dx = Math.Abs(x1 - x0), dz = Math.Abs(z1 - z0), sx = x0 < x1 ? 1 : -1, sz = z0 < z1 ? 1 : -1, err = dx - dz;
             int prev = a;
+            byte[] mv = MaskOk(s) ? s.Mv : null;
             while (true)
             {
                 if (x0 == x1 && z0 == z1) return true;
-                int e2 = 2 * err;
+                int e2 = 2 * err, ox = x0, oz = z0;
                 if (e2 > -dz) { err -= dz; x0 += sx; }
                 if (e2 < dx) { err += dx; z0 += sz; }
                 int i = z0 * s.W + x0;
-                if (!Move(s, prev, i)) return false;     // diagonal steps never cut a corner (a pinhole in a one-cell wall is no way through)
+                if (mv != null ? (mv[prev] & (1 << _bitOf[(z0 - oz + 1) * 3 + x0 - ox + 1])) == 0 : !Move(s, prev, i)) return false;     // diagonal steps never cut a corner (a pinhole in a one-cell wall is no way through)
                 prev = i;
             }
         }
@@ -1305,13 +1574,7 @@ namespace WildWasteland.Modules.NPC
             Field f;
             if (s.Fields.TryGetValue(key, out f) && now - f.Made < life && (!inside || f.GoalCell == goalCell || Settle(s, f, goalCell) <= s.Cell * 2.9f)) { Expand(s, f, until); return f; }
             if (f != null) { Return(f); s.Fields.Remove(key); }
-            if (s.Fields.Count >= 16)
-            {
-                _expired.Clear();
-                foreach (var kv in s.Fields) if (now - kv.Value.Made >= life) _expired.Add(kv.Key);
-                foreach (var k in _expired) { Return(s.Fields[k]); s.Fields.Remove(k); }
-                if (s.Fields.Count >= 32) { foreach (var kv in s.Fields) Return(kv.Value); s.Fields.Clear(); }
-            }
+            MakeRoom(s, now, life);
             f = Build(s, goal, inside, goalCell, until);
             s.Fields[key] = f;
             return f;
@@ -1326,7 +1589,7 @@ namespace WildWasteland.Modules.NPC
             int n = s.W * s.H;
             var dist = Rent(n);
             for (int i = 0; i < n; i++) dist[i] = float.PositiveInfinity;
-            var heap = _heaps.Count > 0 ? _heaps.Pop() : new Heap(Math.Max(64, n / 4));    // a large map's heap is ~0.7 MB: pooled like the arrays
+            var heap = _heaps.Count > 0 ? _heaps.Pop() : new Heap(Math.Max(64, n / 2));    // a large map's heap is ~1.4 MB: pooled like the arrays (n/2: a full build of a big area never resizes)
             heap.Clear();
             if (inside) { dist[goalCell] = 0f; heap.Push(goalCell, 0f); }
             else
@@ -1342,13 +1605,47 @@ namespace WildWasteland.Modules.NPC
         // resumes the field's Dijkstra until cell until is settled (its distance final: Dist <= Settled) or the area is exhausted (until < 0:
         // the whole field, for the readers that scan every cell). The pops continue exactly where they stopped, so every settled distance
         // equals the full build's; Downhill only steps to cells with a smaller distance than a settled one, which are settled too.
-        private static void Expand(Structure s, Field f, int until)
+        private static void Expand(Structure s, Field f, int until) { ExpandCore(s, f, until, int.MaxValue); }
+
+        // (WW perf) the same, at most maxPops pops (the sliced exit pick): stops with Settled = the last popped key (every cell at or below
+        // it is final, exactly as when it stops at until). True = the field is complete.
+        private static bool ExpandCore(Structure s, Field f, int until, int maxPops)
         {
             var heap = f.H;
-            if (heap == null || (until >= 0 && f.Dist[until] <= f.Settled)) return;
+            if (heap == null) return true;
+            if (until >= 0 && f.Dist[until] <= f.Settled) return false;
             float[] dist = f.Dist;
             float c1 = s.Cell, c2 = s.Cell * 1.41421356f;
             int i0; float d;
+            if (MaskOk(s))
+            {
+                // (N2) the same relaxation from the move masks, neighbours in the same order (so the same pushes, pops and partial states)
+                byte[] mv = s.Mv, hp = s.Hop; bool[] near = s.Near; int W = s.W;
+                _dOff[0] = -W - 1; _dOff[1] = -W; _dOff[2] = -W + 1; _dOff[3] = -1; _dOff[4] = 1; _dOff[5] = W - 1; _dOff[6] = W; _dOff[7] = W + 1;
+                while (heap.Pop(out i0, out d))
+                {
+                    if (d > dist[i0]) continue;
+                    int m = mv[i0];
+                    if (m != 0)
+                    {
+                        int h = hp[i0];
+                        for (int b = 0; b < 8; b++)
+                        {
+                            if ((m & (1 << b)) == 0) continue;
+                            int j = i0 + _dOff[b];
+                            float nd = d + (_dDiag[b] ? c2 : c1);
+                            if ((h & (1 << b)) != 0) nd += HopCost;
+                            if (near != null && near[j]) nd += NearCost;
+                            if (nd < dist[j]) { dist[j] = nd; heap.Push(j, nd); }
+                        }
+                    }
+                    if (i0 == until) { f.Settled = d; return false; }
+                    if (--maxPops <= 0) { f.Settled = d; if (heap.Count > 0) return false; break; }
+                }
+                f.Settled = float.PositiveInfinity; f.H = null;
+                if (_heaps.Count < PoolCap) _heaps.Push(heap);
+                return true;
+            }
             while (heap.Pop(out i0, out d))
             {
                 if (d > dist[i0]) continue;
@@ -1367,10 +1664,12 @@ namespace WildWasteland.Modules.NPC
                         if (s.Near != null && s.Near[j]) nd += NearCost;
                         if (nd < dist[j]) { dist[j] = nd; heap.Push(j, nd); }
                     }
-                if (i0 == until) { f.Settled = d; return; }
+                if (i0 == until) { f.Settled = d; return false; }
+                if (--maxPops <= 0) { f.Settled = d; if (heap.Count > 0) return false; break; }
             }
             f.Settled = float.PositiveInfinity; f.H = null;
-            if (_heaps.Count < 8) _heaps.Push(heap);
+            if (_heaps.Count < PoolCap) _heaps.Push(heap);
+            return true;
         }
 
         private static void Seed(Structure s, int x, int z, Vector3 goal, float[] dist, Heap heap)
@@ -1387,6 +1686,7 @@ namespace WildWasteland.Modules.NPC
             private int[] _i; private float[] _k; private int _n;
             public Heap(int cap) { _i = new int[cap]; _k = new float[cap]; }
             public void Clear() { _n = 0; }
+            public int Count { get { return _n; } }
             public void Push(int i, float k)
             {
                 if (_n == _i.Length) { Array.Resize(ref _i, _n * 2); Array.Resize(ref _k, _n * 2); }
@@ -1424,7 +1724,6 @@ namespace WildWasteland.Modules.NPC
 
         // (1.1.0) a cover spot for an NPC at pos against a target at target: the nearest walkable cell of its own area on its map, 2 m or
         // more away, at least 4 m from the target, whose line to the target's chest is blocked (walls, rock, a car). Up to 80 lines.
-        private static readonly List<int> _coverCand = new List<int>();
         private const int CoverBlockers = (1 << 0) | (1 << 8) | (1 << 9) | (1 << 11) | (1 << 14);
         internal static bool CoverSpot(Vector3 pos, Vector3 target, float range, out Vector3 spot)
         {
@@ -1434,21 +1733,18 @@ namespace WildWasteland.Modules.NPC
             int comp = s.Comp[from];
             int x0 = from % s.W, z0 = from / s.W, r = Mathf.Clamp(Mathf.CeilToInt(range / s.Cell), 2, 80);
             float minD2 = (2f / s.Cell) * (2f / s.Cell);
-            _coverCand.Clear();
-            for (int dz = -r; dz <= r; dz++)
-                for (int dx = -r; dx <= r; dx++)
-                {
-                    int cx = x0 + dx, cz = z0 + dz;
-                    if (cx < 0 || cz < 0 || cx >= s.W || cz >= s.H) continue;
-                    int i = cz * s.W + cx;
-                    if (float.IsNaN(s.FloorY[i]) || s.Comp[i] != comp || dx * dx + dz * dz < minD2) continue;
-                    _coverCand.Add(i);
-                }
-            _coverCand.Sort((a, b) => Dist2(s, a, x0, z0).CompareTo(Dist2(s, b, x0, z0)));
+            // (WW perf) nearest first from the precomputed offset table (was: up to 161 x 161 cells collected and sorted with a capturing lambda)
+            Offsets();
             Vector3 chest = target + Vector3.up * 1f;
-            int tested = 0;
-            foreach (int i in _coverCand)
+            int tested = 0; long r2 = 2L * r * r;
+            for (int k = 0; k < _offD2.Length && _offD2[k] <= r2; k++)
             {
+                int dx = _offDx[k], dz = _offDz[k];
+                if (dx < -r || dx > r || dz < -r || dz > r) continue;
+                int cx = x0 + dx, cz = z0 + dz;
+                if (cx < 0 || cz < 0 || cx >= s.W || cz >= s.H) continue;
+                int i = cz * s.W + cx;
+                if (float.IsNaN(s.FloorY[i]) || s.Comp[i] != comp || dx * dx + dz * dz < minD2) continue;
                 Vector3 c = CellCenter(s, i % s.W, i / s.W, s.FloorY[i]);
                 if ((c - target).sqrMagnitude < 16f) continue;
                 if (++tested > 80) break;
@@ -1769,14 +2065,19 @@ namespace WildWasteland.Modules.NPC
                 var b = s.Box; b.center += d; s.Box = b;
                 s.RefY += d.y;
                 if (s.FloorY != null && d.y != 0f) for (int i = 0; i < s.FloorY.Length; i++) s.FloorY[i] += d.y;      // NaN stays NaN
-                foreach (var kv in s.Fields) Return(kv.Value);
-                s.Fields.Clear();
+                // (WW perf) only the fields seeded from a world point go (outside goals: ring cells weighted by the straight line to the goal);
+                // fields seeded at a cell (inside goals, exit cells, NPC cells - keyed and computed in grid space) stay valid
+                _expired.Clear();
+                foreach (var kv in s.Fields) if (!kv.Value.GoalInside) _expired.Add(kv.Key);
+                foreach (var k in _expired) { Return(s.Fields[k]); s.Fields.Remove(k); }
             }
-            foreach (var kv in _relaxedFields) Return(kv.Value);
-            _relaxedFields.Clear(); _outPlans.Clear(); _outMemo.Clear(); _exits.Clear(); _debug.Clear();
+            // relaxed fields are seeded at an exit cell (grid space): kept too
+            PickReset();     // queued / running exit picks are for world-space goals (8 m buckets): dropped, asked again on the next think
+            _outPlans.Clear(); _outMemo.Clear(); _exits.Clear(); _debug.Clear();
         }
 
         internal static int StructureCount { get { return _structures.Count; } }
+        internal static int MaskedCount { get { int b = 0; foreach (var s in _structures) if (s.Mv != null) b++; return b; } }
         internal static int BakedCount { get { int b = 0; foreach (var s in _structures) if (s.Baked) b++; return b; } }
         internal static string BakingText { get { var s = _baking; return s == null ? "-" : s.Name + " phase " + s.Phase + ", " + (100 * s.Next / Math.Max(1, s.W * s.H)) + " % of " + (s.W * s.H) + " cells, " + s.BakeMs.ToString("0") + " ms / " + s.BakeFrames + " frames"; } }
         internal static float MsPerCell { get { return _msPerCell; } }

@@ -87,7 +87,8 @@ namespace WildWasteland.Modules.Patrols
             Expired.Clear();foreach(var pair in Candidates)if(pair.Key==null||pair.Value.Value<=0f)Expired.Add(pair.Key);
             foreach(var expired in Expired)Candidates.Remove(expired);
             if(Sites.Count==0)return;
-            var ids=new List<string>(Sites.Keys);string id=ids[_cursor++%ids.Count];
+            // Perf: the cursor walks the keys in place (was a List copy every second)
+            int pick=_cursor++%Sites.Count;string id=null;foreach(var key in Sites.Keys){if(pick--==0){id=key;break;}}
             if(!TrafficLocations.Known.TryGetValue(id,out var camp)||camp.cleared||!Loaded(id))return;
             foreach(var pair in Candidates)
             {

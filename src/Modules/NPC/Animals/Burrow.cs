@@ -36,6 +36,17 @@ namespace WildWasteland.Modules.NPC
         private static GameObject _effect; private static AudioClip _clip; private static float _nextFind;
         private static string[] _prefabs, _hunters; private static string _prefabsSrc, _huntersSrc;
         private static readonly Dictionary<TerrainData, bool[]> _sandLayers = new Dictionary<TerrainData, bool[]>();
+        // (WW perf) the Terrain of a TerrainCollider (was GetComponent per check) and the sand verdict per alphamap texel (was a new
+        // float[1,1,n] from GetAlphamaps per check); a terrain's layers are painted by MapMagic when the tile is made, never in play
+        private static readonly Dictionary<int, Terrain> _terrainOf = new Dictionary<int, Terrain>();
+        private sealed class Texels { public Vector3 At; public readonly Dictionary<int, bool> Sand = new Dictionary<int, bool>(); }
+        private static readonly Dictionary<int, Texels> _sandAt = new Dictionary<int, Texels>();   // per TerrainData; dropped when its terrain moved (a reused tile)
+        // (WW perf) the sand puffs: finished ones are deactivated and reused (was Instantiate + Destroy per puff)
+        private static readonly List<GameObject> _fxFree = new List<GameObject>();
+        private static readonly List<GameObject> _fxLive = new List<GameObject>();
+        private static readonly List<float> _fxUntil = new List<float>();
+        private static readonly List<ParticleSystem> _psBuf = new List<ParticleSystem>();
+        private static readonly List<PlayMakerFSM> _fsmBuf = new List<PlayMakerFSM>();
         private static readonly Collider[] _overlap = new Collider[16];
         private const int GroundMask = (1 << 0) | (1 << 8) | (1 << 9) | (1 << 11) | (1 << 14) | (1 << 16);           // what can be stood on
         private const int RoomMask = (1 << 0) | (1 << 6) | (1 << 8) | (1 << 9) | (1 << 10) | (1 << 11) | (1 << 14) | (1 << 16);   // + Player, Actor
@@ -44,7 +55,7 @@ namespace WildWasteland.Modules.NPC
         internal static int Hidden;
 
         // (WW perf) _effect is a prefab asset, not a scene object: it survives scene loads (unloaded -> Unity-null -> found again), no new FSM scan per scene
-        internal static void OnSceneLoaded() { _list.Clear(); if (_effect == null) { _effect = null; _clip = null; } _nextFind = 0f; _sandLayers.Clear(); Hidden = 0; }
+        internal static void OnSceneLoaded() { _list.Clear(); if (_effect == null) { _effect = null; _clip = null; } _nextFind = 0f; _sandLayers.Clear(); _terrainOf.Clear(); _sandAt.Clear(); _fxFree.Clear(); _fxLive.Clear(); _fxUntil.Clear(); Hidden = 0; }
 
         // (WW) module shutdown: a hunter under the ground comes back up where it dived (colliders on, not kinematic), every body is raised
         // to its rig's own position, the brain's hold is released
@@ -71,6 +82,9 @@ namespace WildWasteland.Modules.NPC
                 catch (Exception e) { NpcModule.Warn("Burrow shutdown: " + e.Message); }
             }
             _list.Clear(); Hidden = 0;
+            foreach (var fx in _fxLive) if (fx != null) UnityEngine.Object.Destroy(fx);
+            foreach (var fx in _fxFree) if (fx != null) UnityEngine.Object.Destroy(fx);
+            _fxLive.Clear(); _fxUntil.Clear(); _fxFree.Clear(); _terrainOf.Clear(); _sandAt.Clear();
         }
 
         // (WW) floating origin: the dive spot and the destination are scene space
@@ -126,6 +140,7 @@ namespace WildWasteland.Modules.NPC
 
         internal static void Tick()
         {
+            if (_fxLive.Count > 0) FxRecycle(Time.time);
             if (_list.Count == 0) { Hidden = 0; return; }
             float now = Time.time, dt = Time.deltaTime;
             bool on = NpcModule.BurrowEnabled.Value && Senses.On;
@@ -403,15 +418,25 @@ namespace WildWasteland.Modules.NPC
             try
             {
                 float s = Mathf.Clamp(b.Hunter ? NpcModule.HuntFxScale.Value : NpcModule.BurrowFxScale.Value, 0.05f, 1f);
-                var fx = UnityEngine.Object.Instantiate(_effect, at, Quaternion.identity);
-                foreach (var f in fx.GetComponentsInChildren<PlayMakerFSM>(true)) f.enabled = false;     // played by hand, at our scale and volume
+                GameObject fx = null;
+                while (_fxFree.Count > 0 && fx == null) { fx = _fxFree[_fxFree.Count - 1]; _fxFree.RemoveAt(_fxFree.Count - 1); }
+                if (fx == null)
+                {
+                    fx = UnityEngine.Object.Instantiate(_effect, at, Quaternion.identity);
+                    fx.GetComponentsInChildren(true, _fsmBuf);
+                    foreach (var f in _fsmBuf) f.enabled = false;     // played by hand, at our scale and volume
+                    _fsmBuf.Clear();
+                }
+                else fx.transform.SetPositionAndRotation(at, Quaternion.identity);
                 fx.SetActive(true);
                 fx.transform.localScale = Vector3.one * s;
-                foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+                fx.GetComponentsInChildren(true, _psBuf);
+                foreach (var ps in _psBuf)
                 {
                     var m = ps.main; m.scalingMode = ParticleSystemScalingMode.Hierarchy;
                     ps.Play(true);
                 }
+                _psBuf.Clear();
                 var src = fx.GetComponent<AudioSource>() ?? fx.GetComponentInChildren<AudioSource>(true);
                 float life = 3f;
                 if (src != null)
@@ -423,9 +448,23 @@ namespace WildWasteland.Modules.NPC
                     src.loop = false; src.dopplerLevel = 0f;
                     if (src.clip != null) { src.Play(); life = Mathf.Max(life, src.clip.length / src.pitch + 0.5f); }
                 }
-                UnityEngine.Object.Destroy(fx, life);
+                _fxLive.Add(fx); _fxUntil.Add(Time.time + life);
             }
             catch (Exception e) { NpcModule.Warn("Burrow: effect: " + e.Message); }
+        }
+
+        // puffs whose time is up: off, and back to the free list (at most 6 kept; more are destroyed as before)
+        private static void FxRecycle(float now)
+        {
+            for (int i = _fxLive.Count - 1; i >= 0; i--)
+            {
+                if (now < _fxUntil[i] && _fxLive[i] != null) continue;
+                var fx = _fxLive[i];
+                _fxLive.RemoveAt(i); _fxUntil.RemoveAt(i);
+                if (fx == null) continue;
+                if (_fxFree.Count < 6) { fx.SetActive(false); _fxFree.Add(fx); }
+                else UnityEngine.Object.Destroy(fx);
+            }
         }
 
         // ---------- sand ----------
@@ -442,7 +481,8 @@ namespace WildWasteland.Modules.NPC
                 var tc = h.collider as TerrainCollider;
                 if (tc == null) return false;                       // standing on any other object (rock, floor, road mesh, car, wreck): not sand
                 if (!NpcModule.BurrowUseLayers.Value) return true;     // the open ground itself (terrain) is sand
-                var terrain = h.collider.GetComponent<Terrain>();
+                Terrain terrain; int tid = tc.GetInstanceID();
+                if (!_terrainOf.TryGetValue(tid, out terrain) || terrain == null) { terrain = h.collider.GetComponent<Terrain>(); if (_terrainOf.Count > 256) _terrainOf.Clear(); _terrainOf[tid] = terrain; }
                 if (terrain == null || terrain.terrainData == null) return NpcModule.BurrowTerrainIsSand.Value;
                 var d = terrain.terrainData;
                 bool[] sand;
@@ -451,10 +491,17 @@ namespace WildWasteland.Modules.NPC
                 Vector3 lp = h.point - terrain.transform.position;
                 int ax = Mathf.Clamp((int)(lp.x / d.size.x * d.alphamapWidth), 0, d.alphamapWidth - 1);
                 int az = Mathf.Clamp((int)(lp.z / d.size.z * d.alphamapHeight), 0, d.alphamapHeight - 1);
+                Texels tx; int did = d.GetInstanceID(), texel = ax * 65536 + az; Vector3 tp = terrain.transform.position;
+                if (!_sandAt.TryGetValue(did, out tx)) { if (_sandAt.Count > 64) _sandAt.Clear(); _sandAt[did] = tx = new Texels { At = tp }; }
+                if (tx.At != tp || tx.Sand.Count > 4096) { tx.Sand.Clear(); tx.At = tp; }
+                bool verdict;
+                if (tx.Sand.TryGetValue(texel, out verdict)) return verdict;
                 float[,,] w = d.GetAlphamaps(ax, az, 1, 1);
                 float total = 0f, s = 0f;
                 for (int i = 0; i < w.GetLength(2) && i < sand.Length; i++) { total += w[0, 0, i]; if (sand[i]) s += w[0, 0, i]; }
-                return total > 0.0001f && s / total >= 0.5f;
+                verdict = total > 0.0001f && s / total >= 0.5f;
+                tx.Sand[texel] = verdict;
+                return verdict;
             }
             catch (Exception e) { NpcModule.Verbose("Burrow: sand check: " + e.Message); return NpcModule.BurrowTerrainIsSand.Value; }
         }

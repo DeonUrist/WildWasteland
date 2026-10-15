@@ -90,10 +90,11 @@ namespace WildWasteland.Modules.Patrols
         }
 
         // [Debug] AiOverlay: one OnGUI for every pilot (an OnGUI on each car would be dispatched per IMGUI event whether or not it draws)
-        // WW: was OnGUI (Gui job)
+        // WW: was OnGUI (Gui job); GuiWanted = its gate (the Gui job's predicate)
+        internal static bool GuiWanted() { return PatrolsModule.AiOverlay.Value && Time.timeScale > 0f; }
         internal void Gui()
         {
-            if (!PatrolsModule.AiOverlay.Value || Time.timeScale <= 0f) return;
+            if (!GuiWanted()) return;
             var all = Pilot.All;
             int shown = 0;
             for (int i = 0; i < all.Count; i++)
@@ -700,15 +701,16 @@ namespace WildWasteland.Modules.Patrols
 
         // The handbrake lever FSM: HandbrakeOn -> (click) over -> Sound -> HandbrakeOff (SetProperty input.Handbrake + lever rotation).
         // Entering "Sound" plays the click and flows into HandbrakeOff by itself; "Sound 2" goes back to HandbrakeOn.
-        internal static void Handbrake(GameObject car, bool on)
+        internal static void Handbrake(GameObject car, bool on) { Handbrake(car, on, FindFsm(car, "handbrake", "Handbrake")); }
+        // f = the car's handbrake/Handbrake FSM, cached by the caller (null = none)
+        internal static void Handbrake(GameObject car, bool on, PlayMakerFSM f)
         {
-            var f = FindFsm(car, "handbrake", "Handbrake");
             if (f == null) { Core.Log.Warn("[Patrols] " + "No handbrake/Handbrake FSM; setting NWH input.Handbrake only"); Nwh.SetHandbrake(car, on ? 1f : 0f); return; }
             string cur = f.Fsm.Initialized ? f.ActiveStateName : "";
             bool isOn = cur == "HandbrakeOn" || cur == "over" || cur == "Sound 2" || cur == "";
-            if (on == isOn) { PatrolsModule.Verbose("Handbrake already " + (on ? "on" : "off") + " (" + cur + ")"); return; }
+            if (on == isOn) { if (Core.Log.Verbose) PatrolsModule.Verbose("Handbrake already " + (on ? "on" : "off") + " (" + cur + ")"); return; }
             f.Fsm.SetState(on ? "Sound 2" : "Sound");
-            PatrolsModule.Verbose("Handbrake " + (on ? "on" : "released") + " (was " + cur + ")");
+            if (Core.Log.Verbose) PatrolsModule.Verbose("Handbrake " + (on ? "on" : "released") + " (was " + cur + ")");
         }
 
         // A ragdoll on the driver seat: the *_Dead prefab's root Rigidbody is made kinematic and parented to the car's sitPos
@@ -849,19 +851,22 @@ namespace WildWasteland.Modules.Patrols
         }
 
         // carCols = the car's colliders, fetched by the caller once for every occupant it checks
-        internal static int IgnoreCollisionsIfChanged(GameObject who, GameObject car, Collider[] carCols)
+        // Perf: the occupant's colliders go to a reused buffer (was a GetComponentsInChildren array per check, 1-2 Hz per occupant)
+        private static readonly List<Collider> _whoCols = new List<Collider>();
+        internal static int IgnoreCollisionsIfChanged(GameObject who, GameObject car, IList<Collider> carCols)
         {
             if (who == null || car == null) return 0;
+            _whoCols.Clear(); who.GetComponentsInChildren(true, _whoCols);
             long sig = 17;
-            foreach (var a in who.GetComponentsInChildren<Collider>(true))
-                if (a != null && a.enabled && a.gameObject.activeInHierarchy) sig = sig * 31 + a.GetInstanceID();
-            foreach (var b in carCols)
-                if (b != null && b.enabled && b.gameObject.activeInHierarchy) sig = sig * 31 + b.GetInstanceID();
+            for (int i = 0; i < _whoCols.Count; i++)
+            { var a = _whoCols[i]; if (a != null && a.enabled && a.gameObject.activeInHierarchy) sig = sig * 31 + a.GetInstanceID(); }
+            for (int i = 0; i < carCols.Count; i++)
+            { var b = carCols[i]; if (b != null && b.enabled && b.gameObject.activeInHierarchy) sig = sig * 31 + b.GetInstanceID(); }
             long old;
-            if (_ignoreSignature.TryGetValue(who, out old) && old == sig) return 0;
+            if (_ignoreSignature.TryGetValue(who, out old) && old == sig) { _whoCols.Clear(); return 0; }
             _ignoreSignature[who] = sig;
-            int n = IgnoreCollisions(who, car, carCols);
-            PatrolsModule.Verbose("Collision ignores re-applied for " + who.name + ": " + n + " pairs");
+            int n = IgnoreCore(who, _whoCols, carCols); _whoCols.Clear();
+            if (Core.Log.Verbose) PatrolsModule.Verbose("Collision ignores re-applied for " + who.name + ": " + n + " pairs");
             return n;
         }
 
@@ -871,15 +876,21 @@ namespace WildWasteland.Modules.Patrols
             return IgnoreCollisions(who, car, car.GetComponentsInChildren<Collider>(true));
         }
 
-        internal static int IgnoreCollisions(GameObject who, GameObject car, Collider[] carCols)
+        internal static int IgnoreCollisions(GameObject who, GameObject car, IList<Collider> carCols)
         {
             if (who == null || car == null) return 0;
+            return IgnoreCore(who, who.GetComponentsInChildren<Collider>(true), carCols);
+        }
+
+        private static int IgnoreCore(GameObject who, IList<Collider> whoCols, IList<Collider> carCols)
+        {
             int n = 0;
-            foreach (var a in who.GetComponentsInChildren<Collider>(true))
+            for (int i = 0; i < whoCols.Count; i++)
             {
+                var a = whoCols[i];
                 if (a == null || !a.enabled || !a.gameObject.activeInHierarchy) continue;
-                foreach (var b in carCols)
-                    if (b != null && b.enabled && b.gameObject.activeInHierarchy && !b.transform.IsChildOf(who.transform)) { Physics.IgnoreCollision(a, b, true); n++; }
+                for (int k = 0; k < carCols.Count; k++)
+                { var b = carCols[k]; if (b != null && b.enabled && b.gameObject.activeInHierarchy && !b.transform.IsChildOf(who.transform)) { Physics.IgnoreCollision(a, b, true); n++; } }
             }
             return n;
         }
@@ -1198,7 +1209,10 @@ namespace WildWasteland.Modules.Patrols
         private static Dictionary<string, GameObject> _exact;
         private static float _nextExactRescan;
 
-        internal static void Invalidate() { _all = null; _roots = null; _byName = null; _nextRescan = 0f; _exact = null; _nextExactRescan = 0f; }
+        internal static void Invalidate() { _all = null; _roots = null; _byName = null; _nextRescan = 0f; _exact = null; _nextExactRescan = 0f; _exactMemo.Clear(); }
+        // Perf: case-insensitive hits (60 s) and misses (30 s) of Exact are memoized; they used to force a FindObjectsOfTypeAll rescan every 5 s
+        private sealed class Memo { public GameObject Hit; public float Until; }
+        private static readonly Dictionary<string, Memo> _exactMemo = new Dictionary<string, Memo>(StringComparer.Ordinal);
 
         // Exported names must resolve exactly: a missing mod must never spawn a similarly named vanilla frame.
         // Runtime factories are shared with the exporter, availability checks and the builder.
@@ -1211,6 +1225,9 @@ namespace WildWasteland.Modules.Patrols
             if (MotorcycleIntegration.IsBody(name)) return MotorcycleIntegration.Template();
             var mod = ModVehicles.Template(name);
             if (mod != null) return mod;
+            Memo memo;
+            if (_exact != null && _exactMemo.TryGetValue(name, out memo) && Time.unscaledTime < memo.Until)
+            { if (ReferenceEquals(memo.Hit, null)) return null; if (memo.Hit != null) return memo.Hit; }
             if (_exact == null || Time.unscaledTime >= _nextExactRescan)
             {
                 // Mesh assets can differ from a spawnable frame only by case (trailer_small / Trailer_Small).
@@ -1225,8 +1242,11 @@ namespace WildWasteland.Modules.Patrols
                 _nextExactRescan = Time.unscaledTime + 5f;
             }
             if (_exact.TryGetValue(name, out hit)) return hit;
-            return _exact.Where(p => p.Value != null && p.Key.Equals(name, StringComparison.OrdinalIgnoreCase))
+            hit = _exact.Where(p => p.Value != null && p.Key.Equals(name, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(p => p.Value.GetComponent<ES3Prefab>() != null).Select(p => p.Value).FirstOrDefault();
+            if (_exactMemo.Count > 512) _exactMemo.Clear();
+            _exactMemo[name] = new Memo { Hit = hit, Until = Time.unscaledTime + (hit != null ? 60f : 30f) };
+            return hit;
         }
 
         internal static GameObject Find(string query, string kind)
@@ -1560,22 +1580,39 @@ namespace WildWasteland.Modules.Patrols
 
         // Takes a car and everything under it (parts, cargo) out of the game's NewGO lists before it is destroyed, so the
         // save does not keep references to it.
+        // Perf: reused buffers, a reference-identity set and one compaction pass per list (was RemoveAt per hit, new set/arrays per call)
+        private sealed class RefEq : IEqualityComparer<GameObject>
+        {
+            public bool Equals(GameObject a, GameObject b) { return ReferenceEquals(a, b); }
+            public int GetHashCode(GameObject o) { return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o); }
+        }
+        private static readonly HashSet<GameObject> _treeSet = new HashSet<GameObject>(new RefEq());
+        private static readonly List<Transform> _treeNodes = new List<Transform>();
+        private static readonly List<PlayMakerArrayListProxy> _proxies = new List<PlayMakerArrayListProxy>();
         internal static void RemoveTree(GameObject root)
         {
             var reg = Registry();
             if (reg == null || root == null) return;
-            var set = new HashSet<GameObject>();
-            foreach (var t in root.GetComponentsInChildren<Transform>(true)) set.Add(t.gameObject);
-            foreach (var p in reg.GetComponents<PlayMakerArrayListProxy>())
+            _treeSet.Clear(); _treeNodes.Clear();
+            root.GetComponentsInChildren(true, _treeNodes);
+            foreach (var t in _treeNodes) _treeSet.Add(t.gameObject);
+            _treeNodes.Clear();
+            _proxies.Clear(); reg.GetComponents(_proxies);
+            foreach (var p in _proxies)
             {
                 var list = p.arrayList;
                 if (list == null) continue;
-                for (int i = list.Count - 1; i >= 0; i--)
+                int w = 0, n = list.Count;
+                for (int i = 0; i < n; i++)
                 {
-                    var go = list[i] as GameObject;
-                    if (go != null && set.Contains(go)) list.RemoveAt(i);
+                    var item = list[i]; var go = item as GameObject;
+                    // the set holds live objects only, so a destroyed entry never matches (as with the old != null test)
+                    if (!ReferenceEquals(go, null) && _treeSet.Contains(go)) continue;
+                    if (w != i) list[w] = item; w++;
                 }
+                if (w < n) list.RemoveRange(w, n - w);
             }
+            _proxies.Clear(); _treeSet.Clear();
         }
 
         // owner = the car the object belongs to when it is not parented under it yet (cargo before it is locked in)
@@ -1605,6 +1642,8 @@ namespace WildWasteland.Modules.Patrols
         {
             public Component Vc;
             public object Input, Engine, Transmission;
+            // Perf: typed NWH.VehiclePhysics2 access (same members as the reflection path; null = fall back to reflection)
+            public NWH.VehiclePhysics2.Input.VehicleInputHandler TInput; public NWH.VehiclePhysics2.Powertrain.EngineComponent TEngine;
             public float Throttle = float.NaN, Steering = float.NaN, Brakes = float.NaN, WrittenAt = -1f;   // last SetInput, to skip identical writes
         }
 
@@ -1629,6 +1668,7 @@ namespace WildWasteland.Modules.Patrols
             var pt = Get(h.Vc, "powertrain");
             h.Engine = Get(pt, "engine");
             h.Transmission = Get(pt, "transmission");
+            h.TInput = h.Input as NWH.VehiclePhysics2.Input.VehicleInputHandler; h.TEngine = h.Engine as NWH.VehiclePhysics2.Powertrain.EngineComponent;
             _handles[id] = h;
             return h;
         }
@@ -1677,7 +1717,7 @@ namespace WildWasteland.Modules.Patrols
         internal static bool EngineRunning(GameObject car)
         {
             bool running; if (Core.Services.VehicleIgnition != null && Core.Services.VehicleIgnition.TryRunning(car, out running)) return running;
-            try { var h = Of(car); var r = h != null ? Get(h.Engine, "IsRunning") : null; return r is bool && (bool)r; }
+            try { var h = Of(car); if (h != null && h.TEngine != null) return h.TEngine.IsRunning; var r = h != null ? Get(h.Engine, "IsRunning") : null; return r is bool && (bool)r; }
             catch (Exception e) { Core.Log.Warn("[Patrols] " + "EngineRunning: " + e.Message); return false; }
         }
 
@@ -1689,6 +1729,7 @@ namespace WildWasteland.Modules.Patrols
                 var h = Of(car);
                 var eng = h != null ? h.Engine : null;
                 if (eng == null) { Core.Log.Warn("[Patrols] " + "No powertrain.engine"); return; }
+                if (h.TEngine != null) { h.TEngine.StartEngine(); return; }
                 var m = eng.GetType().GetMethod("StartEngine", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
                 if (m == null) { Core.Log.Warn("[Patrols] " + "No StartEngine()"); return; }
                 m.Invoke(eng, null);
@@ -1704,6 +1745,7 @@ namespace WildWasteland.Modules.Patrols
                 var h = Of(car);
                 var eng = h != null ? h.Engine : null;
                 if (eng == null) return;
+                if (h.TEngine != null) { h.TEngine.StopEngine(); return; }
                 var m = eng.GetType().GetMethod("StopEngine", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
                 if (m == null) { PatrolsModule.Verbose("No StopEngine()"); return; }
                 m.Invoke(eng, null);
@@ -1718,6 +1760,7 @@ namespace WildWasteland.Modules.Patrols
             {
                 var h = Of(car);
                 var input = h != null ? h.Input : null;
+                if (h != null && h.TInput != null) { bool old = h.TInput.autoSetInput; h.TInput.autoSetInput = on; return old; }
                 var was = Get(input, "autoSetInput");
                 if (!Set(input, "autoSetInput", on)) PatrolsModule.Verbose("no autoSetInput");
                 return was is bool ? (bool)was : false;
@@ -1738,6 +1781,7 @@ namespace WildWasteland.Modules.Patrols
             {
                 var h = Of(car);
                 if (h == null) return;
+                if (h.TInput != null) { h.TInput.ShiftInto = gear; return; }
                 if (!Set(h.Input, "ShiftInto", gear)) Set(h.Input, "shiftInto", gear);
             }
             catch (Exception e) { Core.Log.Warn("[Patrols] " + "ShiftInto: " + e.Message); }
@@ -1774,7 +1818,7 @@ namespace WildWasteland.Modules.Patrols
 
         internal static void SetHandbrake(GameObject car, float value)
         {
-            try { var h = Of(car); if (h == null || !Set(h.Input, "Handbrake", value)) PatrolsModule.Verbose("no input.Handbrake"); }
+            try { var h = Of(car); if (h != null && h.TInput != null) { h.TInput.Handbrake = value; return; } if (h == null || !Set(h.Input, "Handbrake", value)) PatrolsModule.Verbose("no input.Handbrake"); }
             catch (Exception e) { Core.Log.Warn("[Patrols] " + "SetHandbrake: " + e.Message); }
         }
 
@@ -1786,6 +1830,7 @@ namespace WildWasteland.Modules.Patrols
                 if (h == null || h.Input == null) { Core.Log.Warn("[Patrols] " + "No VehicleController.input"); return; }
                 if (h.Throttle == throttle && h.Steering == steering && h.Brakes == brakes && Time.fixedTime - h.WrittenAt < InputRefresh) return;
                 h.Throttle = throttle; h.Steering = steering; h.Brakes = brakes; h.WrittenAt = Time.fixedTime;
+                if (h.TInput != null) { h.TInput.Throttle = throttle; h.TInput.Steering = steering; h.TInput.Brakes = brakes; return; }
                 Set(h.Input, "Throttle", throttle);
                 Set(h.Input, "Steering", steering);
                 Set(h.Input, "Brakes", brakes);

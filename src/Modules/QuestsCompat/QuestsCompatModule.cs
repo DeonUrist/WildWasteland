@@ -32,7 +32,15 @@ namespace WildWasteland.Modules.QuestsCompat
         private static Action<object, PlayMakerFSM> _saveFsm;
         private static Action<object, bool> _hadSaveFsm;
         private static Action<object, string> _saveState;
-        private static bool _dispatch, _tickDispatch, _newWorld;
+        private static bool _dispatch, _tickDispatch, _splitDispatch, _newWorld;
+        private static Action<Vector3> _neutralize;
+        private static Action<object, Vector3> _giverTick;
+        private static Action<object> _syncMarkers, _reputation;
+        private static Func<Transform> _player;
+        private static Func<object, IList> _toasts;
+        private static Func<object, List<string>> _trackerLines;
+        private static Func<object, bool> _showLog;
+        private static Func<object, BepInEx.Configuration.ConfigEntry<bool>> _showTracker;
         private static int _generation;
         private static readonly List<PlayMakerFSM> Items = new List<PlayMakerFSM>(), People = new List<PlayMakerFSM>();
         private static List<PlayMakerFSM> _nextItems = new List<PlayMakerFSM>(), _nextPeople = new List<PlayMakerFSM>();
@@ -55,7 +63,7 @@ namespace WildWasteland.Modules.QuestsCompat
         [MethodImpl(MethodImplOptions.NoInlining)]
         public override void Init()
         {
-            _owner = this; _generation++; _newWorld = false; _dispatch = _tickDispatch = false;
+            _owner = this; _generation++; _newWorld = false; _dispatch = _tickDispatch = _splitDispatch = false;
             ClearScan(); CrewHistory.Clear();
             PluginInfo info;
             if (Chainloader.PluginInfos.TryGetValue("com.example.apocalypter.talk", out info) && !ReferenceEquals(info.Instance, null))
@@ -94,6 +102,23 @@ namespace WildWasteland.Modules.QuestsCompat
                 DeliveryRecovery.Install(this, asm, _quests, _talk);
                 Patch(game, "FindItems", transpiler: "ItemScan");
                 foreach (var name in new[] { "FindPeople", "FindEnemies", "FindBodies", "LiveNames", "FindNpcNames" }) Patch(game, name, transpiler: "PeopleScan");
+                var hire = asm.GetType("ApocalypterQuests.Hire", true);
+                if (!Core.Patches.Patch(this, AccessTools.Method(hire, "NearestByName"), transpiler: AccessTools.Method(typeof(QuestsCompatModule), "PeopleScan")))
+                    Log.Warn("[QuestsCompat] Hire search keeps the full FSM list walk");
+                // Quests' 0.5 s Tick runs these four in one frame; each now has its own randomly phased job (internal timers unchanged).
+                var takeover = asm.GetType("ApocalypterQuests.Takeover", true);
+                _neutralize = (Action<Vector3>)Delegate.CreateDelegate(typeof(Action<Vector3>), AccessTools.Method(takeover, "NeutralizeTick"));
+                var giver = AccessTools.Method(takeover, "GiverTick"); var bookArg = System.Linq.Expressions.Expression.Parameter(typeof(object), "b");
+                var playerArg = System.Linq.Expressions.Expression.Parameter(typeof(Vector3), "p");
+                _giverTick = System.Linq.Expressions.Expression.Lambda<Action<object, Vector3>>(System.Linq.Expressions.Expression.Call(giver,
+                    System.Linq.Expressions.Expression.Convert(bookArg, giver.GetParameters()[0].ParameterType), playerArg), bookArg, playerArg).Compile();
+                _syncMarkers = Binding.Call(type, "SyncMapMarkers"); _reputation = Binding.Call(type, "ReputationTick");
+                _player = (Func<Transform>)Delegate.CreateDelegate(typeof(Func<Transform>), AccessTools.Method(game, "Player"));
+                Patch(takeover, "NeutralizeTick", "SplitOnly"); Patch(takeover, "GiverTick", "SplitOnly");
+                Patch(type, "SyncMapMarkers", "SplitOnly"); Patch(type, "ReputationTick", "SplitOnly");
+                _toasts = Binding.Get<IList>(type, "toasts"); _trackerLines = Binding.Get<List<string>>(type, "trackerLines");
+                _showLog = Binding.Get<bool>(type, "showLog"); _showTracker = Binding.Get<BepInEx.Configuration.ConfigEntry<bool>>(type, "showTracker");
+                QuestsPerf.Install(this, asm, _talk, _talking);
                 QuestFollower.Install(this, asm, _quests);
                 _bridge = Binding.Get<object>(type, "bridge"); _dialogueNpc = Binding.Get<Transform>(asm.GetType("ApocalypterQuests.TalkBridge", true), "Npc");
                 _buttons = Binding.Get<IList>(type, "wantButtons"); _buttonKey = Binding.Get<string>(asm.GetType("ApocalypterQuests.TalkBtn", true), "Key");
@@ -105,8 +130,12 @@ namespace WildWasteland.Modules.QuestsCompat
                 Services.CrewBailedOut += CrewHistory.Bailed;
                 Scheduler.EveryFrame(this, "Quest frame", QuestFrame);
                 Scheduler.EveryFrame(this, "Quest poses", QuestLate, Phase.LateUpdateLast);
-                Scheduler.Gui(this, "Quest windows", QuestGui);
+                Scheduler.Gui(this, "Quest windows", QuestGui, QuestGuiWanted);   // (WW perf) IMGUI off while Quests has nothing to draw
                 Scheduler.Interval(this, "Quest logic", .5f, QuestTick);
+                Scheduler.Interval(this, "Quest camps", .5f, CampTick);
+                Scheduler.Interval(this, "Quest givers", .5f, GiverTick);
+                Scheduler.Interval(this, "Quest map sync", .5f, MapTick);
+                Scheduler.Interval(this, "Quest reputation", .5f, ReputationTick);
                 Scheduler.Sliced(this, "World cache", 500, ScanStep);
                 Scheduler.Interval(this, "Marker providers", .5f, ReconcileMarkers);
                 if (SaveBus.State != null) StateChanged(null, SaveBus.State);
@@ -145,6 +174,7 @@ namespace WildWasteland.Modules.QuestsCompat
             }
         }
         private static bool TickOnly() { return _tickDispatch; }
+        private static bool SplitOnly() { return _splitDispatch || !_tickDispatch; }
         private static bool SkipWatcher() { return false; }
         private static bool KeepDialogueModel() { return false; }
         private static bool TalkCamera(ref Camera __result) { __result = GameRefs.MainCamera; return false; }
@@ -160,13 +190,46 @@ namespace WildWasteland.Modules.QuestsCompat
         private static void TalkLate() { if (_talking(_talk)) { Run(_talkLate, _talk); DialogueSession.Maintain(); } }
         private static void QuestFrame() { if (!_ready(_quests) || _scanReady) Run(_questUpdate, _quests); QuestFollower.Tick(); }
         private static void QuestLate() { Run(_questLate, _quests); QuestFollower.Late(); }
-        private static void QuestGui() { if (!EditorSession.Busy) Run(_questGui, _quests); }
+        private static void QuestGui()
+        {
+            // Quests' OnGUI only draws labels/textures (no controls or input), so the Repaint event is the only one that matters.
+            var e = Event.current; if (EditorSession.Busy || e == null || e.type != EventType.Repaint || !_ready(_quests)) return;
+            if (_toasts(_quests).Count == 0 && !_showLog(_quests) && (!_showTracker(_quests).Value || _trackerLines(_quests).Count == 0)) return;
+            Run(_questGui, _quests);
+        }
+        // QuestGui's skip test without the event check: true while a toast is up (Quests expires them inside its OnGUI), the J window
+        // is open (native when CleanHUD is off) or the tracker has lines. showLog and toasts change in Quests' Update, before this runs.
+        private static bool QuestGuiWanted()
+        {
+            return !EditorSession.Busy && _ready(_quests)
+                && (_toasts(_quests).Count > 0 || _showLog(_quests) || (_showTracker(_quests).Value && _trackerLines(_quests).Count > 0));
+        }
         private static void QuestTick()
         {
             if (!_ready(_quests) || !_scanReady || !GameRefs.InGame) return;
             DeliveryRecovery.Tick(People, _scanRevision);
             _tickDispatch = true; try { _questTick(_quests); } finally { _tickDispatch = false; }
         }
+        private static bool SplitReady() { return _ready(_quests) && _scanReady && GameRefs.InGame; }
+        private static void Split(int which)
+        {
+            if (!SplitReady()) return;
+            var player = _player(); if (player == null) return;
+            _splitDispatch = true;
+            try
+            {
+                if (which == 0) _neutralize(player.position);
+                else if (which == 1) { QuestsPerf.GiverDispatch = true; _giverTick(_book(_quests), player.position); }
+                else if (which == 2) _syncMarkers(_quests);
+                else _reputation(_quests);
+            }
+            catch (Exception e) { Log.Warn("[QuestsCompat] Quests " + (which == 0 ? "NeutralizeTick" : which == 1 ? "GiverTick" : which == 2 ? "MapMarkers" : "ReputationTick") + ": " + e.Message); }
+            finally { _splitDispatch = false; QuestsPerf.GiverDispatch = false; if (which == 1) QuestsPerf.ReleaseObjects(); }
+        }
+        private static void CampTick() { Split(0); }
+        private static void GiverTick() { Split(1); }
+        private static void MapTick() { Split(2); }
+        private static void ReputationTick() { Split(3); }
         private static void StateChanged(string previous, string state)
         {
             if (_quests == null) return;
@@ -190,7 +253,7 @@ namespace WildWasteland.Modules.QuestsCompat
                 SaveBus.AfterSave(() => { if (_quests != null && generation == _generation && slot == SaveBus.Slot) { CrewHistory.Save(slot, crew); _save(_quests); } });
             }
         }
-        private static void ClearScan() { Items.Clear(); People.Clear(); _nextItems.Clear(); _nextPeople.Clear(); _scan = _scanRevision = 0; _scanAt = 0; _scanReady = false; DeliveryRecovery.Clear(); }
+        private static void ClearScan() { Items.Clear(); People.Clear(); _nextItems.Clear(); _nextPeople.Clear(); _scan = _scanRevision = 0; _scanAt = 0; _scanReady = false; DeliveryRecovery.Clear(); QuestsPerf.Clear(); }
         private static bool ScanStep()
         {
             if (_quests == null || !_ready(_quests) || !GameRefs.InPlay || Time.unscaledTime < _scanAt) return false;
@@ -202,11 +265,13 @@ namespace WildWasteland.Modules.QuestsCompat
                 _scanReady = true; _scanRevision++;
                 _nextItems.Clear(); _nextPeople.Clear(); _scan = 0; _scanAt = Time.unscaledTime + .5f; return false;
             }
-            var f = fsms[_scan++];
-            if (f != null)
+            for (int end = Math.Min(fsms.Count, _scan + 32); _scan < end; )
             {
-                if (f.FsmName == "ItemName") _nextItems.Add(f);
-                else if (f.FsmName == "Health" || f.FsmName == "ID") { _nextPeople.Add(f); if (f.FsmName == "Health") CrewHistory.Observe(f.gameObject); }
+                var f = fsms[_scan++];
+                if (f == null) continue;
+                string name = f.FsmName;
+                if (name == "ItemName") _nextItems.Add(f);
+                else if (name == "Health" || name == "ID") { _nextPeople.Add(f); if (name == "Health") CrewHistory.Observe(f.gameObject); }
             }
             return true;
         }
@@ -274,8 +339,8 @@ namespace WildWasteland.Modules.QuestsCompat
             if (_quests != null && _saveFsm != null) { _saveFsm(_quests, GameRefs.SaveLoadGame); _hadSaveFsm(_quests, GameRefs.SaveLoadGame != null); _saveState(_quests, SaveBus.State); }
             if (_talk != null && _talking != null && _talking(_talk)) _talkClose(_talk);
             DialogueSession.Close(true);
-            DeliveryRecovery.Uninstall();
-            _talk = _quests = null; _owner = null; _dispatch = _tickDispatch = false;
+            DeliveryRecovery.Uninstall(); QuestsPerf.Uninstall();
+            _talk = _quests = null; _owner = null; _dispatch = _tickDispatch = _splitDispatch = false;
         }
     }
 }

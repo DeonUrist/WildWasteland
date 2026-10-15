@@ -219,7 +219,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (_loadingScreen != null) { SaveBus.StateChanged -= _loadingScreen.StateChanged; _loadingScreen.Dispose(); _loadingScreen = null; }
             MessageHook.Clear(); Bindings.Clear(); Menu.BlockCancelFrame = -1;
             SceneCache.Clear(); Assets.Dispose(); Menu.DisposeAssets(); GlyphFont.Reset();
-            Api.Compass.Entries.Clear(); Api.Compass.CustomIcons.Clear(); _attach = null;
+            Api.Compass.Entries.Clear(); Api.Compass.CustomIcons.Clear(); Api.Compass.IconRevision++; _attach = null;
         }
         public override IEnumerable<ToolPage> ToolPages()
         {

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 using System.Reflection;
 using BepInEx.Bootstrap;
 using BepInEx.Configuration;
@@ -21,6 +22,18 @@ namespace WildWasteland.Modules.NPC
         private static ConfigEntry<float> runSpeed, biteDamage, leash;
         private static bool warnedBundle;
         private static PropertyInfo knownPlayer;
+        // (WW perf, N12) the private API as compiled delegates (built once in Initialize; a member that cannot be compiled falls back to its
+        // reflection call - the same result): Riding / SyncTarget / Feet ... run several times per frame per companion dog
+        private static Func<object, object> _target, _targetGo, _knownPlayer;
+        private static Func<object, int> _mode;
+        private static Func<object, float> _nextBite, _pawDepth;
+        private static Action<object, float> _setNextBite, _setLunge, _setLastFight, _giveUp, _hurt;
+        private static Func<object, Vector3> _feet;
+        private static Func<object, bool> _alive;
+        private static Action<object, Vector3, float, float> _step;
+        private static Action<object, bool, float> _setMoving;
+        private static Action<object> _unstick, _snarl;
+        private static Func<object, float, bool> _stuck;
 
         // (WW) patched through Core (module patches, removed by Core on shutdown). The whole contract is resolved before any patch; a failed
         // patch turns the bridge off (handlers return at once) instead of UnpatchSelf. [NPC] DogCompanionCompat switches it live.
@@ -64,6 +77,7 @@ namespace WildWasteland.Modules.NPC
                 all &= Core.Patches.Patch(module, step, prefix: Hook(nameof(BeforeStep)));
                 all &= Core.Patches.Patch(module, distraction, prefix: Hook(nameof(BeforeDistraction)));
                 if (!all) throw new InvalidOperationException("a Harmony patch was refused");
+                Compile();
                 _ok = true;
                 NpcModule.DogCompanionCompatEnabled.SettingChanged += OnToggle;
                 NpcModule.Log.LogInfo("Dog Companion compatibility enabled (" + info.Metadata.Version + "): shared canine locomotion/combat and sitting in vehicles.");
@@ -98,6 +112,80 @@ namespace WildWasteland.Modules.NPC
         { return AccessTools.Method(type, name) ?? throw new MissingMethodException(type.FullName, name); }
         private static MethodInfo Hook(string name) { return AccessTools.Method(typeof(DogCompanionCompat), name); }
 
+        // ---------- (WW perf) compiled accessors ----------
+        private static Expression Inst(ParameterExpression o, MemberInfo m, bool isStatic) { return isStatic ? null : Expression.Convert(o, m.DeclaringType); }
+        private static Func<object, T> FieldGet<T>(FieldInfo f)
+        {
+            try
+            {
+                var o = Expression.Parameter(typeof(object), "o");
+                Expression e = Expression.Field(Inst(o, f, f.IsStatic), f);
+                if (e.Type != typeof(T)) e = Expression.Convert(e, typeof(T));
+                return Expression.Lambda<Func<object, T>>(e, o).Compile();
+            }
+            catch (Exception) { return null; }
+        }
+        private static Action<object, float> FieldSetFloat(FieldInfo f)
+        {
+            try
+            {
+                if (f.FieldType != typeof(float) || f.IsInitOnly) return null;
+                var o = Expression.Parameter(typeof(object), "o"); var v = Expression.Parameter(typeof(float), "v");
+                return Expression.Lambda<Action<object, float>>(Expression.Assign(Expression.Field(Inst(o, f, f.IsStatic), f), v), o, v).Compile();
+            }
+            catch (Exception) { return null; }
+        }
+        private static Func<object, T> PropGet<T>(PropertyInfo pi)
+        {
+            try
+            {
+                var o = Expression.Parameter(typeof(object), "o");
+                var g = pi.GetGetMethod(true);
+                Expression e = Expression.Property(Inst(o, pi, g.IsStatic), pi);
+                if (e.Type != typeof(T)) e = Expression.Convert(e, typeof(T));
+                return Expression.Lambda<Func<object, T>>(e, o).Compile();
+            }
+            catch (Exception) { return null; }
+        }
+        private static TDelegate Call<TDelegate>(MethodInfo m, params Type[] args) where TDelegate : class
+        {
+            try
+            {
+                var o = Expression.Parameter(typeof(object), "o");
+                var ps = new ParameterExpression[args.Length + 1]; ps[0] = o;
+                var call = new Expression[args.Length];
+                var mp = m.GetParameters();
+                if (mp.Length != args.Length) return null;
+                for (int i = 0; i < args.Length; i++) { ps[i + 1] = Expression.Parameter(args[i], "a" + i); if (mp[i].ParameterType != args[i]) return null; call[i] = ps[i + 1]; }
+                return Expression.Lambda<TDelegate>(Expression.Call(Inst(o, m, m.IsStatic), m, call), ps).Compile();
+            }
+            catch (Exception) { return null; }
+        }
+        private static void Compile()
+        {
+            var ft = target; var fm = mode; var fl = lunge; var flf = lastFight; var fnb = nextBite; var fg = targetGo; var fpd = pawDepth;
+            var pf = feet; var pa = alive; var pk = knownPlayer;
+            var ms = step; var msm = setMoving; var mu = unstick; var mst = stuck; var mg = giveUp; var mh = hurt; var msn = snarl;
+            _target = FieldGet<object>(ft) ?? (o => ft.GetValue(o));
+            _targetGo = FieldGet<object>(fg) ?? (o => fg.GetValue(o));
+            _mode = FieldGet<int>(fm) ?? (o => Convert.ToInt32(fm.GetValue(o)));
+            _nextBite = FieldGet<float>(fnb) ?? (o => (float)fnb.GetValue(o));
+            _pawDepth = FieldGet<float>(fpd) ?? (o => (float)fpd.GetValue(o));
+            _setNextBite = FieldSetFloat(fnb) ?? ((o, v) => fnb.SetValue(o, v));
+            _setLunge = FieldSetFloat(fl) ?? ((o, v) => fl.SetValue(o, v));
+            _setLastFight = FieldSetFloat(flf) ?? ((o, v) => flf.SetValue(o, v));
+            _feet = PropGet<Vector3>(pf) ?? (o => (Vector3)pf.GetValue(o, null));
+            _alive = PropGet<bool>(pa) ?? (o => (bool)pa.GetValue(o, null));
+            _knownPlayer = PropGet<object>(pk) ?? (o => pk.GetValue(null, null));
+            _step = Call<Action<object, Vector3, float, float>>(ms, typeof(Vector3), typeof(float), typeof(float)) ?? ((o, a, b, c) => ms.Invoke(o, new object[] { a, b, c }));
+            _setMoving = Call<Action<object, bool, float>>(msm, typeof(bool), typeof(float)) ?? ((o, a, b) => msm.Invoke(o, new object[] { a, b }));
+            _unstick = Call<Action<object>>(mu) ?? (o => mu.Invoke(o, null));
+            _snarl = Call<Action<object>>(msn) ?? (o => msn.Invoke(o, null));
+            _stuck = Call<Func<object, float, bool>>(mst, typeof(float)) ?? ((o, a) => (bool)mst.Invoke(o, new object[] { a }));
+            _giveUp = Call<Action<object, float>>(mg, typeof(float)) ?? ((o, a) => mg.Invoke(o, new object[] { a }));
+            _hurt = Call<Action<object, float>>(mh, typeof(float)) ?? ((o, a) => mh.Invoke(o, new object[] { a }));
+        }
+
         internal sealed class Driver
         {
             internal readonly MonoBehaviour Dog;
@@ -113,18 +201,18 @@ namespace WildWasteland.Modules.NPC
             internal Driver(MonoBehaviour dog)
             { Dog = dog; Agent = new Senses.Agent { Owner = dog.gameObject, T = dog.transform, Col = dog.GetComponent<Collider>() }; }
             internal bool Active { get { return !Failed && Dog != null && Dog.isActiveAndEnabled; } }
-            internal bool Riding { get { return Convert.ToInt32(mode.GetValue(Dog)) == 1; } }
+            internal bool Riding { get { return _mode(Dog) == 1; } }
             internal bool Sneaking
             {
                 get
                 {
-                    object npc = target.GetValue(Dog);
-                    return WantsSneak && !Riding && Agent.Target == null && (npc == null || !(bool)alive.GetValue(npc, null));
+                    object npc = _target(Dog);
+                    return WantsSneak && !Riding && Agent.Target == null && (npc == null || !_alive(npc));
                 }
             }
             internal void RefreshSneaking()
             {
-                var player = Senses.PlayerObj ?? (GameObject)knownPlayer.GetValue(null, null);
+                var player = Senses.PlayerObj ?? (GameObject)_knownPlayer(null);
                 if (player != movementPlayer || (player != null && playerMovement == null))
                 {
                     movementPlayer = player; playerMovement = null; standingHeight = null;
@@ -134,53 +222,53 @@ namespace WildWasteland.Modules.NPC
                 WantsSneak = state.StartsWith("Crouch", StringComparison.OrdinalIgnoreCase) || state.StartsWith("Crawl", StringComparison.OrdinalIgnoreCase)
                     || (playerMovement != null && playerMovement.enabled && standingHeight != null && standingHeight.Value > .1f && standingHeight.Value < 1.4f);
             }
-            internal Vector3 Feet { get { return (Vector3)feet.GetValue(Dog, null); } }
-            internal float PawHeight { get { return -(float)pawDepth.GetValue(Dog); } }
+            internal Vector3 Feet { get { return _feet(Dog); } }
+            internal float PawHeight { get { return -_pawDepth(Dog); } }
             internal float RunSpeed { get { return runSpeed.Value * 1.1f; } }
-            internal float NativeNextBite { get { return (float)nextBite.GetValue(Dog); } }
-            internal void SetCooldown(float until) { nextBite.SetValue(Dog, until); }
+            internal float NativeNextBite { get { return _nextBite(Dog); } }
+            internal void SetCooldown(float until) { _setNextBite(Dog, until); }
             internal void SyncTarget()
             {
-                object npc = Riding ? null : target.GetValue(Dog);
-                Agent.Target = npc != null && (bool)alive.GetValue(npc, null) ? (GameObject)targetGo.GetValue(npc) : null;
+                object npc = Riding ? null : _target(Dog);
+                Agent.Target = npc != null && _alive(npc) ? (GameObject)_targetGo(npc) : null;
                 Agent.State = Agent.Target != null ? Senses.State.Combat : Senses.State.Idle;
             }
             internal bool TargetAlive(GameObject victim)
             {
-                object npc = target.GetValue(Dog);
-                return victim != null && npc != null && (GameObject)targetGo.GetValue(npc) == victim && (bool)alive.GetValue(npc, null);
+                object npc = _target(Dog);
+                return victim != null && npc != null && (GameObject)_targetGo(npc) == victim && _alive(npc);
             }
             internal void Halt(bool hold)
-            { Held = hold; if (hold && Active) setMoving.Invoke(Dog, new object[] { false, 0f }); }
+            { Held = hold; if (hold && Active) _setMoving(Dog, false, 0f); }
             internal void Contact(GameObject victim)
             {
                 if (!Active || Riding || !TargetAlive(victim)) return;
-                hurt.Invoke(target.GetValue(Dog), new object[] { biteDamage.Value });
+                _hurt(_target(Dog), biteDamage.Value);
                 if (Senses.PlayerObj != null) Senses.Hurt(victim, Senses.PlayerObj);
-                snarl.Invoke(Dog, null);
+                _snarl(Dog);
             }
             internal void Dash(Vector3 direction, float speed, float dt, GameObject victim)
             {
                 if (!Active || Riding) return;
                 FixedDash = true; DashTarget = victim;
-                try { step.Invoke(Dog, new object[] { Feet + direction * 5f, speed, dt }); }
+                try { _step(Dog, Feet + direction * 5f, speed, dt); }
                 finally { FixedDash = false; DashTarget = null; }
                 Dog.transform.rotation = Quaternion.LookRotation(direction);
             }
             internal bool Chase(Transform player, float dt)
             {
                 SyncTarget(); if (Agent.Target == null) return false;
-                lastFight.SetValue(Dog, Time.time);
+                _setLastFight(Dog, Time.time);
                 Vector3 distance = Agent.Target.transform.position - player.position; distance.y = 0f;
-                if (distance.magnitude > leash.Value) { giveUp.Invoke(Dog, new object[] { 5f }); SyncTarget(); return false; }
+                if (distance.magnitude > leash.Value) { _giveUp(Dog, 5f); SyncTarget(); return false; }
                 // The shared animation state owns holding and committed dashes. All
                 // other chasing keeps Dog Companion's obstacle/ground navigation.
                 if (!Held && !DogAnimations.CompanionDashing(Dog.gameObject))
                 {
-                    step.Invoke(Dog, new object[] { Agent.Target.transform.position, RunSpeed, dt });
-                    if ((bool)stuck.Invoke(Dog, new object[] { 3f })) { giveUp.Invoke(Dog, new object[] { 6f }); SyncTarget(); }
+                    _step(Dog, Agent.Target.transform.position, RunSpeed, dt);
+                    if (_stuck(Dog, 3f)) { _giveUp(Dog, 6f); SyncTarget(); }
                 }
-                else unstick.Invoke(Dog, null);
+                else _unstick(Dog);
                 return false;
             }
         }
@@ -223,7 +311,7 @@ namespace WildWasteland.Modules.NPC
             {
                 d.SyncTarget(); Vector3 moved = __instance.transform.position - d.Before; moved.y = 0f;
                 d.Speed = d.Riding || moved.magnitude > 2f ? 0f : moved.magnitude / Mathf.Max(.001f, Time.deltaTime);
-                if (Owns(d)) lunge.SetValue(__instance, 1f); // suppress the old procedural jolt
+                if (Owns(d)) _setLunge(__instance, 1f); // suppress the old procedural jolt
                 DogAnimations.TickCompanion(__instance.gameObject);
             }
             catch (Exception e) { Fail(d, e); }

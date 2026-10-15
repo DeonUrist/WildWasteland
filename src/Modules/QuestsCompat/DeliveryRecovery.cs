@@ -36,6 +36,13 @@ namespace WildWasteland.Modules.QuestsCompat
         private sealed class Empty { internal float Since; internal int Scan; }
         private static readonly Dictionary<object, Empty> Waiting = new Dictionary<object, Empty>();
         private static readonly List<object> Expired = new List<object>();
+        // Returning deliveries look for one giver by name: index the Health FSMs by object name once per world-cache pass,
+        // remembering names by instance id (refreshed every 30 s), and re-check the live name of each candidate.
+        private static readonly Dictionary<string, List<PlayMakerFSM>> ByName = new Dictionary<string, List<PlayMakerFSM>>(StringComparer.Ordinal);
+        private static readonly Stack<List<PlayMakerFSM>> Lists = new Stack<List<PlayMakerFSM>>();
+        private static readonly Dictionary<int, string> Names = new Dictionary<int, string>();
+        private static readonly List<PlayMakerFSM> NoOne = new List<PlayMakerFSM>();
+        private static int _indexed = -1; private static List<PlayMakerFSM> _indexedFrom; private static float _namesUntil;
 
         internal static void Install(IModule owner, Assembly assembly, object plugin, object talk)
         {
@@ -82,14 +89,14 @@ namespace WildWasteland.Modules.QuestsCompat
             {
                 var q = quests[i]; if (_type(q) != 6) continue;
                 bool returning = Returning(q);
-                if (returning && HasRecipient(q, people, Vector3.zero, float.PositiveInfinity, true)) { Waiting.Remove(q); continue; }
+                if (returning && HasRecipient(q, people, scan, Vector3.zero, float.PositiveInfinity, true)) { Waiting.Remove(q); continue; }
                 if (returning ? !_hasGiverPosition(q) : !_hasPosition(q)) continue;
                 Vector3 world = returning ? _giverPosition(q) : _position(q);
                 var status = camps.At(world, 120f);
                 if (status == CampState.Cleared) { Fail(q, returning ? "return camp is dead" : "destination camp is dead"); continue; }
                 Vector3 scene = Origin.Scene(world), delta = player.transform.position - scene;
                 float radius = returning ? 120f : _radius(q), arrival = Mathf.Max(5f, Mathf.Min(30f, radius * .6f));
-                if (delta.x * delta.x + delta.z * delta.z > arrival * arrival || status != CampState.Ready || HasRecipient(q, people, scene, radius, returning))
+                if (delta.x * delta.x + delta.z * delta.z > arrival * arrival || status != CampState.Ready || HasRecipient(q, people, scan, scene, radius, returning))
                 { Waiting.Remove(q); continue; }
                 Empty empty;
                 if (!Waiting.TryGetValue(q, out empty)) { Waiting.Add(q, new Empty { Since = Time.time, Scan = scan }); continue; }
@@ -102,8 +109,28 @@ namespace WildWasteland.Modules.QuestsCompat
                 _toast("There was nobody to deliver to. Return the " + _label(q) + " to the " + _giverName(q) + ".");
             }
         }
-        private static bool HasRecipient(object q, List<PlayMakerFSM> people, Vector3 position, float radius, bool returning)
+        private static List<PlayMakerFSM> Named(List<PlayMakerFSM> people, int scan, string name)
         {
+            if (scan != _indexed || !ReferenceEquals(people, _indexedFrom))
+            {
+                foreach (var list in ByName.Values) { list.Clear(); Lists.Push(list); }
+                ByName.Clear(); _indexed = scan; _indexedFrom = people;
+                if (Time.unscaledTime >= _namesUntil || Names.Count > 8192) { Names.Clear(); _namesUntil = Time.unscaledTime + 30f; }
+                foreach (var f in people)
+                {
+                    if (f == null || f.FsmName != "Health") continue;
+                    var go = f.gameObject; int id = go.GetInstanceID(); string n;
+                    if (!Names.TryGetValue(id, out n)) Names[id] = n = go.name;
+                    List<PlayMakerFSM> list;
+                    if (!ByName.TryGetValue(n, out list)) ByName[n] = list = Lists.Count > 0 ? Lists.Pop() : new List<PlayMakerFSM>();
+                    list.Add(f);
+                }
+            }
+            List<PlayMakerFSM> found; return name != null && ByName.TryGetValue(name, out found) ? found : NoOne;
+        }
+        private static bool HasRecipient(object q, List<PlayMakerFSM> people, int scan, Vector3 position, float radius, bool returning)
+        {
+            if (returning) people = Named(people, scan, _giverId(q));
             foreach (var f in people)
             {
                 if (f == null || f.FsmName != "Health" || f.ActiveStateName != "health" || !f.gameObject.activeInHierarchy) continue;
@@ -149,7 +176,11 @@ namespace WildWasteland.Modules.QuestsCompat
             }
             if (matched != 1) throw new InvalidOperationException("Giver respawn gate not found exactly once");
         }
-        internal static void Clear() { Waiting.Clear(); Expired.Clear(); }
+        internal static void Clear()
+        {
+            Waiting.Clear(); Expired.Clear(); foreach (var list in ByName.Values) list.Clear();
+            ByName.Clear(); Names.Clear(); _indexed = -1; _indexedFrom = null; _namesUntil = 0;
+        }
         internal static void Uninstall() { Clear(); _plugin = null; _resolveNpc = null; _friendly = null; }
     }
 }

@@ -90,6 +90,7 @@ namespace WildWasteland.Modules.Patrols
             _installed = true;
             TerrainTile.OnBeforeTilePrepare += Prepare;
             TerrainTile.OnTileFinalized += Finalized;
+            TerrainTile.OnTileApplied += LocationsApplied;
         }
         internal static void Uninstall()
         {
@@ -97,6 +98,7 @@ namespace WildWasteland.Modules.Patrols
             _installed = false;
             TerrainTile.OnBeforeTilePrepare -= Prepare;
             TerrainTile.OnTileFinalized -= Finalized;
+            TerrainTile.OnTileApplied -= LocationsApplied;
         }
 
         internal static void Reset()
@@ -181,6 +183,7 @@ namespace WildWasteland.Modules.Patrols
                 return BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(text.ToString()))).Replace("-", "").Substring(0, 24);
         }
 
+        private static void LocationsApplied(TerrainTile tile, TileData data, StopToken stop) { if (tile != null) TrafficLocations.TileApplied(); }
         private static void Finalized(TerrainTile tile, TileData data, StopToken stop)
         {
             if (data == null || data.isDraft || (stop != null && stop.stop) || !Captures.TryRemove(data, out var capture)) return;

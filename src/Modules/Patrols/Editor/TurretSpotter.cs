@@ -120,9 +120,10 @@ namespace WildWasteland.Modules.Patrols
         private void Say(string s) { _status = s; _statusUntil = Time.unscaledTime + 6f; Core.Log.Info("[Patrols] " + "Turret spot editor: " + s); }
         private static string SlotLabel(int slot) { return slot < PatrolMarker.VehicleTurretSlots ? "turret " + (slot + 1) : "trailer turret " + (slot - PatrolMarker.VehicleTurretSlots + 1); }
 
+        internal bool GuiWanted() { return PatrolsModule.TurretSpotEditor != null && PatrolsModule.TurretSpotEditor.Value && _car != null; }   // Gui's gate
         internal void Gui()
         {
-            if (PatrolsModule.TurretSpotEditor == null || !PatrolsModule.TurretSpotEditor.Value || _car == null || Event.current.type != EventType.Repaint) return;
+            if (!GuiWanted() || Event.current.type != EventType.Repaint) return;
             var anchor = RiderApi.Anchor(_car, _slot); if (anchor == null) return;
             if (_style == null) _style = new GUIStyle(GUI.skin.label) { fontSize = 14, alignment = TextAnchor.UpperRight, richText = false };
             var p = anchor.localPosition;

@@ -62,15 +62,17 @@ namespace WildWasteland.Modules.CleanHUD
             while (Walk.Count > 0)
             {
                 var t = Walk.Pop(); if (t == null) continue;
-                if (t.name == "mapIcon") LocationMarkers.Observe(t);
+                string n = t.name;   // one name read per node
+                if (n == "mapIcon") LocationMarkers.Observe(t);
                 for (int i = 0; i < t.childCount; i++) Walk.Push(t.GetChild(i));
+                bool named = n == "Weapons" || n == "Bandage_Item" || n == "FirstAid_Item" || n == "PlayerCamera" || n == "__GameManager__";
+                // Tile walks (keys == false) only need the FSMs of the five named objects.
+                if (!keys && !named) { yield return null; continue; }
                 FsmBuffer.Clear(); t.GetComponents<PlayMakerFSM>(FsmBuffer);
                 for (int i = 0; i < FsmBuffer.Count; i++)
                 {
                     var f = FsmBuffer[i]; if (f == null) continue;
-                    string n = t.name;
-                    if (n == "Weapons" || n == "Bandage_Item" || n == "FirstAid_Item" || n == "PlayerCamera" || n == "__GameManager__")
-                        FsMs[n + "\n" + f.FsmName] = f;
+                    if (named) FsMs[n + "\n" + f.FsmName] = f;
                     if (!keys || f.Fsm == null || !f.Fsm.Initialized || f.FsmStates == null) continue;
                     foreach (var state in f.FsmStates)
                     {

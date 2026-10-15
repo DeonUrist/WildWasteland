@@ -20,11 +20,21 @@ namespace WildWasteland.Modules.Guns
 
         internal static bool ReloadHeld()
         {
-            try { return Input.GetButton("Reload"); } catch { }
+            // (WW perf) a game without a "Reload" input axis throws (and allocates an exception) on every call: remembered after the first
+            if (!_noReloadButton) { try { return Input.GetButton("Reload"); } catch { _noReloadButton = true; } }
             try { var kb = Keyboard.current; if (kb != null) return kb[FallbackKey.Value].isPressed; } catch { }
-            try { KeyCode kc; if (Enum.TryParse(FallbackKey.Value.ToString(), out kc)) return Input.GetKey(kc); } catch { }
+            try
+            {
+                var key = FallbackKey.Value;
+                if (!_fallbackParsed || key != _fallbackFor) { _fallbackFor = key; _fallbackParsed = true; _fallbackOk = Enum.TryParse(key.ToString(), out _fallbackCode); }
+                if (_fallbackOk) return Input.GetKey(_fallbackCode);
+            }
+            catch { }
             return false;
         }
+        private static bool _noReloadButton, _fallbackParsed, _fallbackOk;
+        private static KeyCode _fallbackCode;
+        private static Key _fallbackFor;
         internal static bool TapPending() { int frame = Time.frameCount; return frame == TapFrame || frame == TapFrame + 1; }
     }
 }

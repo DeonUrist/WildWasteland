@@ -150,14 +150,14 @@ namespace WildWasteland.Modules.CleanHUD
                     if (l.A <= 0f) { l.Rt.gameObject.SetActive(false); _pool.Push(l); _lines.RemoveAt(i); i--; continue; }
                 }
                 else l.A = Mathf.Min(1f, l.A + dt * 6f);
-                l.G.alpha = Mathf.Clamp01(l.A);
+                float alpha = Mathf.Clamp01(l.A); if (l.G.alpha != alpha) l.G.alpha = alpha;
             }
             for (int i = 0; i < _lines.Count; i++)
             {
                 var l = _lines[i];
                 float target = i * LineH;
                 l.Y = Mathf.Abs(l.Y - target) < .5f ? target : Mathf.Lerp(l.Y, target, 1f - Mathf.Exp(-dt * 14f));
-                l.Rt.anchoredPosition = new Vector2(0, -l.Y);
+                var position = new Vector2(0, -l.Y); if (l.Rt.anchoredPosition != position) l.Rt.anchoredPosition = position;
             }
         }
     }

@@ -45,6 +45,9 @@ namespace WildWasteland.Modules.NPC
             public int SNext; public bool SLooked;      // (1.4.10) the round: next point to walk, looked around at the end
             public bool InSearch, SAtOrigin; public Vector3 SOrigin; public List<Vector3> SPts; public float[] SDropped; public int SLast = -1;
             public bool Inv; public int InvGhost = -1, InvFails, SkipGhost = -1; public Vector3 SkipPos; public bool InvOnMap; public float BestStraight, LastMapLeft, LastStraightLeft;   // (1.6.0) the walk to a ghost
+            // (WW perf) think scale by camera distance (x1 / x2 / x4, as the brain's TickScale), the thinking state the timer belongs to
+            // (0 none, 1 ghost walk, 2 search, 3 idle), the feeler fan's last answer and when to ask again, the next run-clip check
+            public float Scale = 1f; public byte ThinkKind; public float NextFan, FanWant, FanOff, NextRunCheck;
         }
 
         private sealed class Spot { public Transform T; public bool Coyotes; }
@@ -61,6 +64,12 @@ namespace WildWasteland.Modules.NPC
         private static readonly HashSet<int> _claimed = new HashSet<int>();                          // spawn point ids already someone's home
         private static readonly List<int> _dead = new List<int>();
         private static int _stagger;
+        // (WW perf, T2/N3) thinks: every ThinkEvery x Scale s per NPC on its own phase (next += interval, a random phase whenever it (re)enters
+        // a thinking state - an alert no longer lines a whole camp up on one frame); at most ceil(thinkers x dt / ThinkEvery) + 1 per frame,
+        // the rest a frame later
+        private const float ThinkEvery = 0.2f;
+        private static int _thinkers, _thinkCap = 1, _thinksNow;
+        private static readonly int RunHash = Animator.StringToHash("run");
 
         internal static bool On { get { return NpcModule.IdleEnabled != null && NpcModule.IdleEnabled.Value && Senses.On; } }
 
@@ -177,6 +186,7 @@ namespace WildWasteland.Modules.NPC
             if (!On) { if (_ctl.Count > 0) { foreach (var kv in _ctl) Stop(kv.Value, true); _ctl.Clear(); _claimed.Clear(); } return; }
             float now = Time.time, dt = Time.deltaTime;
             if (dt <= 0f) return;
+            _thinkCap = Mathf.CeilToInt(_thinkers * dt / ThinkEvery) + 1; _thinkers = 0; _thinksNow = 0;
             foreach (var a in Senses.AllAgents)
             {
                 if (a.Owner == null) continue;
@@ -193,12 +203,14 @@ namespace WildWasteland.Modules.NPC
                 if (c.Excluded) continue;
                 if (a.T.parent != null)        // seated in a car (Apocapatrol crews): not ours - no home lookup, no logic, no label
                 {
+                    c.ThinkKind = 0;
                     if (c.Moving || c.Leg != Leg.None || c.Turning) Stop(c, false);
                     c.InSearch = false; c.Inv = false;
                     continue;
                 }
                 if (a.Blown)                   // shoved by a tornado: stands as vanilla, nothing counts (no failed tries)
                 {
+                    c.ThinkKind = 0;
                     if (c.Moving || c.Leg != Leg.None || c.Turning) Stop(c, true);
                     c.InSearch = false; c.PendingBack = false; c.Inv = false;
                     continue;
@@ -225,14 +237,13 @@ namespace WildWasteland.Modules.NPC
                     }
                     else if (c.InvGhost != gh.Id) { c.InvGhost = gh.Id; c.InvFails = 0; c.BestLeft = c.BestStraight = float.MaxValue; c.ProgressAt = now; }   // news: a new spot
                     c.BusyAt = now; c.LastWasSearch = false; c.Fresh = false; c.Tries = 0; c.PendingBack = false; c.AtHome = false;
-                    if (now >= c.NextThink)
+                    if (Due(c, now, 1))
                     {
-                        c.NextThink = now + 0.2f;
                         try { InvestigateThink(c, now); }
                         catch (Exception e) { NpcModule.Log.LogError("Idle ghost walk: " + e); Stop(c, false); c.Inv = false; c.SkipGhost = gh.Id; c.SkipPos = gh.Pos; }
                     }
                     if (c.Leg == Leg.Investigate && !Brain.IsWalk(a.Owner)) { Stop(c, false); c.WaitUntil = 0f; }   // the brain took the body back: no two drivers
-                    if (c.Moving) Drive(c, dt);
+                    if (c.Moving) Drive(c, dt, now);
                     continue;
                 }
                 bool idle = a.State == Senses.State.Idle && a.Target == null && a.Ghost == null && a.T.parent == null
@@ -241,12 +252,11 @@ namespace WildWasteland.Modules.NPC
                 {
                     if (!c.InSearch && (c.Leg != Leg.None || c.Moving || c.Turning)) Stop(c, false);
                     c.BusyAt = now; c.LastWasSearch = true; c.Fresh = false; c.Tries = 0; c.PendingBack = false; c.AtHome = false;
-                    if (now >= c.NextThink)
+                    if (Due(c, now, 2))
                     {
-                        c.NextThink = now + 0.2f;
                         try { SearchThink(c, now); } catch (Exception e) { NpcModule.Log.LogError("Idle search: " + e); Stop(c, false); c.InSearch = false; }
                     }
-                    if (c.Moving) Drive(c, dt);
+                    if (c.Moving) Drive(c, dt, now);
                     continue;
                 }
                 if (c.InSearch) { c.InSearch = false; if (c.Moving) Stop(c, idle); c.WaitUntil = 0f; }   // the search is over
@@ -254,15 +264,15 @@ namespace WildWasteland.Modules.NPC
                 {
                     if (c.Leg != Leg.None || c.Moving || c.Turning) Stop(c, false);   // the fight logic takes over: its own animation, not ours
                     c.BusyAt = now; c.LastWasSearch = false; c.Fresh = false; c.Tries = 0; c.WaitUntil = 0f; c.PendingBack = false; c.AtHome = false;
+                    c.ThinkKind = 0;
                     continue;
                 }
-                if (now >= c.NextThink)
+                if (Due(c, now, 3))
                 {
-                    c.NextThink = now + 0.2f;
                     try { Think(c, now); } catch (Exception e) { NpcModule.Log.LogError("Idle: " + e); Stop(c); c.Excluded = true; }
                 }
                 if (!c.Moving && !c.Turning && now >= c.NextAnimCheck) { c.NextAnimCheck = now + 0.5f; RunInPlace(c); }
-                if (c.Moving) Drive(c, dt);
+                if (c.Moving) Drive(c, dt, now);
                 else if (c.Turning)
                 {
                     float y = Mathf.MoveTowardsAngle(a.T.eulerAngles.y, c.LookYaw, Mathf.Max(10f, NpcModule.TurnRate.Value) * 0.5f * dt);
@@ -274,9 +284,39 @@ namespace WildWasteland.Modules.NPC
             if (_ctl.Count > 0 && (Time.frameCount & 63) == 0)
             {
                 _dead.Clear();
-                foreach (var kv in _ctl) if (kv.Value.A.Owner == null) { _dead.Add(kv.Key); if (kv.Value.HasHome) _claimed.Remove(kv.Value.SpotId); }
+                var cam = Core.GameRefs.MainCamera; Vector3 cp = cam != null ? cam.transform.position : Vector3.zero;
+                foreach (var kv in _ctl)
+                {
+                    var c = kv.Value;
+                    if (c.A.Owner == null) { _dead.Add(kv.Key); if (c.HasHome) _claimed.Remove(c.SpotId); continue; }
+                    if (cam != null)
+                    {
+                        // (WW perf, D7) the brain's camera-distance scale (Brain TickScale): far from the camera the finer steering is wasted
+                        float cd = (c.A.T.position - cp).sqrMagnitude;
+                        c.Scale = cd > 80f * 80f ? 4f : cd > 40f * 40f ? 2f : 1f;
+                    }
+                }
                 foreach (var k in _dead) { _ctl.Remove(k); _spawnOf.Remove(k); }
             }
+        }
+
+        // a think is due for this NPC (and this frame still has room for it); kind = the thinking state it is in
+        private static bool Due(Ctl c, float now, byte kind)
+        {
+            _thinkers++;
+            if (c.ThinkKind != kind) { c.ThinkKind = kind; if (now >= c.NextThink) c.NextThink = now + UnityEngine.Random.value * ThinkEvery * c.Scale; }
+            // a slow (far) thinker walking: a reached waypoint or the goal close ahead asks for the next think now (no overshooting), but
+            // never sooner than ThinkEvery after the last one (the near rate)
+            if (c.Scale > 1f && c.Moving && c.Leg != Leg.None && now < c.NextThink && now - (c.NextThink - ThinkEvery * c.Scale) >= ThinkEvery)
+            {
+                Vector3 p = c.A.T.position;
+                if (Flat(p - c.Goal) <= 2f || Flat(p - c.Steer) <= 1f) c.NextThink = now;
+            }
+            if (now < c.NextThink || _thinksNow >= _thinkCap) return false;
+            _thinksNow++;
+            c.NextThink += ThinkEvery * c.Scale;
+            if (c.NextThink < now) c.NextThink = now;
+            return true;
         }
 
         private static void Think(Ctl c, float now)
@@ -374,7 +414,7 @@ namespace WildWasteland.Modules.NPC
         {
             var a = c.A; var g = a.Ghost;
             if (g == null) return;
-            if (!Brain.IsWalk(a.Owner)) { c.NextThink = now + 0.1f; return; }      // the brain hasn't let go yet (its next think)
+            if (!Brain.IsWalk(a.Owner)) { c.NextThink = now + 0.05f + 0.1f * UnityEngine.Random.value; return; }      // the brain hasn't let go yet (its next think; own phase per NPC)
             Vector3 goal; if (!Senses.GoalOf(a.Owner, out goal)) goal = g.Pos;    // (1.1.0) the flank point first, then the ghost
             if (c.Leg == Leg.Investigate)
             {
@@ -429,7 +469,7 @@ namespace WildWasteland.Modules.NPC
                 else { if (left > c.LastStraightLeft + 2f) c.BestStraight = left; c.LastStraightLeft = left; if (left < c.BestStraight - 0.5f) { c.BestStraight = left; c.ProgressAt = now; } }
             }
             else if (left < c.BestLeft - 0.5f) { c.BestLeft = left; c.ProgressAt = now; }
-            float patience = c.Leg == Leg.Home || inv ? 2f : 1f;
+            float patience = (c.Leg == Leg.Home || inv ? 2f : 1f) * c.Scale;      // (WW perf) thinks Scale x rarer far from the camera: as much patience in thinks
             if (now - c.ProgressAt > patience) Failed(c, now);
         }
 
@@ -526,7 +566,7 @@ namespace WildWasteland.Modules.NPC
                     foreach (var f in c.A.Owner.GetComponents<PlayMakerFSM>()) if (f.FsmName == "Movement") { c.Movement = f; break; }
                 }
                 bool fsmRun = c.Movement != null && c.Movement.Fsm != null && c.Movement.Fsm.ActiveStateName == "Run";
-                bool animRun = c.Anim != null && c.Anim.isActiveAndEnabled && c.Anim.GetCurrentAnimatorStateInfo(0).IsName("run") && !c.Anim.IsInTransition(0);
+                bool animRun = c.Anim != null && c.Anim.isActiveAndEnabled && c.Anim.GetCurrentAnimatorStateInfo(0).shortNameHash == RunHash && !c.Anim.IsInTransition(0);
                 if (!fsmRun && !animRun) return;
                 if (fsmRun) c.Movement.SendEvent("Animal_Idle");
                 if (c.Anim != null) { c.Anim.speed = 1f; c.Anim.Play("idle", 0, 0f); }
@@ -545,6 +585,7 @@ namespace WildWasteland.Modules.NPC
                 if (!c.Moving) c.Anim.Play("run", 0, UnityEngine.Random.value);
                 c.Anim.speed = speed / 5f;
             }
+            if (!c.Moving) { c.NextFan = 0f; c.NextRunCheck = Time.time + 0.25f * UnityEngine.Random.value; }   // a new walk: the feelers at once, the clip check on its own phase
             c.Moving = true;
         }
 
@@ -560,22 +601,33 @@ namespace WildWasteland.Modules.NPC
         }
 
         private static readonly float[] Fan = { 0f, -35f, 35f, -70f, 70f };
-        private static void Drive(Ctl c, float dt)
+        // (WW perf, D1) the run-clip check every 0.25 s (state hash, no string), the feeler fan (1-5 capsule casts) at 10 Hz per walker or at once
+        // when the wanted heading turns > 15 deg; turning and velocity stay per frame. Worst case: the fan's answer is 0.1 s old (0.25-0.5 m
+        // of walking against a 1.2 m feeler), a run clip knocked off by something else comes back within 0.25 s.
+        private static void Drive(Ctl c, float dt, float now)
         {
             if (c.Rb == null) { Stop(c); return; }
             var t = c.A.T;
-            if (c.Anim != null && !c.Anim.IsInTransition(0) && !c.Anim.GetCurrentAnimatorStateInfo(0).IsName("run")) { c.Anim.Play("run", 0, 0f); c.Anim.speed = c.Speed / 5f; }
+            if (c.Anim != null && now >= c.NextRunCheck)
+            {
+                c.NextRunCheck = now + 0.25f;
+                if (!c.Anim.IsInTransition(0) && c.Anim.GetCurrentAnimatorStateInfo(0).shortNameHash != RunHash) { c.Anim.Play("run", 0, 0f); c.Anim.speed = c.Speed / 5f; }
+            }
             Vector3 to = c.Steer - t.position; to.y = 0f;
             if (to.sqrMagnitude < 0.0001f) return;
             float want = Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg;
             // three-way body feelers (only off a map route): the first free heading nearest the wanted one
-            float chosen = want;
-            Vector3 low = t.position + Vector3.up * 0.6f, high = t.position + Vector3.up * 1.3f;
-            for (int i = 0; i < Fan.Length; i++)
+            if (now >= c.NextFan || Mathf.Abs(Mathf.DeltaAngle(want, c.FanWant)) > 15f)
             {
-                Vector3 d = Quaternion.Euler(0f, want + Fan[i], 0f) * Vector3.forward;
-                if (!Physics.CapsuleCast(low, high, 0.3f, d, 1.2f, FeelMask, QueryTriggerInteraction.Ignore)) { chosen = want + Fan[i]; break; }
+                c.NextFan = now + 0.08f + 0.04f * UnityEngine.Random.value; c.FanWant = want; c.FanOff = 0f;
+                Vector3 low = t.position + Vector3.up * 0.6f, high = t.position + Vector3.up * 1.3f;
+                for (int i = 0; i < Fan.Length; i++)
+                {
+                    Vector3 d = Quaternion.Euler(0f, want + Fan[i], 0f) * Vector3.forward;
+                    if (!Physics.CapsuleCast(low, high, 0.3f, d, 1.2f, FeelMask, QueryTriggerInteraction.Ignore)) { c.FanOff = Fan[i]; break; }
+                }
             }
+            float chosen = want + c.FanOff;
             float yaw = Mathf.MoveTowardsAngle(t.eulerAngles.y, chosen, Mathf.Max(10f, NpcModule.TurnRate.Value) * dt);
             t.rotation = Quaternion.Euler(0f, yaw, 0f);
             Vector3 v = t.forward * (c.Speed * Brain.TurnSpeedFactor(Mathf.Abs(Mathf.DeltaAngle(yaw, chosen))));   // slows down while turning: no arcs

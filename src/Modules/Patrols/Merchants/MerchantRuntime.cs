@@ -45,17 +45,22 @@ namespace WildWasteland.Modules.Patrols
         private PlayMakerFSM _start;
         private void OnEnable(){All.Add(this);}
         private void OnDestroy(){All.Remove(this);foreach(var pair in _stock)if(pair.Value!=null&&!pair.Key.purchased)Register.RemoveTree(pair.Value);}
+        // Perf: marker / crew / handbrake FSM resolved once (re-resolved while missing); was GetComponent x2 + a whole-bus
+        // GetComponentsInChildren<PlayMakerFSM> per Park (2/s). Park still re-asserts every call (ignition off, handbrake, inputs).
+        private PatrolMarker _marker;private Crew _crew;private PlayMakerFSM _handbrake;private float _handbrakeSearch=-1f;
         internal void Park()
         {
-            var marker=GetComponent<PatrolMarker>();if(marker?.PlayerEntered==true)return;
-            var journey=WorldTraffic.Find(marker?.TrafficId);var crew=GetComponent<Crew>();
+            if(_marker==null)_marker=GetComponent<PatrolMarker>();if(_crew==null)_crew=GetComponent<Crew>();
+            var marker=_marker;if(marker?.PlayerEntered==true)return;
+            var journey=WorldTraffic.Find(marker?.TrafficId);var crew=_crew;
             bool waiting=Data?.travelling!=true||(journey?.merchant==true&&(journey.arrived||journey.waitSeconds>0f));
             if(Data?.travelling!=true&&crew!=null)crew.Hold=true;
             if(crew!=null)crew.WaitForMerchant(waiting);if(!waiting)return;
             Nwh.StopEngine(gameObject);
             if(_start==null)_start=Patrol.FindFsm(gameObject,"START","Start");
             if(_start!=null&&_start.enabled&&_start.Fsm.Initialized&&_start.ActiveStateName!="off")_start.Fsm.SetState("off");
-            Nwh.SetInput(gameObject,0f,0f,1f);Nwh.SetHandbrake(gameObject,1f);Patrol.Handbrake(gameObject,true);
+            if(_handbrake==null&&Time.unscaledTime>=_handbrakeSearch){_handbrakeSearch=Time.unscaledTime+5f;_handbrake=Patrol.FindFsm(gameObject,"handbrake","Handbrake");}
+            Nwh.SetInput(gameObject,0f,0f,1f);Nwh.SetHandbrake(gameObject,1f);Patrol.Handbrake(gameObject,true,_handbrake);
         }
         private IEnumerator Start()
         {
@@ -160,20 +165,31 @@ namespace WildWasteland.Modules.Patrols
         private void Update()
         { if (!PatrolsModule.Running) return;
             if(Time.time<_next||Data==null)return;_next=Time.time+0.5f;Park();
-            var marker=GetComponent<PatrolMarker>();bool trading=Ready&&!TrafficFactions.PlayerHostile(Data.types.Length>0?marker?.Faction:"Coyotes");
+            if(_marker==null)_marker=GetComponent<PatrolMarker>();var marker=_marker;bool trading=Ready&&!TrafficFactions.PlayerHostile(Data.types.Length>0?marker?.Faction:"Coyotes");
             foreach(var f in _sellers)if(f!=null&&f.enabled!=trading){f.enabled=trading;if(trading)f.Fsm.SetState("trigger");}
             ObserveStock(trading);
             CleanProbes();
+        }
+        // Perf: each stock item's ForBuy / Value / Buyable FSMs found once per item (was GetComponents + LINQ x3 per item, 2/s)
+        private sealed class ItemFsms{internal GameObject Item;internal PlayMakerFSM Buy,Value,Buyable;}
+        private readonly Dictionary<MerchantStock,ItemFsms> _itemFsms=new Dictionary<MerchantStock,ItemFsms>();
+        private static readonly List<PlayMakerFSM> _fs=new List<PlayMakerFSM>();
+        private ItemFsms FsmsOf(MerchantStock record,GameObject item)
+        {
+            if(_itemFsms.TryGetValue(record,out var c)&&ReferenceEquals(c.Item,item))return c;
+            c=new ItemFsms{Item=item};_fs.Clear();item.GetComponents(_fs);
+            foreach(var f in _fs){if(f==null)continue;if(c.Buy==null&&f.FsmName=="ForBuy")c.Buy=f;else if(c.Value==null&&f.FsmName=="Value")c.Value=f;else if(c.Buyable==null&&f.FsmName=="Buyable")c.Buyable=f;}
+            _fs.Clear();_itemFsms[record]=c;return c;
         }
         private void ObserveStock(bool trading)
         {
             foreach(var pair in _stock)
             {
                 var item=pair.Value;if(pair.Key.purchased)continue;if(item==null){pair.Key.purchased=true;continue;}
-                var buy=item.GetComponents<PlayMakerFSM>().FirstOrDefault(f=>f.FsmName=="ForBuy");
+                var fsms=FsmsOf(pair.Key,item);var buy=fsms.Buy!=null?fsms.Buy:null;
                 if(Ready&&buy?.FsmVariables.FindFsmInt("ForBuyInt")?.Value==0){pair.Key.purchased=true;item.transform.SetParent(null,true);foreach(var a in item.GetComponentsInChildren<Collider>(true))foreach(var b in _chassis??new Collider[0])if(a!=null&&b!=null&&a!=b)Physics.IgnoreCollision(a,b,false);continue;}
-                var value=item.GetComponents<PlayMakerFSM>().FirstOrDefault(f=>f.FsmName=="Value")?.FsmVariables.FindFsmInt("BuyValue");if(value!=null)pair.Key.buyPrice=value.Value;
-                var buyable=item.GetComponents<PlayMakerFSM>().FirstOrDefault(f=>f.FsmName=="Buyable");if(buyable!=null)buyable.enabled=trading;
+                var value=fsms.Value!=null?fsms.Value.FsmVariables.FindFsmInt("BuyValue"):null;if(value!=null)pair.Key.buyPrice=value.Value;
+                var buyable=fsms.Buyable;if(buyable!=null&&buyable.enabled!=trading)buyable.enabled=trading;
             }
         }
         internal string Snapshot()

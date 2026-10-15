@@ -77,6 +77,7 @@ namespace WildWasteland.Modules.PlayerBody
         private static bool _hooked;
         private static readonly List<Renderer> _hidden = new List<Renderer>();
         private static float _nextScan, _dist, _aimDist = 20f;
+        private static int _aimRayFrame = -10; private static float _aimRayDist = 100f;
         private static readonly int Mask = ~((1 << 6) | (1 << 2) | (1 << 5) | (1 << 9) | (1 << 22));   // not the player, ignore-raycast, UI, loose items, map icons
 
         // cars: our third person also works in the car (the game's own car view is replaced: it switches the whole first-person camera off, so
@@ -118,9 +119,6 @@ namespace WildWasteland.Modules.PlayerBody
                 {
                     if (ModAPI.PlayerTraversalActive || ClimbingController.Instance != null && ClimbingController.Instance.TryJumpClimb()) return false;
                 }
-                // VEHICLE owns the headlight binding; avoid toggling twice with the vanilla key.
-                if (kind == BtnHeadlight && PlayerBodyModule.Running && Game.InCar)
-                    return false;
                 if (kind == BtnCarCamera && PlayerBodyModule.Running && PlayerBodyModule.ThirdPersonOnFoot.Value
                     && __instance.buttonName != null && __instance.buttonName.Value == "Change Camera")
                     return false;   // the car's DriveTrigger [Camera] toggle: our Tick handles Change Camera in the car too
@@ -236,7 +234,8 @@ namespace WildWasteland.Modules.PlayerBody
         private static int _viewFrame = -1;
         private static Vector3 _vPos, _vEye; private static Quaternion _vRot = Quaternion.identity; private static float _vFov = 60f, _gameFov = 60f;
         private static Transform _vCar; private static bool _vCutaway;
-        private static bool _projSet; private static int _zoomLogs; private static string _xhairWhat = ""; private static float _xhairDist;
+        private static bool _projSet; private static int _zoomLogs; private static Collider _xhairCol;
+        private static string XhairWhat { get { return _xhairCol != null ? _xhairCol.name + " (layer " + _xhairCol.gameObject.layer + ")" : "nothing"; } } private static float _xhairDist;
         private static bool _transparentProjection;
         public static Matrix4x4 Projection(Camera cam, float fov) { return Matrix4x4.Perspective(fov, cam.aspect, cam.nearClipPlane, cam.farClipPlane); }
         private static void ComputeView(Camera cam)
@@ -296,8 +295,15 @@ namespace WildWasteland.Modules.PlayerBody
             float conv = (1f - _dynK) * (1f - Mathf.Clamp01((Mathf.Abs(_orbitYaw) + Mathf.Abs(_orbitPitch)) / 10f));
             if (conv > 0.001f && !dead)
             {
-                RaycastHit ah;
-                float want2 = Physics.Raycast(t.position, t.forward, out ah, 100f, Mask, QueryTriggerInteraction.Ignore) ? Mathf.Max(ah.distance, 0.8f) : 100f;
+                // (WW perf, D15) the 100 m ray every other frame (the distance is low-pass filtered below; the crosshair's eye ray uses other
+                // layers/filters, so it can't be reused); at once when it hasn't run for 2+ frames. Worst case: the target distance 1 frame old.
+                if (Time.frameCount - _aimRayFrame >= 2 || Time.frameCount < _aimRayFrame)
+                {
+                    _aimRayFrame = Time.frameCount;
+                    RaycastHit ah;
+                    _aimRayDist = Physics.Raycast(t.position, t.forward, out ah, 100f, Mask, QueryTriggerInteraction.Ignore) ? Mathf.Max(ah.distance, 0.8f) : 100f;
+                }
+                float want2 = _aimRayDist;
                 // fast toward nearer targets, a bit slower when the target goes away (no flicker on edges)
                 float k = 1f - Mathf.Exp(-Time.unscaledDeltaTime * (want2 < _aimDist ? 20f : 8f));
                 _aimDist = Mathf.Lerp(_aimDist, want2, k);
@@ -348,7 +354,7 @@ namespace WildWasteland.Modules.PlayerBody
                 cam.useJitteredProjectionMatrixForTransparentRendering = true;
                 cam.projectionMatrix = Projection(cam, _vFov); _projSet = true;
                 if (_zoomLogs < 3 && AimZoom && _zoomK >= 1f) PlayerBodyModule.Info("Aim transparent projection: original=" + _transparentProjection + ", zoom projection=" + cam.useJitteredProjectionMatrixForTransparentRendering + ", raw m11=" + cam.nonJitteredProjectionMatrix.m11.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) + ", zoom m11=" + cam.projectionMatrix.m11.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture));
-                if (_zoomLogs < 3 && AimZoom && _zoomK >= 1f) { _zoomLogs++; PlayerBodyModule.Info("Aim zoom check: game FOV " + _gameFov.ToString("0.0") + " -> view FOV " + _vFov.ToString("0.0") + ", camera FOV now " + cam.fieldOfView.ToString("0.0") + ", physical camera " + cam.usePhysicalProperties + ", crosshair on " + _xhairWhat + " at " + _xhairDist.ToString("0.0") + " m, screen " + CrosshairScreen.ToString("F0")); }
+                if (_zoomLogs < 3 && AimZoom && _zoomK >= 1f) { _zoomLogs++; PlayerBodyModule.Info("Aim zoom check: game FOV " + _gameFov.ToString("0.0") + " -> view FOV " + _vFov.ToString("0.0") + ", camera FOV now " + cam.fieldOfView.ToString("0.0") + ", physical camera " + cam.usePhysicalProperties + ", crosshair on " + XhairWhat + " at " + _xhairDist.ToString("0.0") + " m, screen " + CrosshairScreen.ToString("F0")); }
             }
             else if (_projSet) { cam.useJitteredProjectionMatrixForTransparentRendering = _transparentProjection; cam.ResetProjectionMatrix(); _projSet = false; }
             ViewFov = _vFov;
@@ -402,8 +408,8 @@ namespace WildWasteland.Modules.PlayerBody
                 best = _eyeHits[i].distance; hitPoint = _eyeHits[i].point;
             }
             _xhairDist = best < float.MaxValue ? best : -1f;
-            _xhairWhat = "nothing";
-            for (int i = 0; i < n; i++) if (_eyeHits[i].collider != null && _eyeHits[i].distance == best) { _xhairWhat = _eyeHits[i].collider.name + " (layer " + _eyeHits[i].collider.gameObject.layer + ")"; break; }
+            _xhairCol = null;   // (WW perf) the collider only; its name is built when the zoom check logs it (was a string every frame)
+            for (int i = 0; i < n; i++) if (_eyeHits[i].collider != null && _eyeHits[i].distance == best) { _xhairCol = _eyeHits[i].collider; break; }
             if (muzzleRay)
             {
                 var d = hitPoint - muzzle; float distance = d.magnitude;
@@ -418,7 +424,7 @@ namespace WildWasteland.Modules.PlayerBody
                         if (c == null || _eyeHits[i].distance >= best || Mine(c.transform) || !guns.BlocksProjectile(c)) continue;
                         best = _eyeHits[i].distance; hitPoint = _eyeHits[i].point; obstruction = c;
                     }
-                    if (obstruction != null) { _xhairDist = best; _xhairWhat = obstruction.name + " (layer " + obstruction.gameObject.layer + ")"; }
+                    if (obstruction != null) { _xhairDist = best; _xhairCol = obstruction; }
                 }
             }
             var vp = Projection(cam, fov) * Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * Matrix4x4.TRS(pos, viewRot, Vector3.one).inverse;
@@ -463,7 +469,8 @@ namespace WildWasteland.Modules.PlayerBody
                 PlayerBodyModule.Verbose("Crosshair: dynamic cursor icons " + string.Join(", ", n.ToArray()));
             }
             var parent = _xhair.parent as RectTransform;
-            var canvas = _xhair.GetComponentInParent<Canvas>();
+            if (!ReferenceEquals(_xhairCanvasFor, _xhair) || _xhairCanvas == null) { _xhairCanvasFor = _xhair; _xhairCanvas = _xhair.GetComponentInParent<Canvas>(); }   // (WW perf) cached per crosshair
+            var canvas = _xhairCanvas;
             if (parent == null || canvas == null) return;
             var root = canvas.rootCanvas;
             Camera uiCam = root.renderMode == RenderMode.ScreenSpaceOverlay ? null : root.worldCamera;
@@ -479,6 +486,7 @@ namespace WildWasteland.Modules.PlayerBody
             for (int i = 0; i < _cursors.Length; i++) if (_cursors[i] != null) _cursors[i].localPosition = _cursorHome[i] + delta;
         }
 
+        private static Canvas _xhairCanvas; private static RectTransform _xhairCanvasFor;
         private static GameObject FindCursor()
         {
             for (int i = 0; i < CursorNames.Length; i++) { var g = GameObject.Find(CursorNames[i]); if (g != null && g.transform.parent != null) return g; }
@@ -522,10 +530,16 @@ namespace WildWasteland.Modules.PlayerBody
                 if (h == null) { _hidden.RemoveAt(i); continue; }
                 if (!h.transform.IsChildOf(Game.PlayerCamera) || hand != null && h.transform.IsChildOf(hand)) { h.forceRenderingOff = false; _hidden.RemoveAt(i); }   // dropped / picked up
             }
-            foreach (var r in Game.PlayerCamera.GetComponentsInChildren<Renderer>(true))
+            Game.PlayerCamera.GetComponentsInChildren<Renderer>(true, _scanRenderers);   // (WW perf) List overload, no array per scan
+            for (int i = 0; i < _scanRenderers.Count; i++)
+            {
+                var r = _scanRenderers[i];
                 if (r != null && !r.forceRenderingOff && (hand == null || !r.transform.IsChildOf(hand))) { r.forceRenderingOff = true; _hidden.Add(r); }
+            }
+            _scanRenderers.Clear();
         }
 
+        private static readonly List<Renderer> _scanRenderers = new List<Renderer>();
         private static void ShowViewModel()
         {
             foreach (var r in _hidden) if (r != null) r.forceRenderingOff = false;

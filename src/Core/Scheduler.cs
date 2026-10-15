@@ -37,6 +37,7 @@ namespace WildWasteland.Core
         internal int BudgetMicros;      // sliced
         internal bool Removed;
         internal bool Scaled;           // interval uses Time.time (pauses with the game) instead of unscaled time
+        internal Func<bool> Wants;      // Gui jobs: null = always draws; else drawn (and the GUI runner kept on) only while it returns true
 
         public long Calls;
         public double TotalMs, LastMs, MaxMs;
@@ -104,10 +105,37 @@ namespace WildWasteland.Core
             return j;
         }
 
-        /// <summary>OnGUI draw job (Phase.Gui).</summary>
+        /// <summary>OnGUI draw job (Phase.Gui). Always called (no predicate): keeps the GUI runner on every frame.</summary>
         public static Job Gui(IModule owner, string name, Action draw)
         {
             return EveryFrame(owner, name, draw, Phase.Gui);
+        }
+
+        /// <summary>
+        /// OnGUI draw job that only draws while <paramref name="wants"/> returns true (checked once a frame after LateUpdate and before each
+        /// call). When no Gui job wants to draw and the F7 window is closed, Unity's OnGUI (Layout + Repaint + every input event) is not run at all.
+        /// The predicate must be cheap and must not allocate.
+        /// </summary>
+        public static Job Gui(IModule owner, string name, Action draw, Func<bool> wants)
+        {
+            var j = EveryFrame(owner, name, draw, Phase.Gui);
+            j.Wants = wants;
+            return j;
+        }
+
+        /// <summary>True when some Gui job has to run this frame (no predicate, or its predicate is true). Called by the runner.</summary>
+        internal static bool GuiWanted()
+        {
+            var list = _jobs[(int)Phase.Gui];
+            for (int i = 0; i < list.Count; i++)
+            {
+                var j = list[i];
+                if (j.Removed || !j.Enabled) continue;
+                if (j.Wants == null) return true;
+                try { if (j.Wants()) return true; }
+                catch (Exception e) { j.Wants = null; Log.Error("[" + (j.Owner != null ? j.Owner.Id : "Core") + "] Gui job '" + j.Name + "' predicate failed - now always drawn", e); return true; }
+            }
+            return false;
         }
 
         public static Coroutine StartCoroutine(IEnumerator routine)
@@ -154,6 +182,12 @@ namespace WildWasteland.Core
                 var j = list[i];
                 if (j.Removed) { list.RemoveAt(i); i--; continue; }
                 if (!j.Enabled) continue;
+                if (j.Wants != null)
+                {
+                    bool want;
+                    try { want = j.Wants(); } catch (Exception) { want = true; j.Wants = null; }
+                    if (!want) continue;
+                }
                 if (j.Interval > 0)
                 {
                     double now = j.Scaled ? scaled : unscaled;

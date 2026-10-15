@@ -10,14 +10,23 @@ namespace WildWasteland.Modules.Patrols
     {
         internal static bool IsTrailer(GameObject go)
         {
-            return go != null && go.GetComponents<PlayMakerFSM>().Any(f => f != null && f.FsmName == "TrailerAttached");
+            if (go == null) return false;
+            Fs.Clear(); go.GetComponents(Fs); bool found = false;
+            foreach (var f in Fs) if (f != null && f.FsmName == "TrailerAttached") { found = true; break; }
+            Fs.Clear(); return found;
         }
 
+        private static readonly System.Collections.Generic.List<ConfigurableJoint> Joints = new System.Collections.Generic.List<ConfigurableJoint>();
+        private static readonly System.Collections.Generic.List<PlayMakerFSM> Fs = new System.Collections.Generic.List<PlayMakerFSM>();
+        private static ConfigurableJoint[] _joints = new ConfigurableJoint[0]; private static int _jointsFrame = -1;
         internal static bool Connected(GameObject car, GameObject trailer)
         {
             if (car == null || trailer == null) return false;
             var rb = car.GetComponent<Rigidbody>();
-            return rb != null && trailer.GetComponents<ConfigurableJoint>().Any(j => j != null && j.connectedBody == rb);
+            if (rb == null) return false;
+            Joints.Clear(); trailer.GetComponents(Joints);   // Perf: List overload, no LINQ closure (per frame from RiderGuard)
+            bool found = false; foreach (var j in Joints) if (j != null && j.connectedBody == rb) { found = true; break; }
+            Joints.Clear(); return found;
         }
 
         internal static GameObject Attached(GameObject car)
@@ -33,7 +42,9 @@ namespace WildWasteland.Modules.Patrols
             }
             var rb = car.GetComponent<Rigidbody>();
             if (rb == null) return null;
-            foreach (var j in UnityEngine.Object.FindObjectsOfType<ConfigurableJoint>())
+            // Perf: one scene-wide joint scan per frame shared by every caller (cleanup bursts, camp clearance checks)
+            if (_jointsFrame != Time.frameCount) { _jointsFrame = Time.frameCount; _joints = UnityEngine.Object.FindObjectsOfType<ConfigurableJoint>(); }
+            foreach (var j in _joints)
                 if (j != null && j.connectedBody == rb && IsTrailer(j.gameObject)) return j.gameObject;
             return null;
         }

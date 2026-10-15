@@ -95,6 +95,10 @@ namespace WildWasteland.Modules.NPC
             public FsmFloat HpVar; public float HpMax;   // the Health FSM's Health, and the most it was seen at
             public bool Travel; public float RunZ;
             public float Boost = 1f, BoostUntil;
+            public bool WasEngaged;                        // (perf) engaged last frame: a fresh engagement gets a random think phase
+            public WeaponRanges.HandCache Hands;           // (perf) hand bones / gun candidates, scanned once (WeaponOf)
+            public bool GunPoses; public float GunPosesAt = -10f; public string GunPosesKey;   // (perf) ApBody.HasPoses(WeaponKey), re-read on a new key or after 1 s
+            public Fsm MultyFsm; public FsmInt MultyVar;   // (perf) the Damage Ranged FSM's "multyAttack" counter
             public bool Halted;                            // (1.8.0) DogBite: in reach of its target - stands (and DogBite turns it)          // (1.7.0) a nest alarm: runs this many times faster until then       // (1.4.0) a hunter under the ground (Burrow): paused; the fastest pedal the game gave it (its run speed)
         }
 
@@ -111,7 +115,7 @@ namespace WildWasteland.Modules.NPC
         private static readonly HashSet<int> _ignored = new HashSet<int>();
         private static readonly List<int> _dead = new List<int>();
         private static float _nextCount, _interval = 0.1f;
-        private static int _active, _created;
+        private static int _active, _created, _engagedFrame;
         // layers (TagManager): 0 Default, 6 Player, 8 Car, 9 Item, 10 Actor, 11 Door, 14 Ground, 16 SeeTrough, 18 PhysicsLock
         private static readonly int GroundMask = (1 << 0) | (1 << 8) | (1 << 11) | (1 << 14) | (1 << 16);   // + Ground: for the drop check
         private static readonly int LosMask = GroundMask;          // line of sight for the shooting decision: a hill crest hides the target too
@@ -122,7 +126,7 @@ namespace WildWasteland.Modules.NPC
         private static readonly float[] _scores = new float[32];
         private static readonly float[] _blocks = new float[32];
 
-        public static void OnSceneLoaded() { foreach (var kv in _npcs) if (kv.Value.Body != null) ApBody.Detach(kv.Value.Body); _npcs.Clear(); _ignored.Clear(); _arrive.Clear(); _active = 0; ReloadSounds.Clear(); _pending.Clear(); ApBody.Reset(); }
+        public static void OnSceneLoaded() { foreach (var kv in _npcs) if (kv.Value.Body != null) ApBody.Detach(kv.Value.Body); _npcs.Clear(); _ignored.Clear(); _arrive.Clear(); _active = 0; ReloadSounds.Clear(); _pending.Clear(); _pendingAt.Clear(); ApBody.Reset(); }
 
         // (WW) module shutdown: every brain lets go (the game's pedal, facing, Unstuck and animation again), kneeling gunmen stand up, frozen
         // aim poses play on, bodies animated by the player animation framework are handed back
@@ -137,7 +141,7 @@ namespace WildWasteland.Modules.NPC
                 n.Halted = false; n.Travel = false; n.BoostUntil = 0f;
                 if (n.Body != null) { try { ApBody.Detach(n.Body); } catch (Exception) { } n.Body = null; }
             }
-            _npcs.Clear(); _pending.Clear(); _ignored.Clear();
+            _npcs.Clear(); _pending.Clear(); _pendingAt.Clear(); _ignored.Clear();
         }
 
         // (WW) floating origin: the scene-space points a brain keeps across thinks
@@ -190,6 +194,10 @@ namespace WildWasteland.Modules.NPC
             if (ApBody.Available) RegisterPending();        // spawned gunmen get their rig before they ever engage
             bool on = On;
             float turn = Mathf.Max(10f, NpcModule.TurnRate.Value) * dt;
+            // (perf) per-frame think cap: the engaged NPCs' average thinks per frame + 1; one over the cap keeps its overdue NextTick and
+            // thinks next frame (an alert no longer runs every overdue think in one frame)
+            int engagedPrev = _engagedFrame; _engagedFrame = 0;
+            int thinks = 0, thinkCap = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(_active, engagedPrev) * dt / Mathf.Max(0.01f, _interval)) + 1);
             foreach (var kv in _npcs)
             {
                 var n = kv.Value;
@@ -216,12 +224,19 @@ namespace WildWasteland.Modules.NPC
                 if (n.Reloading) ReloadSounds.Tick(n, now);                                           // (1.1.2) the reload's sounds, rig or not
                 if (!engaged)
                 {
+                    n.WasEngaged = false;
                     if (n.Mode != Mode.Off) SetMode(n, Mode.Off, "target lost");
                     continue;
                 }
-                if (now >= n.NextTick)
+                _engagedFrame++;
+                float step = _interval * n.TickScale;
+                // (perf) a fresh engagement (or a timer left far behind while skipped) starts at a random phase within one base interval:
+                // a camp alerted by one shot no longer thinks in one frame and stays phase-locked
+                if (!n.WasEngaged || now - n.NextTick > 2f * step + 0.1f) { n.WasEngaged = true; n.NextTick = now + UnityEngine.Random.value * _interval; }
+                if (now >= n.NextTick && thinks < thinkCap)
                 {
-                    n.NextTick = now + _interval * n.TickScale;
+                    thinks++;
+                    n.NextTick += step; if (n.NextTick < now) n.NextTick = now + step;     // keeps its phase
                     try { Think(n, now); }
                     catch (Exception e)
                     {
@@ -290,18 +305,29 @@ namespace WildWasteland.Modules.NPC
 
         // CreateObject postfix (Senses): a spawned NPC is registered as soon as its FSMs are up, so its gun is in the right hand from the
         // first frames, not only when it first engages
+        // (perf/fix) only what Make can accept is queued (a root object with a Rigidbody: CreateObject never parents); an entry leaves
+        // 5 s after it was first checked, and a full queue drops its oldest entry (an inactive item used to stay for good and, at 200,
+        // kept new NPCs out); a dropped NPC still registers on its first Movement SetVelocity as before
         private static readonly List<GameObject> _pending = new List<GameObject>();
-        internal static void Spawned(GameObject made) { if (made != null && _pending.Count < 200) _pending.Add(made); }
+        private static readonly List<float> _pendingAt = new List<float>();
+        internal static void Spawned(GameObject made)
+        {
+            if (made == null || made.transform.parent != null || made.GetComponent<Rigidbody>() == null) return;
+            if (_pending.Count >= 200) { _pending.RemoveAt(0); _pendingAt.RemoveAt(0); }
+            _pending.Add(made); _pendingAt.Add(-1f);
+        }
         private static void RegisterPending()
         {
             if (_pending.Count == 0) return;
+            float now = Time.time;
             for (int i = _pending.Count - 1; i >= 0; i--)
             {
                 var go = _pending[i];
-                if (go == null) { _pending.RemoveAt(i); continue; }
+                if (_pendingAt[i] < 0f) _pendingAt[i] = now;      // the clock starts when the queue is first worked (the animation framework may load later)
+                if (go == null || now - _pendingAt[i] > 5f) { _pending.RemoveAt(i); _pendingAt.RemoveAt(i); continue; }
                 if (!go.activeInHierarchy) continue;
                 var n = Of(go);
-                if (n != null || !_retry) _pending.RemoveAt(i);       // registered, or not an NPC of ours
+                if (n != null || !_retry) { _pending.RemoveAt(i); _pendingAt.RemoveAt(i); }       // registered, or not an NPC of ours
             }
         }
 
@@ -1178,7 +1204,7 @@ namespace WildWasteland.Modules.NPC
             if (n.WeaponDirty || (n.Weapon == null ? now >= n.RigTried + 0.5f : !n.Weapon.gameObject.activeInHierarchy))
             {
                 n.WeaponDirty = false; n.RigTried = now;      // (nothing held: looked again twice a second at most)
-                var w = WeaponRanges.WeaponOf(n.Owner);
+                var w = HeldWeapon(n);
                 if (w != n.Weapon)
                 {
                     n.Weapon = w; n.WeaponKey = ApBody.WeaponKey(w);
@@ -1186,9 +1212,9 @@ namespace WildWasteland.Modules.NPC
                     n.Cocks = w != null && ApBody.Cocks(n.WeaponKey);
                     if (NpcModule.BrainLog.Value) NpcModule.Log.LogInfo("Brain: " + n.Owner.name + " now holds " + (w != null ? n.WeaponKey + (n.Cocks ? " (cocked after each burst)" : "") : "nothing"));
                 }
-                ApBody.SetWeapon(body, w != null && w.gameObject.activeInHierarchy && ApBody.HasPoses(n.WeaponKey) ? w : null, n.WeaponKey);   // a gun goes to the right hand; anything else stays where it is
+                ApBody.SetWeapon(body, w != null && w.gameObject.activeInHierarchy && GunPoses(n, now) ? w : null, n.WeaponKey);   // a gun goes to the right hand; anything else stays where it is
             }
-            bool gun = n.Weapon != null && ApBody.HasPoses(n.WeaponKey);     // a gun the player's table knows (a machete out: the game's clips)
+            bool gun = n.Weapon != null && GunPoses(n, now);     // a gun the player's table knows (a machete out: the game's clips)
             bool dead = n.HpVar != null && n.HpMax > 0f && n.HpVar.Value <= 0f;
             bool melee = state == "attack_melee";
             bool off = !gun || dead || melee || n.T.parent != null || !NpcModule.ApocaplayerClips.Value;
@@ -1233,6 +1259,20 @@ namespace WildWasteland.Modules.NPC
             n.SpeedCap = ApBody.SpeedCap(body);                                                  // no faster than the clips carry the feet
         }
 
+        // (perf) WeaponOf over the NPC's cached hand bones (scanned again if the skeleton went away)
+        private static Transform HeldWeapon(Npc n)
+        {
+            var c = n.Hands;
+            if (c == null || (c.Hands.Length > 0 && c.Hands[0] == null)) n.Hands = c = WeaponRanges.ScanHands(n.Owner);
+            return WeaponRanges.WeaponOf(n.Owner, c);
+        }
+        // (perf) ApBody.HasPoses(WeaponKey), cached per key and re-read once a second (a pose table edited live is seen within 1 s)
+        private static bool GunPoses(Npc n, float now)
+        {
+            if (now >= n.GunPosesAt || !ReferenceEquals(n.GunPosesKey, n.WeaponKey)) { n.GunPosesKey = n.WeaponKey; n.GunPoses = ApBody.HasPoses(n.WeaponKey); n.GunPosesAt = now + 1f; }
+            return n.GunPoses;
+        }
+
         // ---------- (1.1.2) magazines ----------
         private static Dictionary<string, int> _mags; private static string _magSrc;
         internal static int MagazineOf(string weaponKey)
@@ -1261,11 +1301,12 @@ namespace WildWasteland.Modules.NPC
             n.Shots++;
             if (n.Magazine <= 0 && n.Weapon == null)
             {
-                n.Weapon = WeaponRanges.WeaponOf(owner); n.WeaponKey = ApBody.WeaponKey(n.Weapon); n.Magazine = MagazineOf(n.WeaponKey);
+                n.Weapon = HeldWeapon(n); n.WeaponKey = ApBody.WeaponKey(n.Weapon); n.Magazine = MagazineOf(n.WeaponKey);
             }
             if (n.Magazine > 0 && n.Shots >= n.Magazine && damageRanged != null)
             {
-                var cnt = damageRanged.Variables.GetFsmInt("multyAttack");
+                if (!ReferenceEquals(n.MultyFsm, damageRanged)) { n.MultyFsm = damageRanged; n.MultyVar = damageRanged.Variables.GetFsmInt("multyAttack"); }
+                var cnt = n.MultyVar;
                 if (cnt != null) cnt.Value = 1000;
             }
         }
@@ -1279,7 +1320,7 @@ namespace WildWasteland.Modules.NPC
             if (n.Weapon == null)
             {
                 // no rig (Apocaplayer absent): the gun is looked up here, once per burst until found
-                n.Weapon = WeaponRanges.WeaponOf(owner); n.WeaponKey = ApBody.WeaponKey(n.Weapon);
+                n.Weapon = HeldWeapon(n); n.WeaponKey = ApBody.WeaponKey(n.Weapon);
                 n.Shots = 0; n.Magazine = MagazineOf(n.WeaponKey);
             }
             if (n.Magazine <= 0) return false;
@@ -1326,7 +1367,21 @@ namespace WildWasteland.Modules.NPC
                 var fsm = __instance.Fsm;
                 if (fsm == null) return;
                 var n = Get(fsm.GameObject);
-                if (n != null && n.Body != null) n.WeaponDirty = true;
+                if (n == null || n.Body == null || n.WeaponDirty) return;
+                // (perf) only a toggle under (or above) a hand bone, or of the held gun, can change what the hand holds; a muzzle flash or
+                // another prop elsewhere on the body no longer re-scans the gun. ActivateGameObjects (several targets): as before.
+                var one = __instance as ActivateGameObject;
+                if (one != null)
+                {
+                    var go = fsm.GetOwnerDefaultTarget(one.gameObject);
+                    if (go != null && n.Hands != null)
+                    {
+                        var gt = go.transform;
+                        if (n.Weapon != null && gt != n.Weapon && gt.IsChildOf(n.Weapon)) return;      // a muzzle flash of the held gun: still held
+                        if (gt != n.Weapon && !WeaponRanges.UnderHand(n.Hands, gt)) return;
+                    }
+                }
+                n.WeaponDirty = true;
             }
             catch (Exception) { }
         }

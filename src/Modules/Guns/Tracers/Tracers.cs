@@ -45,6 +45,10 @@ namespace WildWasteland.Modules.Guns
             public float DmgMult;            // damage left after the car parts it went through (1 = none)
             public int Passed, Passed0, Passed1;   // car parts gone through (at most 2) and their instance ids
             public bool Orb;                 // (1.1.0) a monster's projectile (Orbs.cs): penetrates like a pistol bullet
+            // (WW perf, D2) fixed-rate flight: Pos is simulated up to Ahead seconds past the frame time, Prev = Pos before the last step of
+            // StepLen seconds; the drawn bullet is between them (RenderOf)
+            public float Ahead, StepLen;
+            public Vector3 Prev;
         }
 
         // A first-person gun under PlayerCamera/WeaponsArm/Parent/<gun>: its Attack FSM, the Raycast it fires and the states that
@@ -240,7 +244,7 @@ namespace WildWasteland.Modules.Guns
         // (WW) FloatingOrigin jumped: bullets in flight move with the world (Gunplay did not handle this; they jumped 1000 m)
         internal static void OriginShift(Vector3 delta)
         {
-            for (int i = 0; i < _shots.Count; i++) { var s = _shots[i]; s.Pos += delta; s.Start += delta; _shots[i] = s; }
+            for (int i = 0; i < _shots.Count; i++) { var s = _shots[i]; s.Pos += delta; s.Start += delta; s.Prev += delta; _shots[i] = s; }
             _playerLast += delta;
         }
 
@@ -1028,8 +1032,10 @@ namespace WildWasteland.Modules.Guns
                 foreach (var f in AttackFsms(w))
                 {
                     if (f == null || f.Fsm == null || !f.Fsm.Initialized) continue;
-                    string cur = f.ActiveStateName, prev;
                     int fid = f.GetInstanceID();
+                    float known;
+                    if (_wDamage.TryGetValue(fid, out known) && float.IsNaN(known)) break;   // (WW perf) a gun's Attack FSM (known not melee): nothing to track
+                    string cur = f.ActiveStateName, prev;
                     _wPrev.TryGetValue(fid, out prev);
                     _wPrev[fid] = cur;
                     if (active != null) break;
@@ -1157,12 +1163,23 @@ namespace WildWasteland.Modules.Guns
             if (dt <= 0f) { if (!_drawnPaused) { Draw(); _drawnPaused = true; } return; }   // paused: the mesh is drawn once and left as it is
             _drawnPaused = false;
             if (GunsModule.Lead) TrackPlayer(dt);
+            // (WW perf, D2) bullets fly in fixed 1/60 s steps instead of one cast per bullet per frame: a bullet is stepped only once its
+            // simulated time is used up, then by whole ticks covering this frame in ONE swept cast (below 60 fps that is one step per frame of
+            // the same length as before; above it, ~60 casts a second whatever the fps). The path swept is the same; a hit can land up to
+            // 1/60 s before the frame that would have reached it. Drawn per frame between the last two simulated points.
             for (int i = _shots.Count - 1; i >= 0; i--)
             {
                 var s = _shots[i];
-                try { Step(ref s, dt); }
-                catch (Exception e) { s.Alive = false; Core.Log.Error("[Guns] Tracers: bullet dropped", e); }
-                if (s.Alive) { MoveBolt(ref s); _shots[i] = s; }
+                s.Ahead -= dt;
+                if (s.Ahead <= 0f)
+                {
+                    int ticks = Mathf.Max(1, Mathf.CeilToInt(-s.Ahead * SimHz - 1e-3f));
+                    float st = ticks / SimHz;
+                    s.Prev = s.Pos; s.StepLen = st; s.Ahead += st;
+                    try { Step(ref s, st); }
+                    catch (Exception e) { s.Alive = false; Core.Log.Error("[Guns] Tracers: bullet dropped", e); }
+                }
+                if (s.Alive) { Vector3 rp; float rt; RenderOf(ref s, out rp, out rt); MoveBoltAt(ref s, rp); _shots[i] = s; }
                 else { if (s.Visual != null) UnityEngine.Object.Destroy(s.Visual.gameObject); _shots.RemoveAt(i); }
             }
             if (Time.unscaledTime >= _nextSweep) { _nextSweep = Time.unscaledTime + 30f; Sweep(); }
@@ -1194,6 +1211,18 @@ namespace WildWasteland.Modules.Guns
                 }
             }
             Draw();
+        }
+
+        private const float SimHz = 60f;
+        // where the bullet is drawn this frame: between Prev and Pos by the share of the last step already elapsed (Pos itself before the first
+        // step), and how far it has travelled there
+        private static void RenderOf(ref Shot s, out Vector3 pos, out float travelled)
+        {
+            pos = s.Pos; travelled = s.Travelled;
+            if (s.StepLen <= 0f || s.Ahead <= 0f) return;
+            float f = Mathf.Clamp01(1f - s.Ahead / s.StepLen);
+            pos = Vector3.LerpUnclamped(s.Prev, s.Pos, f);
+            travelled = Mathf.Max(0f, s.Travelled - (1f - f) * Vector3.Distance(s.Prev, s.Pos));
         }
 
         // caches keyed by dead NPCs would otherwise hold their objects until the next scene load
@@ -1728,9 +1757,10 @@ namespace WildWasteland.Modules.Guns
                     if (s.Bolt) continue;
                     if (!tracers && !mine && !s.Bolt) continue;
                     if (!s.Bolt && (!tracers || (s.Gun != null && !mine))) continue;      // [Gunplay] Tracers / PlayerGunTracers (bolts always show)
-                    float len = Mathf.Min(s.Bolt ? bl : tl, s.Travelled);
+                    var sr = s; Vector3 rp; float rt; RenderOf(ref sr, out rp, out rt);   // (WW perf, D2) the drawn point of this frame
+                    float len = Mathf.Min(s.Bolt ? bl : tl, rt);
                     if (len <= 0.01f) continue;
-                    Vector3 head = s.Pos, tail = s.Pos - s.Dir * len;
+                    Vector3 head = rp, tail = rp - s.Dir * len;
                     Vector3 side = Vector3.Cross(s.Dir, (head - eye).normalized);
                     if (side.sqrMagnitude < 1e-6f) continue;
                     side = side.normalized * ((s.Bolt ? bw : tw) * 0.5f);

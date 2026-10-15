@@ -47,7 +47,7 @@ namespace WildWasteland.Modules.Patrols
         private readonly System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<FsmFloat, float>> _heat =
             new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<FsmFloat, float>>();   // engine heat values + originals
         private bool _vacated;                // the crew is gone (dead or bailed): the self-destruct has been scheduled
-        private Collider[] _carColliders;
+        private readonly System.Collections.Generic.List<Collider> _carColliders = new System.Collections.Generic.List<Collider>(); private bool _carCollidersKnown;   // Perf: List overload, refilled in place
 
         private PatrolMarker Marker { get { if (_marker == null && _car != null) _marker = _car.GetComponent<PatrolMarker>(); return _marker; } }
 
@@ -285,7 +285,7 @@ namespace WildWasteland.Modules.Patrols
                 var pax = marker != null ? marker.Passenger : null;
                 if ((!_dead && _driver != null) || pax != null)
                 {
-                    if(_carColliders==null||Hold)_carColliders=_car.GetComponentsInChildren<Collider>(true);
+                    if(!_carCollidersKnown||Hold){_carCollidersKnown=true;_car.GetComponentsInChildren(true,_carColliders);}
                     var carCols = _carColliders;
                     if (!_dead && _driver != null) Patrol.IgnoreCollisionsIfChanged(_driver, _car, carCols);
                     if (pax != null) Patrol.IgnoreCollisionsIfChanged(pax, _car, carCols);
@@ -358,7 +358,7 @@ namespace WildWasteland.Modules.Patrols
         }
 
         // convoy: every car of the group is released together
-        internal void Release() { Hold = false; _carColliders=null; }
+        internal void Release() { Hold = false; _carCollidersKnown=false; }
 
         // NWH samples its input on the physics step, so the inputs are written here, not in Update.
         private void FixedUpdate()

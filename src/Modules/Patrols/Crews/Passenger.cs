@@ -69,7 +69,19 @@ namespace WildWasteland.Modules.Patrols
 
         // a human turret gunner (2.2.0) also needs [Combat] HumanTurrets
         private bool _turret; private float _turretArc;   // arc 0 = all around (roof); a motorcycle seat: BikeArc
+        // Perf: verdict + car marker cached for 0.25 s (random first phase per guard), was ~8 GetComponent + journey scan per frame
+        private float _nextCombatCheck; private bool _combatAllowed, _combatPhased; private PatrolMarker _marker;
         private bool CombatAllowed
+        {
+            get
+            {
+                if (Time.time < _nextCombatCheck) return _combatAllowed;
+                _nextCombatCheck = Time.time + (_combatPhased ? 0.25f : 0.25f * UnityEngine.Random.value); _combatPhased = true;
+                _marker = _car != null ? _car.GetComponent<PatrolMarker>() : null;
+                _combatAllowed = CombatAllowedNow; return _combatAllowed;
+            }
+        }
+        private bool CombatAllowedNow
         {
             get
             {
@@ -84,7 +96,7 @@ namespace WildWasteland.Modules.Patrols
         {
             Attach(who, car, anchor);
             var guard = who.GetComponent<PassengerGuard>();
-            guard._turret = true; guard._turretArc = arc;
+            guard._turret = true; guard._turretArc = arc; guard._nextCombatCheck = 0f;
             return guard;
         }
 
@@ -101,7 +113,7 @@ namespace WildWasteland.Modules.Patrols
         internal void SetDriverMode(Transform sit)
         {
             _anchor = sit;
-            _driverMode = true;
+            _driverMode = true; _nextCombatCheck = 0f;
             _shooting = false;
             _ranged = _rangedPrefab && PatrolsModule.RangedCombat.Value;
             if (_ranged) foreach (var fsm in _combat) if (fsm != null) fsm.enabled = true;
@@ -185,7 +197,7 @@ namespace WildWasteland.Modules.Patrols
             var guard = passenger.GetComponent<PassengerGuard>() ?? passenger.AddComponent<PassengerGuard>();
             guard._passenger = passenger;
             guard._car = car;
-            guard._anchor = anchor;
+            guard._anchor = anchor; guard._nextCombatCheck = 0f;
             guard._rangedPrefab = IsRanged(passenger);
             guard._ranged = guard._rangedPrefab && PatrolsModule.RangedCombat.Value;
             guard._combat = Array.FindAll(passenger.GetComponents<PlayMakerFSM>(), f => Array.IndexOf(CombatFsms, f.FsmName) >= 0);
@@ -264,7 +276,7 @@ namespace WildWasteland.Modules.Patrols
                 return;
             }
 
-            GameObject target = _questFollower ? _questTarget : _car.GetComponent<PatrolMarker>()!=null?TrafficFactions.ForCar(_car):FindVanillaTarget();
+            GameObject target = _questFollower ? _questTarget : _marker!=null?TrafficFactions.ForCar(_car,_marker):FindVanillaTarget();
             if(_targetVars!=null)for(int i=0;i<_targetVars.Length;i++)_targetVars[i].Value=target;
             if (_turret && target != null && PlayerRef.GodMode) target = null;   // a human turret leaves a god-mode player alone
             Vector3 aimPoint = Vector3.zero;

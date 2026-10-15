@@ -497,13 +497,13 @@ namespace WildWasteland.Modules.PlayerBody
                 if (!_b.TryGetValue(upper, out s) || !_b.TryGetValue(lower, out e) || !_b.TryGetValue(hand, out h)) return;
                 var hr = h.rotation;
                 var t = h.position + d;
-                var ne = AimLift.Elbow(D3(s.position), D3(e.position), D3(h.position), D3(t));
-                var E = new Vector3((float)ne[0], (float)ne[1], (float)ne[2]);
+                Vector3 sp = s.position, ep = e.position, hp = h.position; double nx, ny, nz;   // (WW perf) no double[] per call
+                AimLift.Elbow(sp.x, sp.y, sp.z, ep.x, ep.y, ep.z, hp.x, hp.y, hp.z, t.x, t.y, t.z, out nx, out ny, out nz);
+                var E = new Vector3((float)nx, (float)ny, (float)nz);
                 s.rotation = Quaternion.FromToRotation(e.position - s.position, E - s.position) * s.rotation;
                 e.rotation = Quaternion.FromToRotation(h.position - e.position, t - e.position) * e.rotation;
                 h.rotation = hr;
             }
-            private static double[] D3(Vector3 p) { return new double[] { p.x, p.y, p.z }; }
 
             private float YawIn(Transform a, Transform b)
             {

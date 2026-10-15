@@ -21,6 +21,8 @@ namespace WildWasteland.Core.UI
         static bool _open;
         static Action _deferred;
         public static bool IsOpen { get { return _open; } }
+        /// <summary>The window is open or has a deferred action to run: the GUI runner must stay on.</summary>
+        internal static bool NeedsGui { get { return _open || _deferred != null; } }
 
         internal static void Init()
         {

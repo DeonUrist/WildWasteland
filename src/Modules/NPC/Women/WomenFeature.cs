@@ -27,7 +27,7 @@ namespace WildWasteland.Modules.NPC
             _api = new WomenFeature(); Services.NpcAppearance = _api;
             Hooks.CreateObjectEnter.Postfix(module, Gungirl.AfterCreateObject);
             Scheduler.Sliced(module, "Female restoration", 500, Gungirl.Step);
-            Scheduler.Interval(module, "Female discovery", 5f, Gungirl.BeginScan).RunNow();
+            Scheduler.Interval(module, "Female discovery", 5f, Gungirl.SafetyScan).RunNow();   // (WW perf) a full walk only when the world is ready, then every 60 s (Gungirl)
             Scheduler.Interval(module, "Female voices", .25f, Voice.Tick).RunNow();
             Scheduler.Interval(module, "Female cache cleanup", 10f, Gungirl.Sweep);
             Hotkeys.Register(module, NpcModule.FemaleSpawnKey, Gungirl.SpawnInFront, CanSpawn);

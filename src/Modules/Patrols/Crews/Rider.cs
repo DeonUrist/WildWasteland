@@ -365,7 +365,9 @@ namespace WildWasteland.Modules.Patrols
         internal void MaxHealth(float health){_maxHealth=Mathf.Max(_maxHealth,health);}
         private float _standAt = -1f;                      // a Warboy on a bike stands up (crouch -> stand blend) before the leap
         private float _nextIgnore, _outOfArc;
-        internal bool IsWarboy { get { return !_gunner && string.Equals(_prefab,Rider.WarboyPrefab,StringComparison.OrdinalIgnoreCase) && (_mode == Mode.Riding || _mode == Mode.Throwing || _mode == Mode.Witness); } }
+        private bool _warboyPrefab;                        // Perf: the prefab compare once at Init (was per frame)
+        private PatrolMarker _carMarker; private float _nextTrailerCheck; private bool _trailerConnected;
+        internal bool IsWarboy { get { return !_gunner && _warboyPrefab && (_mode == Mode.Riding || _mode == Mode.Throwing || _mode == Mode.Witness); } }
         internal bool Mounted { get { return (_mode == Mode.Riding || _mode == Mode.Throwing || _mode == Mode.Witness) && Alive(); } }
         private AnimationClipPlayable _stand;
         private bool _released, _inClose, _kamikazeArmed;
@@ -386,6 +388,7 @@ namespace WildWasteland.Modules.Patrols
         internal void Init(GameObject car, PatrolMarker marker, Transform anchor, string prefab, int slot, bool gunner, bool bike,bool standing)
         {
             _car = car; _marker = marker; _anchor = anchor; _prefab = prefab; _slot = slot; _gunner = gunner; _bike = bike;
+            _warboyPrefab = string.Equals(prefab,Rider.WarboyPrefab,StringComparison.OrdinalIgnoreCase); _carMarker = car.GetComponent<PatrolMarker>(); _nextTrailerCheck = 0f;
             _standing=standing;
             _carRb = car.GetComponent<Rigidbody>();
             _health = GetComponents<PlayMakerFSM>().FirstOrDefault(f => f.FsmName == "Health");
@@ -396,7 +399,7 @@ namespace WildWasteland.Modules.Patrols
             _carCols = car.GetComponentsInChildren<Collider>(true);
             _myCols = GetComponentsInChildren<Collider>(true);
             _side = Vector3.Dot(anchor.position - car.transform.position, car.transform.right) >= 0f ? 1f : (UnityEngine.Random.value < 0.5f ? -1f : 1f);
-            if (_gunner||!string.Equals(prefab,Rider.WarboyPrefab,StringComparison.OrdinalIgnoreCase)) return;
+            if (_gunner||!_warboyPrefab) return;
             HideOwnWeapons();
             BuildGraph();
             BuildLance();
@@ -462,7 +465,7 @@ namespace WildWasteland.Modules.Patrols
             if (_body != null) { PlayerAnims.Set(_body, !StandingPose&&(target==0||target==1), false, target == 2, 0f); return; }
             if (!_graphOk) return;
             float step = Time.deltaTime / Mathf.Max(0.01f, seconds);
-            for (int i = 0; i < 4; i++) { _w[i] = Mathf.MoveTowards(_w[i], i == target ? 1f : 0f, step); _mixer.SetInputWeight(i, _w[i]); }
+            for (int i = 0; i < 4; i++) { float w = Mathf.MoveTowards(_w[i], i == target ? 1f : 0f, step); if (w == _w[i]) continue; _w[i] = w; _mixer.SetInputWeight(i, w); }   // compare-before-write
         }
 
         // the blast lance item as a prop in the throwing hand: no FSMs, no physics, no colliders
@@ -518,16 +521,22 @@ namespace WildWasteland.Modules.Patrols
             if (transform.parent == null || !Alive()) { Die(); return; }
             if (!_gunner && Time.time >= _nextHide) { _nextHide = Time.time + 0.5f; HideOwnWeapons(); }
             // weapon props toggled by the game drop their collision ignores with the car (a kinematic body would shove it): re-applied
-            if (Time.time >= _nextIgnore) { _nextIgnore = Time.time + 1f; Patrol.IgnoreCollisionsIfChanged(gameObject, _car, _carCols); }
+            if (Time.time >= _nextIgnore) { _nextIgnore = Time.time + 1f; Patrol.IgnoreCollisionsIfChanged(gameObject, _car, _carCols); _carMarker = _car.GetComponent<PatrolMarker>(); }
 
             // the player took this car, or it blew up: off the roof
             if(_marker?.SetupOnly==true)return;
             if (PlayerRef.PlayerCar == _car || (_marker != null && PlayerRef.PlayerCar == _marker.gameObject)) { JumpOff("the player took the car"); return; }
-            if (_slot >= PatrolMarker.VehicleTurretSlots && (_marker == null || !TrailerSupport.Connected(_marker.gameObject, _car))) { JumpOff("the trailer detached"); return; }
-            if (_gunner||!string.Equals(_prefab,Rider.WarboyPrefab,StringComparison.OrdinalIgnoreCase)) return;
+            if (_slot >= PatrolMarker.VehicleTurretSlots)
+            {
+                // Perf: the joint check at 4 Hz (was per frame); a lost marker still jumps off at once
+                if (_marker == null) { JumpOff("the trailer detached"); return; }
+                if (Time.time >= _nextTrailerCheck) { _nextTrailerCheck = Time.time + 0.25f; _trailerConnected = TrailerSupport.Connected(_marker.gameObject, _car); }
+                if (!_trailerConnected) { JumpOff("the trailer detached"); return; }
+            }
+            if (_gunner||!_warboyPrefab) return;
 
             Vector3 tpos, tvel; GameObject tcar;
-            bool has = TrafficFactions.DriveTarget(_car,out tpos,out tvel,out tcar) && !PlayerRef.GodMode && WorldTraffic.CombatAllowed(_marker != null ? _marker.gameObject : _car);
+            bool has = TrafficFactions.DriveTarget(_car,_carMarker,out tpos,out tvel,out tcar) && !PlayerRef.GodMode && WorldTraffic.CombatAllowed(_marker != null ? _marker.gameObject : _car);
             var to = tpos - transform.position; to.y = 0f;
             float dist = has ? to.magnitude : 9999f;
             if (!has && _mode == Mode.Witness) { _mode = Mode.Riding; _standAt = -1f; }

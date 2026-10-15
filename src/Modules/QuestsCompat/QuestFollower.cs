@@ -36,6 +36,8 @@ namespace WildWasteland.Modules.QuestsCompat
         private static float _reloadShown, _retry;
         private static float _weaponAt;
         private static string _weaponKey;
+        private static string[] _modelKeys;
+        private static int _combatFrame = -1; private static GameObject _combatNpc, _combatTarget; private static float _combatBlocked;
         private static readonly Dictionary<FieldInfo, object> LegacyFields = new Dictionary<FieldInfo, object>();
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -99,7 +101,11 @@ namespace WildWasteland.Modules.QuestsCompat
         private static bool FeedTarget()
         {
             if (Services.FollowerVehicles == null) return true;
-            Services.FollowerVehicles.Combat(_npc(null), _target(null), _reloadUntil(null)); return false;
+            // Quests feeds the target from Update, HoldFire and LateUpdate; Combat only stores these three values on the guard.
+            GameObject npc = _npc(null), target = _target(null); float blocked = _reloadUntil(null); int frame = Time.frameCount;
+            if (frame == _combatFrame && ReferenceEquals(npc, _combatNpc) && ReferenceEquals(target, _combatTarget) && blocked == _combatBlocked) return false;
+            _combatFrame = frame; _combatNpc = npc; _combatTarget = target; _combatBlocked = blocked;
+            Services.FollowerVehicles.Combat(npc, target, blocked); return false;
         }
         private static bool HoldFire()
         { return Services.FollowerVehicles == null || !_mounted(null) ? true : FeedTarget(); }
@@ -149,7 +155,7 @@ namespace WildWasteland.Modules.QuestsCompat
                 {
                     _animator = npc.GetComponent<Animator>() ?? npc.GetComponentInChildren<Animator>(true);
                     _attack = FsmUtil.Find(npc, "Attack");
-                    _models = npc.GetComponentsInChildren<Transform>(true); _weaponAt = 0;
+                    _models = npc.GetComponentsInChildren<Transform>(true); _modelKeys = null; _weaponAt = 0;
                     _retry = 0;
                 }
             }
@@ -192,10 +198,17 @@ namespace WildWasteland.Modules.QuestsCompat
             if (_body == null || _animation == null || _models == null || Time.unscaledTime < _weaponAt) return;
             _weaponAt = Time.unscaledTime + .5f;
             if (_weapon != null && _weapon.gameObject.activeInHierarchy) return;
-            foreach (var child in _models)
+            if (_modelKeys == null || _modelKeys.Length != _models.Length)
             {
+                // Child names do not change; look each one up once instead of every half second while unarmed.
+                _modelKeys = new string[_models.Length];
+                for (int i = 0; i < _models.Length; i++) _modelKeys[i] = _models[i] != null ? _animation.WeaponKey(_models[i].name) : null;
+            }
+            for (int i = 0; i < _models.Length; i++)
+            {
+                var child = _models[i];
                 if (child == null || !child.gameObject.activeInHierarchy) continue;
-                var key = _animation.WeaponKey(child.name);
+                var key = _modelKeys[i];
                 if (!string.IsNullOrEmpty(key) && _animation.HasWeaponPoses(key) && child.GetComponentInChildren<Renderer>(true) != null)
                 { _weapon = child; _weaponKey = key; _body.SetWeapon(child, key); return; }
             }
@@ -216,22 +229,30 @@ namespace WildWasteland.Modules.QuestsCompat
             }
             if (_body != null && _body.Valid) { _body.CancelReload(); _body.ManualVelocity = false; if (_ownsBody) _body.Dispose(); else _body.Suspended = true; }
             _body = null; _current = null; _animator = null; _weapon = null; _weaponKey = null; _animation = null; _reloadShown = 0;
-            _models = null;
-            _attack = null;
+            _models = null; _modelKeys = null;
+            _attack = null; _combatFrame = -1; _combatNpc = _combatTarget = null;
         }
         internal static void Uninstall()
         {
             Release(); foreach (var kv in LegacyFields) kv.Key.SetValue(null, kv.Value); LegacyFields.Clear();
             _npc = null; _plugin = null;
         }
+        private const string ReportIn = "Report in: ";
         internal static void DescribeMarker(string key, ref string label, out Transform target)
         {
             target = null; if (_plugin == null || _activeQuests == null) return;
             var quests = _activeQuests(_questBook(_plugin));
             foreach (var q in quests)
             {
-                if (key.Substring(2) != _id(q)) continue;
-                if (key[0] == 'T') { label = "Report in: " + _giverName(q); target = _findLive(_giverId(q)); }
+                string id = _id(q);
+                if (id == null || id.Length != key.Length - 2 || string.CompareOrdinal(key, 2, id, 0, id.Length) != 0) continue;
+                if (key[0] == 'T')
+                {
+                    string giver = _giverName(q) ?? "";
+                    if (label == null || label.Length != ReportIn.Length + giver.Length || !label.StartsWith(ReportIn, StringComparison.Ordinal)
+                        || string.CompareOrdinal(label, ReportIn.Length, giver, 0, giver.Length) != 0) label = ReportIn + giver;
+                    target = _findLive(_giverId(q));
+                }
                 else label = _title(q);
                 break;
             }

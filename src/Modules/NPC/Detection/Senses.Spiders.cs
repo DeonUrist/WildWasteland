@@ -17,7 +17,7 @@ namespace WildWasteland.Modules.NPC
         private static void ResetSpiderLights()
         {
             _hasSpiders = false; _spiderItems = null; _spiderFlashOf = null; _spiderFlash = null;
-            _canLights.Clear(); _spiderLights.Clear(); _deadLights.Clear(); _playerCaveLight = 1f;
+            _canLights.Clear(); _spiderLights.Clear(); _deadLights.Clear(); _playerCaveLight = 1f; _spiderItemPos = -1; _notCanLight.Clear();
             CaveDarknessBridge.Reset();
             _spiderCavePlayer = null; _spiderInside = null;
         }
@@ -53,16 +53,31 @@ namespace WildWasteland.Modules.NPC
                 if (!alive) _deadLights.Add(kv.Key);
             }
             foreach (var id in _deadLights) _canLights.Remove(id);
+            if (_spiderItemPos < 0) _spiderItemPos = 0;          // (perf) the item walk follows over the next frames (SpiderItemStep); a walk still running goes on (a long list is not restarted every second and never finished)
+        }
+
+        // (perf) D5: the item list walked 256 items a frame (was all of it in the maintenance frame), and items that are not tin can lights
+        // are remembered by id instead of filling the shared prefab-name cache (it was cleared at 4096 by this walk itself, so every
+        // second each item's name was read again). A new can light is found within items/256 frames.
+        private static int _spiderItemPos = -1;
+        private static readonly HashSet<int> _notCanLight = new HashSet<int>();
+        private static void SpiderItemStep()
+        {
             var items = _spiderItems != null ? _spiderItems.arrayList : null;
-            if (items == null) return;
-            for (int i = 0; i < items.Count; i++)
+            if (items == null) { _spiderItemPos = -1; return; }
+            int end = Mathf.Min(items.Count, _spiderItemPos + 256);
+            for (int i = _spiderItemPos; i < end; i++)
             {
                 var go = items[i] as GameObject;
-                if (go == null || _canLights.ContainsKey(go.GetInstanceID()) || PrefabOf(go) != "tin_can_light") continue;
+                if (go == null) continue;
+                int id = go.GetInstanceID();
+                if (_notCanLight.Contains(id) || _canLights.ContainsKey(id)) continue;
+                if (Prefab(go.name) != "tin_can_light") { if (_notCanLight.Count > 65536) _notCanLight.Clear(); _notCanLight.Add(id); continue; }
                 var lights = go.GetComponentsInChildren<Light>(true);
-                _canLights[go.GetInstanceID()] = lights;
+                _canLights[id] = lights;
                 foreach (var l in lights) if (l != null) _spiderLights.Add(l);
             }
+            _spiderItemPos = end >= items.Count ? -1 : end;
         }
 
         private static float SpiderAmbient(Vector3 p)
@@ -122,7 +137,7 @@ namespace WildWasteland.Modules.NPC
             Vector3 pos = light.transform.position;
             var g = GetOrMake(Src.Vision, OnGround(pos, pos.y), source, "a light", 0f, 1f, now);
             bool had = a.Ghost == g;
-            if (Assign(a, g, Src.Vision, now)) { if (!had) Log(a, "is illuminated, investigates a light (ghost #" + g.Id + ")"); }
+            if (Assign(a, g, Src.Vision, now)) { if (!had) if (NpcModule.SensesLog.Value) Log(a, "is illuminated, investigates a light (ghost #" + g.Id + ")"); }
             else if (g.Holders.Count == 0) { int i = _ghosts.IndexOf(g); if (i >= 0) KillGhost(i); }
         }
     }

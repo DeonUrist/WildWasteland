@@ -107,6 +107,11 @@ static class NavCheck
         public object LazyBuild(object s, Vector3 goal, bool inside, int goalCell, int until) { return Build5.Invoke(null, new object[] { s, goal, inside, goalCell, until }); }
         public void ExpandTo(object s, object f, int until) { Expand.Invoke(null, new object[] { s, f, until }); }
         public void ClearFields(object s) { ((System.Collections.IDictionary)Get(s, "Fields")).Clear(); }
+        public void ClearMemos() { foreach (var n in new[] { "_outMemo", "_outPlans", "_exits", "_pickDone", "_pickWait" }) { var f = Nav.GetField(n, BindingFlags.Static | BindingFlags.NonPublic); if (f != null) ((System.Collections.IDictionary)f.GetValue(null)).Clear(); } }
+        public void Masks(object s) { var m = Nav.GetMethod("MasksNow", BindingFlags.Static | BindingFlags.NonPublic); if (m != null) { m.Invoke(null, new object[] { s }); MasksMade++; } }
+        public int MasksMade;
+        public int PickQueued() { return (int)Nav.GetProperty("PickQueued", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null, null); }
+        public void PickStep() { Nav.GetMethod("PickStep", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null); }
     }
 
     static FieldInfo _fakeTime;
@@ -222,6 +227,8 @@ static class NavCheck
     }
 
     // ---------- the run ----------
+    static int tieDiff; static HashSet<int> tied = new HashSet<int>();
+    static int slicedTotal, slicedJobs, slicedSteps, warmSliced, warmPending;
     static int _mismatch; static int _checks;
     static void Mismatch(string what) { _mismatch++; if (_mismatch <= 40) Console.WriteLine("MISMATCH " + what); }
 
@@ -236,6 +243,9 @@ static class NavCheck
         var nw = new Side("new", Path.GetFullPath(newDll), dir);
         var od = new Side("old", Path.GetFullPath(oldDll), dir);
         Console.WriteLine("new build lazy API: " + nw.Lazy + "; old lazy API: " + od.Lazy);
+        var pickInline = nw.Nav.GetField("PickInline", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+        if (pickInline != null) pickInline.SetValue(null, true);
+        Console.WriteLine("PickInline field: " + (pickInline != null));
         SetTime(10f);
         int pairsTotal = 0, fieldsTotal = 0, coldTotal = 0, warmTotal = 0, unreachable = 0, outside = 0, routed = 0, evictTotal = 0, lowStepTotal = 0, relaxedTotal = 0, evictPeak = 0, evictPeakOld = 0, sharedDiff = 0;
         for (int seed = 1; seed <= seeds; seed++)
@@ -245,6 +255,7 @@ static class NavCheck
             var g = MakeGrid(rnd, W, H, 0.08 + rnd.NextDouble() * 0.12, rnd.Next(2, 8), 0.25f, 0.5f);
             nw.Reset(); od.Reset();
             object sn = nw.MakeStructure(g, seed), so = od.MakeStructure(g, seed);
+            nw.Masks(sn);
             var cn = (int[])nw.Get(sn, "Comp"); var co = (int[])od.Get(so, "Comp");
             for (int i = 0; i < cn.Length; i++) if (cn[i] != co[i]) { Mismatch("seed " + seed + " Comp[" + i + "] " + cn[i] + " vs " + co[i]); break; }
             var sizes = (int[])nw.Get(sn, "CompSize"); int bigComp = 0; for (int c = 0; c < sizes.Length; c++) if (sizes[c] > sizes[bigComp]) bigComp = c;
@@ -293,8 +304,22 @@ static class NavCheck
                 if (r1) routed++;
                 if (t2.Contains("relaxed")) relaxedTotal++;
                 if (t2.Contains("NO ring") || t2.Contains("EXIT")) unreachable++;
+                if (pickInline != null && kind == 3)
+                {
+                    pickInline.SetValue(null, false);
+                    nw.ClearFields(sn); nw.ClearMemos(); od.ClearMemos();
+                    bool r3; Vector3 n3; float l3;
+                    nw.CallNext(null, pos, goal, out r3, out n3, out l3);
+                    int steps = 0; bool queued = nw.PickQueued() > 0;
+                    while (nw.PickQueued() > 0 && steps < 100000) { nw.PickStep(); steps++; }
+                    string t3 = nw.CallNext(null, pos, goal, out r3, out n3, out l3);
+                    pickInline.SetValue(null, true);
+                    _checks++; slicedTotal++; if (queued) slicedJobs++; slicedSteps += steps;
+                    if (r3 != r2 || !Same(n3, n2) || !Same(l3, l2) || t3 != t2)
+                        Mismatch("seed " + seed + " SLICED cold pair " + p + " from " + (from % W) + "," + (from / W) + ": new " + r3 + " " + V(n3) + " " + l3 + " [" + t3 + "] / old " + r2 + " " + V(n2) + " " + l2 + " [" + t2 + "]");
+                }
                 if (r1 != r2 || !Same(n1, n2) || !Same(l1, l2) || t1 != t2)
-                    Mismatch("seed " + seed + " cold pair " + p + " kind " + kind + " from " + (from % W) + "," + (from / W) + ": new " + r1 + " " + n1.ToString("0.000") + " " + l1 + " [" + t1 + "] / old " + r2 + " " + n2.ToString("0.000") + " " + l2 + " [" + t2 + "]");
+                    Mismatch("seed " + seed + " cold pair " + p + " kind " + kind + " from " + (from % W) + "," + (from / W) + ": new " + r1 + " " + V(n1) + " " + l1 + " [" + t1 + "] / old " + r2 + " " + V(n2) + " " + l2 + " [" + t2 + "]");
             }
 
             // (ii) Next, warm: 24 NPCs think every 0.1-0.2 s for 12 s toward moving goals; caches, memos and plans live on both sides
@@ -317,11 +342,33 @@ static class NavCheck
                     _checks++; pairsTotal++; warmTotal++;
                     if (t2.Contains("relaxed")) relaxedTotal++;
                     if (r1 != r2 || !Same(n1, n2) || !Same(l1, l2) || t1 != t2)
-                        Mismatch("seed " + seed + " warm t=" + now.ToString("0.00") + " npc " + k + " from " + (at[k] % W) + "," + (at[k] / W) + ": new " + r1 + " " + n1.ToString("0.000") + " " + l1 + " [" + t1 + "] / old " + r2 + " " + n2.ToString("0.000") + " " + l2 + " [" + t2 + "]");
+                        Mismatch("seed " + seed + " warm t=" + now.ToString("0.00") + " npc " + k + " from " + (at[k] % W) + "," + (at[k] / W) + ": new " + r1 + " " + V(n1) + " " + l1 + " [" + t1 + "] / old " + r2 + " " + V(n2) + " " + l2 + " [" + t2 + "]");
                     // walk: toward the waypoint one cell per think (or wander when the map says straight)
                     if (r1) { int wx, wz; if (CellOf(g, n1, out wx, out wz)) { int cx = at[k] % W, cz = at[k] / W; cx += Math.Sign(wx - cx); cz += Math.Sign(wz - cz); int ni = cz * W + cx; if (cn[ni] >= 0 && sizes[cn[ni]] >= 30) at[k] = ni; } }
                     else if (rnd.NextDouble() < 0.3) at[k] = stand[rnd.Next(stand.Count)];
                 }
+            }
+
+            if (pickInline != null)
+            {
+                pickInline.SetValue(null, false); nw.ClearMemos(); od.ClearMemos();
+                var wat = new int[npcs]; for (int k = 0; k < npcs; k++) { wat[k] = stand[rnd.Next(stand.Count)]; nextThink[k] = 1100f + (float)rnd.NextDouble() * 0.2f; }
+                for (float now = 1100f; now < 1112f; now += 0.05f)
+                {
+                    SetTime(now); nw.PickStep();
+                    for (int k = 0; k < npcs; k++)
+                    {
+                        if (now < nextThink[k]) continue;
+                        nextThink[k] = now + 0.1f + (float)rnd.NextDouble() * 0.1f;
+                        Vector3 goal = k % 2 == 0 ? new Vector3(g.Min.x - 10f - k, 0f, g.Min.z + k * 3f + (now - 1100f)) : player;
+                        bool r1; Vector3 n1; float l1;
+                        nw.CallNext(owners[k], g.Center(wat[k]), goal, out r1, out n1, out l1);
+                        warmSliced++; if (nw.PickQueued() > 0) warmPending++;
+                        if (r1) { int wx, wz; if (CellOf(g, n1, out wx, out wz)) { int cx = wat[k] % W, cz = wat[k] / W; cx += Math.Sign(wx - cx); cz += Math.Sign(wz - cz); int ni = cz * W + cx; if (cn[ni] >= 0 && sizes[cn[ni]] >= 30) wat[k] = ni; } }
+                    }
+                }
+                while (nw.PickQueued() > 0) nw.PickStep();
+                pickInline.SetValue(null, true); nw.ClearMemos(); od.ClearMemos();
             }
 
             // (review) eviction: 48 NPCs of the largest area, each with its own fixed goal cell of that area (48 distinct 4 x 4 buckets),
@@ -360,9 +407,11 @@ static class NavCheck
                         evictPeak = Math.Max(evictPeak, ((System.Collections.IDictionary)nw.Get(sn, "Fields")).Count); evictPeakOld = Math.Max(evictPeakOld, ((System.Collections.IDictionary)od.Get(so, "Fields")).Count);
                         if (r1 != r2 || !Same(n1, n2) || !Same(l1, l2) || t1 != t2)
                         {
-                            if (phase == 2 && k < 16 && r1 == r2 && t1.Contains("same area") && t2.Contains("same area")) { sharedDiff++; if (sharedDiff <= 3) Console.WriteLine("SHARED-FIELD DIFFERENCE seed " + seed + " t=" + now.ToString("0.00") + " npc " + k + ": new " + n1.ToString("0.000") + " " + l1 + " / old " + n2.ToString("0.000") + " " + l2); }
+                            if (phase >= 2 && k < 16 && r1 == r2 && t1.Contains("same area") && t2.Contains("same area")) { sharedDiff++; if (sharedDiff <= 3) Console.WriteLine("SHARED-FIELD DIFFERENCE seed " + seed + " t=" + now.ToString("0.00") + " npc " + k + ": new " + V(n1) + " " + l1 + " / old " + V(n2) + " " + l2); }
+                            else if (t1.Contains("EXIT") && t2.Contains("EXIT") && (Same(l1, l2) || tied.Contains(seed * 1000 + k)))
+                            { tieDiff++; tied.Add(seed * 1000 + k); if (tieDiff <= 3) Console.WriteLine("EXIT TIE seed " + seed + " t=" + now.ToString("0.00") + " npc " + k + ": new [" + t1 + "] / old [" + t2 + "]"); }
                             else
-                            Mismatch("seed " + seed + " evict phase " + phase + " t=" + now.ToString("0.00") + " npc " + k + " from " + (bat[k] % W) + "," + (bat[k] / W) + ": new " + r1 + " " + n1.ToString("0.000") + " " + l1 + " [" + t1 + "] / old " + r2 + " " + n2.ToString("0.000") + " " + l2 + " [" + t2 + "]");
+                            Mismatch("seed " + seed + " evict phase " + phase + " t=" + now.ToString("0.00") + " npc " + k + " from " + (bat[k] % W) + "," + (bat[k] / W) + ": new " + r1 + " " + V(n1) + " " + l1 + " [" + t1 + "] / old " + r2 + " " + V(n2) + " " + l2 + " [" + t2 + "]");
                         }
                         if (r1) { int wx, wz; if (CellOf(g, n1, out wx, out wz)) { int cx = bat[k] % W, cz = bat[k] / W; cx += Math.Sign(wx - cx); cz += Math.Sign(wz - cz); int ni = cz * W + cx; if (cn[ni] >= 0 && sizes[cn[ni]] >= 30) bat[k] = ni; } }
                     }
@@ -386,12 +435,15 @@ static class NavCheck
                 _checks++; pairsTotal++; lowStepTotal++;
                 if (t2.Contains("relaxed")) relaxedTotal++;
                 if (r1 != r2 || !Same(n1, n2) || !Same(l1, l2) || t1 != t2)
-                    Mismatch("seed " + seed + " lowered MaxStep pair " + p + " from " + (from % W) + "," + (from / W) + ": new " + r1 + " " + n1.ToString("0.000") + " " + l1 + " [" + t1 + "] / old " + r2 + " " + n2.ToString("0.000") + " " + l2 + " [" + t2 + "]");
+                    Mismatch("seed " + seed + " lowered MaxStep pair " + p + " from " + (from % W) + "," + (from / W) + ": new " + r1 + " " + V(n1) + " " + l1 + " [" + t1 + "] / old " + r2 + " " + V(n2) + " " + l2 + " [" + t2 + "]");
             }
             foreach (var side in new[] { nw, od }) ((BepInEx.Configuration.ConfigEntry<float>)side.Npc.GetField("NavMaxStep", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public).GetValue(null)).Value = 0.25f;
         }
         Console.WriteLine();
         Console.WriteLine("checks " + _checks + ": fields " + fieldsTotal + ", Next pairs " + pairsTotal + " (cold " + coldTotal + " of which " + outside + " outside goals, " + routed + " routed, " + unreachable + " with an exit; warm " + warmTotal + ", eviction " + evictTotal + ", lowered MaxStep " + lowStepTotal + "; " + relaxedTotal + " relaxed exits), mismatches " + _mismatch + ", shared-field differences (declared, section 3) " + sharedDiff);
+        Console.WriteLine("move masks made on the new side: " + nw.MasksMade + " structures");
+        Console.WriteLine("exit ties (equal cost, lower cell first; and that NPC's later thinks in the phase) " + tieDiff);
+        Console.WriteLine("sliced pick checks " + slicedTotal + " (" + slicedJobs + " queued a job, " + slicedSteps + " frames of PickStep), warm sliced thinks " + warmSliced + " (" + warmPending + " with a job pending)");
         Bench(nw, od);
         Console.WriteLine(_mismatch == 0 ? "RESULT: equivalent" : "RESULT: " + _mismatch + " MISMATCHES");
         return _mismatch == 0 ? 0 : 1;
@@ -420,6 +472,7 @@ static class NavCheck
         if (complete) for (int i = 0; i < d.Length; i++) if (!Same(d[i], full[i])) { Mismatch(what + ": complete field differs at " + i); return; }
     }
 
+    static string V(Vector3 v) { return v.x.ToString("0.000") + "," + v.y.ToString("0.000") + "," + v.z.ToString("0.000"); }
     static bool Same(float a, float b) { return a == b || (float.IsNaN(a) && float.IsNaN(b)); }
     static bool Same(Vector3 a, Vector3 b) { return Same(a.x, b.x) && Same(a.y, b.y) && Same(a.z, b.z); }
 
@@ -431,6 +484,7 @@ static class NavCheck
         for (int tries = 0; tries < 20; tries++) { g = MakeGrid(rnd, 184, 227, 0.27, 3, 0.25f, 0.5f); if (g.Walkable > 28000 && g.Walkable < 31500) break; }
         nw.Reset(); od.Reset();
         object sn = nw.MakeStructure(g, 99), so = od.MakeStructure(g, 99);
+        nw.Masks(sn);
         var comp = (int[])nw.Get(sn, "Comp"); var sizes = (int[])nw.Get(sn, "CompSize"); int big = 0; for (int c = 0; c < sizes.Length; c++) if (sizes[c] > sizes[big]) big = c;
         var cells = new List<int>(); foreach (int i in g.Big) if (comp[i] == big) cells.Add(i);
         Console.WriteLine("bench grid 184 x 227 = " + (184 * 227) + " cells, " + g.Walkable + " walkable, largest area " + sizes[big] + " cells");

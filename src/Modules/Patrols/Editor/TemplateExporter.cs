@@ -78,6 +78,8 @@ namespace WildWasteland.Modules.Patrols
         private void Close() { _session.Close(); _draftCar = null; _draftTrailer = null; _ledgerDropdown.Close(); }
         private void OnDestroy() { _session.Close(true); }
         internal void LateTick() { _session.Maintain(); }
+        // the Gui job's predicate: the recorder window (and its queued _afterDraw, run in the same call) or a toast still up
+        internal bool GuiWanted() { return _session.Open || (_toast.Length > 0 && Time.unscaledTime <= _toastUntil); }
         internal void Gui()
         {
             if (!_session.Open || _draftCar == null) { DrawToast(); return; }   // just saved/closed: the session lets go a frame later

@@ -29,6 +29,8 @@ namespace WildWasteland.Modules.CleanHUD
         private readonly Color _gold, _white;
         private readonly List<Text> _rows = new List<Text>();
         private readonly List<Image> _bars = new List<Image>();
+        // Inputs of the last placement; the root is only moved when one of them changes.
+        private Vector2 _inMin, _inMax, _inPos, _inPivot, _inSize; private Vector3 _inScale, _inCompass; private float _inLossy; private bool _inActive, _placed;
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal static void Install(CleanHudModule owner)
@@ -74,13 +76,22 @@ namespace WildWasteland.Modules.CleanHUD
                 && Core.GameRefs.InGame && !(Cursor.visible && Cursor.lockState != CursorLockMode.Locked);
             if (_root.gameObject.activeSelf != visible) _root.gameObject.SetActive(visible);
             if (!visible) return;
-            _root.anchorMin = insanity.anchorMin; _root.anchorMax = insanity.anchorMax; _root.localScale = insanity.localScale;
-            _root.anchoredPosition = insanity.anchoredPosition + new Vector2((1 - insanity.pivot.x) * insanity.rect.width * insanity.localScale.x,
-                ((1 - insanity.pivot.y) * insanity.rect.height - (insanity.gameObject.activeSelf ? insanity.rect.height + 12 : 0)) * insanity.localScale.y);
+            Vector2 inMin = insanity.anchorMin, inMax = insanity.anchorMax, inPos = insanity.anchoredPosition, inPivot = insanity.pivot;
+            var rect = insanity.rect; Vector2 inSize = rect.size; Vector3 inScale = insanity.localScale; bool inActive = insanity.gameObject.activeSelf;
             var compassBottom = compass.TransformPoint(new Vector3(0, -compass.pivot.y * compass.rect.height, 0));
-            var position = _root.position;
-            position.y = Mathf.Min(position.y, compassBottom.y - 24f * _root.lossyScale.y);
-            _root.position = position;
+            float lossy = _root.lossyScale.y;
+            if (!_placed || inMin != _inMin || inMax != _inMax || inPos != _inPos || inPivot != _inPivot || inSize != _inSize || inScale != _inScale
+                || inActive != _inActive || compassBottom != _inCompass || lossy != _inLossy)
+            {
+                _placed = true; _inMin = inMin; _inMax = inMax; _inPos = inPos; _inPivot = inPivot; _inSize = inSize; _inScale = inScale; _inActive = inActive; _inCompass = compassBottom;
+                _root.anchorMin = inMin; _root.anchorMax = inMax; _root.localScale = inScale;
+                _root.anchoredPosition = inPos + new Vector2((1 - inPivot.x) * rect.width * inScale.x,
+                    ((1 - inPivot.y) * rect.height - (inActive ? rect.height + 12 : 0)) * inScale.y);
+                lossy = _root.lossyScale.y; _inLossy = lossy;
+                var position = _root.position;
+                position.y = Mathf.Min(position.y, compassBottom.y - 24f * lossy);
+                _root.position = position;
+            }
             var lines = _lines(_plugin); float y = 0;
             for (int i = 0; i < lines.Count; i++)
             {
@@ -94,9 +105,10 @@ namespace WildWasteland.Modules.CleanHUD
                     _rows.Add(text); _bars.Add(bar);
                 }
                 var row = _rows[i]; if (!row.gameObject.activeSelf) row.gameObject.SetActive(true);
-                _bars[i].color = i < Colors.Count ? Colors[i] : _gold;
+                var color = i < Colors.Count ? Colors[i] : _gold; if (_bars[i].color != color) _bars[i].color = color;
                 if (row.text != lines[i]) { row.text = lines[i]; row.rectTransform.sizeDelta = new Vector2(620, Mathf.Max(32, row.preferredHeight)); }
-                row.rectTransform.anchoredPosition = new Vector2(0, -y); y += row.rectTransform.sizeDelta.y + 8;
+                var at = new Vector2(0, -y); if (row.rectTransform.anchoredPosition != at) row.rectTransform.anchoredPosition = at;
+                y += row.rectTransform.sizeDelta.y + 8;
             }
             for (int i = lines.Count; i < _rows.Count; i++) if (_rows[i].gameObject.activeSelf) _rows[i].gameObject.SetActive(false);
         }

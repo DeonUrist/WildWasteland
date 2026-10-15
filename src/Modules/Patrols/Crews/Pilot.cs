@@ -65,7 +65,8 @@ namespace WildWasteland.Modules.Patrols
         private bool _hitPending, _hitIsTarget, _rearHit, _abandoned;
         private float _hitSide;
         private float _pushTime, _pushStamp = -1f;   // slow continuous push against an obstacle ahead
-        private string _pushName = "";
+        private Collider _pushCollider;
+        private string _pushName { get { return _pushCollider != null ? _pushCollider.name : ""; } }
         private float _rearClear = -1f;               // nearest obstacle behind while reversing, -1 = clear
 
         private float _nextLog, _nextEngine, _flipLogged;
@@ -149,7 +150,8 @@ namespace WildWasteland.Modules.Patrols
             _stateTime += dt;
 
             Vector3 tpos, tvel; GameObject tcar;
-            _hasTarget = TrafficFactions.DriveTarget(_car,out tpos,out tvel,out tcar);
+            if (_marker == null) _marker = _car.GetComponent<PatrolMarker>();   // Perf: cached marker (was a GetComponent per decision inside DriveTarget)
+            _hasTarget = TrafficFactions.DriveTarget(_car,_marker,out tpos,out tvel,out tcar);
             if (_traffic == null) _traffic = _car.GetComponent<TrafficAgent>();
             Vector3 routeGoal = Vector3.zero; float cruise = 0f; bool stop = false, hunt = false;
             bool traffic = _traffic != null && _traffic.Goal(out routeGoal, out cruise, out stop, out hunt);
@@ -490,7 +492,7 @@ namespace WildWasteland.Modules.Patrols
 
         private void Enter(PilotState s, string why)
         {
-            if (_state != s || _stateTime > 0f) PatrolsModule.Verbose("Pilot: " + _state + " -> " + s + " (" + why + ")");
+            if (Core.Log.Verbose && (_state != s || _stateTime > 0f)) PatrolsModule.Verbose("Pilot: " + _state + " -> " + s + " (" + why + ")");
             if (s == PilotState.Charge) _passSide = _angle > 1f ? 1f : _angle < -1f ? -1f : (UnityEngine.Random.value < 0.5f ? -1f : 1f);
             _state = s; _stateTime = 0f; _why = why; _turnSlow = 0f;
             if (s != PilotState.Recover) _stuckTime = 0f;
@@ -768,13 +770,13 @@ namespace WildWasteland.Modules.Patrols
             if (npc) return;                                              // ran over a creature or a loose item: keep going
             if (rear)
             {
-                if (_state == PilotState.Recover && !target) { _rearHit = true; PatrolsModule.Verbose("Pilot: backed into " + col.collider.name + " at " + rel.ToString("0.0") + " m/s"); }
+                if (_state == PilotState.Recover && !target) { _rearHit = true; if (Core.Log.Verbose) PatrolsModule.Verbose("Pilot: backed into " + col.collider.name + " at " + rel.ToString("0.0") + " m/s"); }
                 return;
             }
             _hitPending = true;
             _hitIsTarget = target && !_travelling;
             _hitSide = Mathf.Abs(local.x) > 0.6f ? Mathf.Sign(local.x) : 0f;
-            PatrolsModule.Verbose("Pilot: " + (target ? "rammed " : "hit ") + col.collider.name + " at " + rel.ToString("0.0") + " m/s, local " + local.ToString("0.0"));
+            if (Core.Log.Verbose) PatrolsModule.Verbose("Pilot: " + (target ? "rammed " : "hit ") + col.collider.name + " at " + rel.ToString("0.0") + " m/s, local " + local.ToString("0.0"));
         }
 
         // A slow, sustained frontal contact with an obstacle (shoving a parked car, leaning on a wall) is tracked here and
@@ -792,7 +794,7 @@ namespace WildWasteland.Modules.Patrols
             if (!IsObstacle(col.collider)) return;
             _pushTime += Time.fixedDeltaTime;
             _pushStamp = Time.fixedTime;
-            _pushName = col.collider.name;
+            _pushCollider = col.collider;   // Perf: the name is read only when it is shown (was a string alloc per physics step)
             _hitSide = Mathf.Abs(local.x) > 0.6f ? Mathf.Sign(local.x) : 0f;
         }
 

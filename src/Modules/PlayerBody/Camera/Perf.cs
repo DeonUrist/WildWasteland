@@ -25,7 +25,8 @@ namespace WildWasteland.Modules.PlayerBody
         internal static void Frame()
         {
             _on = PlayerBodyModule.VerboseOn && Game.Ready;
-            if (!_on) { _start = -1f; return; }
+            if (!_on) { _start = -1f; StopGc(); return; }
+            GcFrame();
             if (!_systemLogged) { _systemLogged = true; LogSystem(); }
             float now = Time.unscaledTime;
             bool car = Game.InCar;
@@ -50,9 +51,12 @@ namespace WildWasteland.Modules.PlayerBody
               .Append((_frames / span).ToString("0.0")).Append(" fps, avg ").Append((span * 1000f / _frames).ToString("0.0")).Append(" ms, worst ").Append((_worst * 1000f).ToString("0"))
               .Append(" ms, ").Append(_over33).Append(" frames >33 ms, ").Append(_over50).Append(" >50 ms | Apocaplayer ").Append((total / _frames).ToString("0.00")).Append(" ms/frame [");
             for (int i = 0; i < _ticks.Length; i++) sb.Append(i > 0 ? ", " : "").Append(Names[i]).Append(' ').Append((_ticks[i] * MsPerTick / _frames).ToString("0.00"));
-            sb.Append("] | GC ").Append(GC.CollectionCount(0) - _gc0).Append(" (gen2 ").Append(GC.CollectionCount(2) - _gc2).Append("), heap ").Append((GC.GetTotalMemory(false) >> 20)).Append(" MB");
+            sb.Append("] | GC alloc ");
+            if (_gcFrames > 0) sb.Append((_gcBytes / 1024.0 / _gcFrames).ToString("0.0")).Append(" KB/frame (").Append((_gcBytes >> 20)).Append(" MB/window)"); else sb.Append("n/a");
+            sb.Append(" | GC ").Append(GC.CollectionCount(0) - _gc0).Append(" (gen2 ").Append(GC.CollectionCount(2) - _gc2).Append("), heap ").Append((GC.GetTotalMemory(false) >> 20)).Append(" MB");
             if (cut && Cave.Inside) sb.Append(" | in a cave: culling off");
             if (cut) sb.Append(" | cutaway: ").Append(((OcclusionCutaway.Renders - _renders) / (float)_frames).ToString("0.00")).Append(" extra views/frame, ").Append(OcclusionCutaway.Blockers).Append(" blockers");
+            sb.Append(" | MapCheat_Camera ").Append(MapCamState());
             sb.Append(" | shadows ").Append(QualitySettings.shadowDistance.ToString("0")).Append(" m | cameras:");
             foreach (var c in UnityEngine.Camera.allCameras)
                 if (c != null && c.isActiveAndEnabled) sb.Append(' ').Append(c.name).Append(c.targetTexture != null ? "(rt " + c.targetTexture.width + "x" + c.targetTexture.height + ")" : "");
@@ -63,7 +67,39 @@ namespace WildWasteland.Modules.PlayerBody
         {
             for (int i = 0; i < _ticks.Length; i++) _ticks[i] = 0;
             _frames = _over33 = _over50 = 0; _worst = 0f; _start = now; _next = now + 10f;
+            _gcBytes = 0; _gcFrames = 0;
             _gc0 = GC.CollectionCount(0); _gc2 = GC.CollectionCount(2); _renders = OcclusionCutaway.Renders;
+        }
+
+        // (WW) Unity's "GC Allocated In Frame" counter (Unity.Profiling.ProfilerRecorder, Unity 2020.2+): summed per window. Only while
+        // VerboseLog is on; where the player doesn't provide the counter (Valid false) the line says n/a.
+        private static Unity.Profiling.ProfilerRecorder _gcRec;
+        private static bool _gcTried;
+        private static long _gcBytes; private static int _gcFrames;
+        private static void GcFrame()
+        {
+            try
+            {
+                if (!_gcTried) { _gcTried = true; _gcRec = Unity.Profiling.ProfilerRecorder.StartNew(Unity.Profiling.ProfilerCategory.Memory, "GC Allocated In Frame"); }
+                if (_gcRec.Valid && _gcRec.Count > 0) { _gcBytes += _gcRec.LastValue; _gcFrames++; }
+            }
+            catch (Exception) { }
+        }
+        internal static void StopGc()
+        {
+            if (!_gcTried) return;
+            _gcTried = false;
+            try { _gcRec.Dispose(); } catch (Exception) { }
+        }
+        // the native map camera (QuestMap / CleanHUD): enabled or not, found among all cameras (also inactive ones) once and kept
+        private static UnityEngine.Camera _mapCam;
+        private static string MapCamState()
+        {
+            if (_mapCam == null)
+                foreach (var c in Resources.FindObjectsOfTypeAll<UnityEngine.Camera>())
+                    if (c != null && c.gameObject.scene.IsValid() && c.name == "MapCheat_Camera") { _mapCam = c; break; }
+            if (_mapCam == null) return "absent";
+            return (_mapCam.enabled ? "enabled" : "disabled") + (_mapCam.gameObject.activeInHierarchy ? ", active" : ", inactive") + (_mapCam.isActiveAndEnabled ? " (renders)" : " (idle)");
         }
 
         private static void LogSystem()

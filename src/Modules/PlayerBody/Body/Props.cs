@@ -19,9 +19,18 @@ namespace WildWasteland.Modules.PlayerBody
 
         public enum Kind { None, Rifle, Pistol, Melee, Throw }
 
+        // (WW perf) memo per weapon name (asked per frame; ToLowerInvariant made a string per call). Pure function of the name.
+        private static readonly Dictionary<string, Kind> _kinds = new Dictionary<string, Kind>();
         public static Kind KindOf(string weapon)
         {
             if (string.IsNullOrEmpty(weapon) || weapon == "hands") return Kind.None;
+            Kind k;
+            if (_kinds.TryGetValue(weapon, out k)) return k;
+            if (_kinds.Count > 512) _kinds.Clear();
+            return _kinds[weapon] = KindOfName(weapon);
+        }
+        private static Kind KindOfName(string weapon)
+        {
             string w = weapon.ToLowerInvariant();
             if (w.Contains("blastlance") || w.Contains("grenade")) return Kind.Throw;
             if (w.Contains("shiv") || w.Contains("knife") || w.Contains("machete") || w.Contains("wrench") || w.Contains("pipe_wrench")) return Kind.Melee;

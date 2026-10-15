@@ -695,19 +695,30 @@ namespace WildWasteland.Modules.PlayerBody
         // on foot: place, animate (graph is already evaluated by the Animator this frame), then the procedural layers
         // pose fades: the last shown pose (captured after every frame) blends into the new one over a short time when she gets into / out of
         // the driver's seat or turns off the seat in the car (bone local rotations; hips stay where the new pose puts them)
-        private readonly Dictionary<string, Quaternion> _shown = new Dictionary<string, Quaternion>(), _fadeFrom = new Dictionary<string, Quaternion>();
+        // (WW perf, F9) the shown pose per bone in arrays parallel to Bones (filled once at creation): was ~50 string-keyed dictionary writes a frame
+        private Transform[] _boneArr; private int _hipsIdx = -1;
+        private Quaternion[] _shownQ, _fadeQ; private bool _shownAny;
+        private void BoneArrays()
+        {
+            if (_boneArr != null && _boneArr.Length == Bones.Count) return;
+            int n = Bones.Count, i = 0;
+            _boneArr = new Transform[n]; _shownQ = new Quaternion[n]; _fadeQ = new Quaternion[n]; _shownAny = false; _hipsIdx = -1; _fadeT = 0f;
+            foreach (var kv in Bones) { if (kv.Key == "mixamorig:Hips") _hipsIdx = i; _boneArr[i++] = kv.Value; }
+        }
         private float _fadeT, _fadeLen = 0.3f;
         private Quaternion _fadeRoot = Quaternion.identity, _shownRoot = Quaternion.identity;
         private bool _fadeRootOn;
         private void CapturePose(Transform rel)
         {
-            foreach (var kv in Bones) _shown[kv.Key] = kv.Value.localRotation;
+            BoneArrays();
+            for (int i = 0; i < _boneArr.Length; i++) _shownQ[i] = _boneArr[i].localRotation;
+            _shownAny = true;
             _shownRoot = rel != null ? Quaternion.Inverse(rel.rotation) * Root.transform.rotation : Root.transform.rotation;
         }
         private void StartPoseFade(float len, bool root)
         {
-            if (_shown.Count == 0) return;
-            _fadeFrom.Clear(); foreach (var kv in _shown) _fadeFrom[kv.Key] = kv.Value;
+            if (!_shownAny) return;
+            Array.Copy(_shownQ, _fadeQ, _shownQ.Length);
             _fadeRoot = _shownRoot; _fadeRootOn = root;
             _fadeT = _fadeLen = len;
         }
@@ -723,11 +734,11 @@ namespace WildWasteland.Modules.PlayerBody
                 Root.transform.rotation = rel.rotation * Quaternion.Slerp(_fadeRoot, cur, k);
                 if (hipsT != null) Root.transform.position += hp - hipsT.position;   // turn about her hips
             }
-            foreach (var kv in Bones)
+            for (int i = 0; i < _boneArr.Length; i++)
             {
-                if (kv.Key == "mixamorig:Hips") continue;
-                Quaternion from;
-                if (_fadeFrom.TryGetValue(kv.Key, out from)) kv.Value.localRotation = Quaternion.Slerp(from, kv.Value.localRotation, k);
+                if (i == _hipsIdx) continue;
+                var bt = _boneArr[i];
+                bt.localRotation = Quaternion.Slerp(_fadeQ[i], bt.localRotation, k);
             }
             _fadeT -= dt;
         }
@@ -750,8 +761,8 @@ namespace WildWasteland.Modules.PlayerBody
             var yaw = Quaternion.LookRotation(fwd.normalized, Vector3.up);
             float standH = Game.StandingHeight;
             string mstate = Game.MoveState;
-            bool crawl = mstate.StartsWith("Crawl") || standH < 0.75f;
-            bool crouch = !crawl && (mstate.StartsWith("Crouch") || standH < 1.4f);
+            bool crawl = mstate.StartsWith("Crawl", StringComparison.Ordinal) || standH < 0.75f;
+            bool crouch = !crawl && (mstate.StartsWith("Crouch", StringComparison.Ordinal) || standH < 1.4f);
             _crouch = Mathf.MoveTowards(_crouch, crouch ? 1f : 0f, dt * 4f);
             _prone = Mathf.MoveTowards(_prone, crawl ? 1f : 0f, dt * 3f);
 
@@ -1186,12 +1197,14 @@ namespace WildWasteland.Modules.PlayerBody
             t.localPosition = p; t.localRotation = r;
 
             string pose = DominantPose();
-            var shown = GunPose.Effective(_propFor, pose, GunPose.Abs(_propPos, _propRot));
+            // (WW perf) the raider-grip default only when the clip has no pose; a new array only while editing (the editor keeps 'shown')
+            var shown = GunPose.Effective(_propFor, pose, null) ?? (GunPose.Editing ? GunPose.Abs(_propPos, _propRot) : GunPose.Abs(_propPos, _propRot, _shownDef));
             Vector3 move, rot;
-            GunPose.Status((kind == Props.Kind.Pistol ? "pistol" : kind == Props.Kind.Rifle ? "rifle" : kind.ToString().ToLowerInvariant()) + " animations" + (_reloading ? ", RELOADING" : "") + (_shootingNow ? ", firing" : _aimingNow ? ", aiming" : ""));
+            GunPose.Status(kind, _reloading, _shootingNow, _aimingNow);
             if (_propShown && GunPose.Keys(_propFor, pose, shown, out move, out rot)) Adjust(t, yaw, move, rot, pose);
         }
 
+        private readonly float[] _shownDef = new float[6];
         private void Adjust(Transform t, Quaternion yaw, Vector3 move, Vector3 rot, string pose)
         {
             float dt = Time.unscaledDeltaTime;

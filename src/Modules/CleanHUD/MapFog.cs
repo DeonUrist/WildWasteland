@@ -32,7 +32,8 @@ namespace WildWasteland.Modules.CleanHUD
         private static int _seed = int.MinValue;
         private static float _lastPaint, _holdUntil, _nextUpload;
         private static Vector3 _last;
-        private static bool _havePosition;
+        private static bool _havePosition, _idle;
+        private static float _idleRadius, _idleInner;
         private static string _saves;
 
         private static byte[] New() { var d = new byte[4096]; for (int i = 0; i < d.Length; i++) d[i] = 255; return d; }
@@ -50,7 +51,7 @@ namespace WildWasteland.Modules.CleanHUD
 
         internal static void Reset()
         {
-            Chunks.Clear(); _loaded = false; _seed = int.MinValue; _window = false; _havePosition = false; _wasOpen = false;
+            Chunks.Clear(); _loaded = false; _seed = int.MinValue; _window = false; _havePosition = false; _wasOpen = false; _idle = false;
             DropOverlay();
         }
 
@@ -92,10 +93,14 @@ namespace WildWasteland.Modules.CleanHUD
             var player = GameRefs.Player; if (player == null) return;
             var p = Origin.World(player.transform.position);
             bool jump = _havePosition && (p - _last).sqrMagnitude > 90000f;
+            bool still = _havePosition && p.x == _last.x && p.y == _last.y && p.z == _last.z;
             _last = p; _havePosition = true;
             if (jump) { _holdUntil = now + .5f; return; }
             float radius = Mathf.Max(Cell, CleanHudModule.FogRadius.Value);
             float inner = Mathf.Clamp(radius - CleanHudModule.FogEdge.Value, 0f, radius * .999f);
+            // Standing exactly still after a pass that revealed nothing: the same pass would reveal nothing again.
+            if (still && _idle && radius == _idleRadius && inner == _idleInner) return;
+            _idle = true; _idleRadius = radius; _idleInner = inner;
             int step = Mathf.Max(1, (int)(dt * 255f)), reach = Mathf.CeilToInt(radius / Cell) + 1;
             int px = Mathf.FloorToInt(p.x / Cell), pz = Mathf.FloorToInt(p.z / Cell);
             long lastKey = long.MinValue; Chunk chunk = null;
@@ -115,7 +120,7 @@ namespace WildWasteland.Modules.CleanHUD
                     }
                     int i = (cz & 63) * 64 + (cx & 63), cur = chunk.D[i], target = 255 - reveal;
                     if (cur <= target) continue;
-                    int v = Mathf.Max(target, cur - step); chunk.D[i] = (byte)v;
+                    int v = Mathf.Max(target, cur - step); chunk.D[i] = (byte)v; _idle = false;
                     if (_window)
                     {
                         int x = cx - _winX, z = cz - _winZ;
@@ -207,7 +212,7 @@ namespace WildWasteland.Modules.CleanHUD
 
         internal static void WorldReady(string slot)
         {
-            Chunks.Clear(); _window = false; _havePosition = false; _loaded = true; _seed = Seed();
+            Chunks.Clear(); _window = false; _havePosition = false; _idle = false; _loaded = true; _seed = Seed();
             if (_standDown) return;
             string from = "nothing saved for this world yet";
             try

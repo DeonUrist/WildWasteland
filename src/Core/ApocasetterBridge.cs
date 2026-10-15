@@ -15,6 +15,9 @@ namespace WildWasteland.Core
         static bool _resolved;
         static MethodInfo _set;
         static FieldInfo _active, _font;
+        // (WW perf) InputBlocker.Active compiled once into a typed getter (it is read every frame by Hotkeys and by input hooks:
+        // FieldInfo.GetValue boxed a bool per call). Falls back to reflection if the delegate can't be built or fails once.
+        static Func<bool> _activeGet;
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void Resolve()
@@ -28,6 +31,11 @@ namespace WildWasteland.Core
                 if (asm == null) return;
                 var ib = asm.GetType("Apocasetter.InputBlocker");
                 if (ib != null) { _set = ib.GetMethod("Set", BindingFlags.Static | BindingFlags.Public); _active = ib.GetField("Active", BindingFlags.Static | BindingFlags.Public); }
+                if (_active != null && _active.FieldType == typeof(bool))
+                {
+                    try { _activeGet = System.Linq.Expressions.Expression.Lambda<Func<bool>>(System.Linq.Expressions.Expression.Field(null, _active)).Compile(); _activeGet(); }
+                    catch (Exception) { _activeGet = null; }
+                }
                 var gs = asm.GetType("Apocasetter.GameSkin");
                 if (gs != null) _font = gs.GetField("GameFont", BindingFlags.Static | BindingFlags.Public);
             }
@@ -39,7 +47,13 @@ namespace WildWasteland.Core
         /// <summary>True while the Apocasetter Mods window blocks game input.</summary>
         public static bool InputBlocked
         {
-            get { Resolve(); try { return _active != null && (bool)_active.GetValue(null); } catch { return false; } }
+            get
+            {
+                Resolve();
+                var g = _activeGet;
+                if (g != null) { try { return g(); } catch { _activeGet = null; } }
+                try { return _active != null && (bool)_active.GetValue(null); } catch { return false; }
+            }
         }
 
         /// <summary>Returns true when the blocker was changed (Apocasetter present).</summary>

@@ -194,6 +194,8 @@ namespace WildWasteland.Modules.PlayerBody
         }
 
 
+        // the same conditions GunPose.OnGUI / Car.OnGUI draw under (an editor hint, or seated in a car)
+        internal static bool GuiWanted() { return !string.IsNullOrEmpty(GunPose.HintText) || Car.GuiWanted; }
         internal static void Gui() { long t0 = Perf.Now; try { GunPose.OnGUI(); Car.OnGUI(); } catch (Exception) { } Perf.Add(Perf.Gui, t0); }
 
         // after the frame is drawn: the camera's real matrices back (the game's mouse picks next frame cast from the eye)

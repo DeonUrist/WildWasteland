@@ -50,6 +50,21 @@ namespace WildWasteland.Modules.Patrols
             }
             return exit;
         }
+        // The Gui job's predicate, Gui's branches without drawing: true for the War Rig notice, while the native map (M) is open with
+        // routes or rigs to ink, while a 5 s map-reference rescan is due (or the map just opened without them), and for the one call that
+        // resets _gameInkAt / _mapWasOpen after the map closed or traffic went off. Destroyed rigs are still pruned there, a bit later.
+        internal bool GuiWanted()
+        {
+            bool inGame=Core.GameRefs.InGame;float now=Time.unscaledTime;
+            if(inGame&&now<WarRig.WorldSpawning.NaturalNoticeUntil)return true;
+            var mapApi=Core.Services.Map;
+            bool traffic=PatrolsModule.WorldTrafficEnabled.Value&&(mapApi!=null?mapApi.Routes!=Core.MapDetail.Off:PatrolsModule.TrafficDebugMap.Value);
+            bool reset=_gameInkAt!=0f||_mapWasOpen;
+            if((!traffic&&WarRig.WorldSpawning.NaturalRigs.Count==0)||!inGame)return reset;
+            bool mapOpen=_mapCheat!=null&&_mapCheat.isActiveAndEnabled&&_mapCheat.ActiveStateName=="on";
+            if((_gameMap==null||_gameMapImage==null||_mapCheat==null)&&(now>=_nextMapScan||(mapOpen&&!_mapWasOpen)))return true;
+            return mapOpen||reset;
+        }
         // WW: was OnGUI (Gui job)
         internal void Gui()
         {
@@ -82,13 +97,19 @@ namespace WildWasteland.Modules.Patrols
             var old=GUI.color;GUI.BeginGroup(rect);
             if(traffic&&(Time.unscaledTime>=_gameInkAt||_gameInkSize!=rect.size||_inkNames!=MapNames||_inkHide!=MapUnknown))
             {
+                bool first=_gameInkAt<=0f||_gameInkSize!=rect.size||_inkNames!=MapNames||_inkHide!=MapUnknown;
                 _gameInkAt=Time.unscaledTime+1f;_gameInkSize=rect.size;
                 _inkNames=MapNames;_inkHide=MapUnknown;
+                // Perf: the route texture is redrawn only when its inputs change (journeys/routes/colours, map camera, size, options),
+                // while the fog is being revealed around a moving player, and every 10 s as a safety net (was every second); labels stay 1 Hz
+                if(InkChanged(mapApi,first))
+                {
                 var canvas=new Rect(0,0,Mathf.Min(512f,rect.width),Mathf.Min(512f,rect.height));
                 _gameInk.Begin(Mathf.RoundToInt(canvas.width),Mathf.RoundToInt(canvas.height));
                 foreach(var journey in _journeys)for(int i=1;i<journey.route.Length;i++)
                     InkSegment(mapApi,journey.route[i-1],journey.route[i],canvas,RouteColor(journey));
                 _gameInk.End();
+                }
                 _mapLabels.Clear();_mapBattles.Clear();
                 foreach(var journey in _journeys)if(!Fogged(mapApi,journey.position))
                 CacheMapLabel(journey.position,rect,RouteColor(journey),MapName(journey));
@@ -116,6 +137,36 @@ namespace WildWasteland.Modules.Patrols
                 GUI.color=Color.white;GUI.Label(new Rect(p.x*rect.width-12f,(1f-p.y)*rect.height-12f,24f,24f),unknown?"?":"X",_rigXStyle);
             }
             GUI.EndGroup();GUI.color=old;
+        }
+        private long _inkSig;private Vector3 _inkCamPos;private Quaternion _inkCamRot;private float _inkCamSize,_inkCamFov,_inkCamAspect,_inkSafetyAt,_fogMovingUntil;
+        private int _inkPlayerX=int.MinValue,_inkPlayerZ=int.MinValue;
+        private bool InkChanged(Core.IMapMarkers mapApi,bool first)
+        {
+            float now=Time.unscaledTime;
+            long sig=_journeys.Count;
+            foreach(var journey in _journeys)
+            {
+                var c=RouteColor(journey);
+                sig=sig*31+(journey.route!=null?System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(journey.route)*7+journey.route.Length:0);
+                sig=sig*31+((c.r<<16)|(c.g<<8)|c.b);
+            }
+            var cam=_gameMap.transform;
+            bool camera=cam.position!=_inkCamPos||cam.rotation!=_inkCamRot||_gameMap.orthographicSize!=_inkCamSize||_gameMap.fieldOfView!=_inkCamFov||_gameMap.aspect!=_inkCamAspect;
+            bool fog=false;
+            if(mapApi!=null)
+            {
+                // CleanHUD reveals the fog only around the player, fading in over about a second: re-ink while the player moves (10 m cells) and 2 s after
+                var player=PlayerRef.Player;
+                if(player!=null)
+                {
+                    var w=TrafficSpace.World(player.position);int x=Mathf.FloorToInt(w.x/10f),z=Mathf.FloorToInt(w.z/10f);
+                    if(x!=_inkPlayerX||z!=_inkPlayerZ){_inkPlayerX=x;_inkPlayerZ=z;_fogMovingUntil=now+2f;}
+                }
+                fog=now<_fogMovingUntil;
+            }
+            if(!first&&!camera&&!fog&&sig==_inkSig&&now<_inkSafetyAt)return false;
+            _inkSig=sig;_inkCamPos=cam.position;_inkCamRot=cam.rotation;_inkCamSize=_gameMap.orthographicSize;_inkCamFov=_gameMap.fieldOfView;_inkCamAspect=_gameMap.aspect;
+            _inkSafetyAt=now+10f;return true;
         }
         // With CleanHUD's fog of war on, routes are inked only across explored ground (50 m pieces, judged at their midpoints).
         private static bool Fogged(Core.IMapMarkers map,Vector3 world){return map!=null&&map.Hidden(TrafficSpace.Scene(world));}

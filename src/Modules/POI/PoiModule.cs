@@ -58,6 +58,22 @@ namespace WildWasteland.Modules.POI
             TerrainTile.OnTileFinalized += Finalized;
             TerrainTile.OnTileApplied += Applied;
             TerrainTile.OnTileMoved += Moved;
+            Scheduler.Interval(this, "Site proximity", 1f, Proximity, Phase.Update, true);
+        }
+        // Replaces the old 500 m trigger sphere per site (a huge Default-layer trigger every rigidbody and query touched):
+        // a site is tried when the player comes within 500 m, as OnTriggerEnter did. Game time, like physics; skipped while not in play.
+        private void Proximity()
+        {
+            if (!_running || _sites.Count == 0 || !GameRefs.InGame || SaveBus.Busy) return;
+            var player = GameRefs.Player; if (player == null) return;
+            var p = player.transform.position;
+            for (int i = 0; i < _sites.Count; i++)
+            {
+                var site = _sites[i]; if (site == null) continue;
+                bool inside = site.gameObject.activeInHierarchy && (p - site.transform.position).sqrMagnitude <= 500f * 500f;
+                if (inside && !site.Inside) TrySpawn(site);
+                site.Inside = inside;
+            }
         }
         public void Register(PoiDefinition definition)
         {
@@ -133,7 +149,7 @@ namespace WildWasteland.Modules.POI
                             graph.Add(filter); registration.Added.Add(filter); registration.Original[output] = original;
                             graph.Link(original, filter); graph.Link(filter, output);
                         }
-                        Log.Always("[POI] Registered " + definition.Id + " with native terrain generation; no scheduler jobs.");
+                        Log.Always("[POI] Registered " + definition.Id + " with native terrain generation.");
                     }
                     locations.Chance = definition.Enabled == null || definition.Enabled() ? _chance.Value : 0;
                 }
@@ -175,7 +191,6 @@ namespace WildWasteland.Modules.POI
                     marker.transform.SetParent(tile.objectsPool.transform, false);
                     marker.transform.position = tile.mapMagic.transform.TransformPoint(point.pos);
                     marker.transform.rotation = point.rotation;
-                    var trigger = marker.AddComponent<SphereCollider>(); trigger.isTrigger = true; trigger.radius = 500f;
                     var siteComponent = marker.AddComponent<PoiSite>(); siteComponent.Owner = this; siteComponent.Definition = definition; siteComponent.Key = key;
                     _sites.Add(siteComponent); if (definition.Mark != null) definition.Mark(marker);
                     Log.Always("[POI] " + pair.Key + " site generated in slice " + tile.coord + " at " + point.pos);
@@ -250,7 +265,7 @@ namespace WildWasteland.Modules.POI
         }
         public override IEnumerable<ToolPage> ToolPages()
         {
-            return new ToolPage[] { new ConfigPage(this, ToolGroups.Vehicles, "Points of interest", Config.Main, "POI / World") { Intro = "Native terrain-generation additions. 100% creates one site per 5 km slice. Encounters spawn within 500 m of the player. No POI scheduler jobs." } };
+            return new ToolPage[] { new ConfigPage(this, ToolGroups.Vehicles, "Points of interest", Config.Main, "POI / World") { Intro = "Native terrain-generation additions. 100% creates one site per 5 km slice. Encounters spawn within 500 m of the player (checked once per second)." } };
         }
     }
 
@@ -259,8 +274,7 @@ namespace WildWasteland.Modules.POI
         internal PoiModule Owner;
         internal PoiDefinition Definition;
         internal string Key;
-        internal bool Building;
-        private void OnTriggerEnter(Collider other) { if (other.CompareTag("Player") && Owner != null) Owner.TrySpawn(this); }
+        internal bool Building, Inside;
         private void OnEnable() { if (Owner != null) Owner.TrySpawn(this); }
         internal void Completed(GameObject result) { if (Owner != null) Owner.Completed(this, result); }
     }

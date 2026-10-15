@@ -94,7 +94,7 @@ namespace WildWasteland.Modules.NPC
         internal static void Shutdown()
         {
             foreach (var st in _rays) if (st.Sensor != null) st.Sensor.Length = st.Length;
-            _rays.Clear(); _refs.Clear();
+            _rays.Clear(); _refs.Clear(); _shotInfo.Clear();
         }
 
         internal static bool PlayerWeapon(GameObject weapon)
@@ -104,6 +104,31 @@ namespace WildWasteland.Modules.NPC
             return false;
         }
 
+        private sealed class ShotInfo { public bool Gun; public WeaponRanges.Kind Kind; public Transform[] Muzzles; }
+        private static readonly Dictionary<Fsm, ShotInfo> _shotInfo = new Dictionary<Fsm, ShotInfo>();
+        private static readonly List<Transform> _muzzleBuf = new List<Transform>();
+        internal static void OnSceneLoaded() { _shotInfo.Clear(); }
+        private static ShotInfo MakeShotInfo(Fsm fsm)
+        {
+            var si = new ShotInfo { Muzzles = new Transform[0] };
+            foreach (var f in fsm.GameObject.GetComponents<PlayMakerFSM>()) if (f != null && f.FsmName == "Reload") { si.Gun = true; break; }
+            if (!si.Gun) return si;
+            var kind = WeaponRanges.Classify(fsm.GameObject.name);
+            bool shotgun = false;
+            var hit = fsm.GetState("hit");
+            if (hit != null && hit.Actions != null)
+                foreach (var a in hit.Actions)
+                { var ic = a as IntCompare; if (ic != null && ic.integer1 != null && ic.integer1.Name == "pellets" && ic.integer2 != null) { shotgun = true; break; } }
+            if (shotgun) kind = WeaponRanges.Kind.Shotgun;
+            else if (kind == WeaponRanges.Kind.Shotgun) kind = WeaponRanges.Kind.Rifle;
+            si.Kind = kind;
+            _muzzleBuf.Clear();
+            foreach (var t in fsm.GameObject.GetComponentsInChildren<Transform>(true))
+                if (t.name.StartsWith("muzzle_flesh_effect", StringComparison.Ordinal) || t.name.StartsWith("muzzle_flash", StringComparison.Ordinal)) _muzzleBuf.Add(t);
+            si.Muzzles = _muzzleBuf.ToArray();
+            return si;
+        }
+
         public static bool BeforePlayerShot(Raycast __instance)
         {
             try
@@ -111,23 +136,30 @@ namespace WildWasteland.Modules.NPC
                 if (!Senses.On || WeaponRanges.ProjectilesEnabled) return true;
                 var fsm = __instance.Fsm;
                 if (fsm == null || fsm.Name != "Attack" || fsm.GameObject == null || __instance.repeatInterval == null || __instance.repeatInterval.Value != 0f) return true;
-                bool reload = false;
-                foreach (var f in fsm.GameObject.GetComponents<PlayMakerFSM>()) if (f != null && f.FsmName == "Reload") { reload = true; break; }
-                if (!reload || !PlayerWeapon(fsm.GameObject)) return true;
-                var kind = WeaponRanges.Classify(fsm.GameObject.name);
-                bool shotgun = false;
-                var hit = fsm.GetState("hit");
-                if (hit != null && hit.Actions != null)
-                    foreach (var a in hit.Actions)
-                    { var ic = a as IntCompare; if (ic != null && ic.integer1 != null && ic.integer1.Name == "pellets" && ic.integer2 != null) { shotgun = true; break; } }
-                if (shotgun) kind = WeaponRanges.Kind.Shotgun;
-                else if (kind == WeaponRanges.Kind.Shotgun) kind = WeaponRanges.Kind.Rifle;
+                // (perf) per Attack FSM, once: has a Reload FSM (a gun), its kind and its muzzle transforms (the NPCs' Attack FSMs end here
+                // after one dictionary lookup instead of a GetComponents per ray)
+                ShotInfo si;
+                if (!_shotInfo.TryGetValue(fsm, out si))
+                {
+                    if (_shotInfo.Count > 512) _shotInfo.Clear();
+                    si = MakeShotInfo(fsm);
+                    _shotInfo[fsm] = si;
+                }
+                if (!si.Gun || !PlayerWeapon(fsm.GameObject)) return true;
                 var from = fsm.GetOwnerDefaultTarget(__instance.fromGameObject);
                 Vector3 position = from != null ? from.transform.position : fsm.GameObject.transform.position;
-                foreach (var t in fsm.GameObject.GetComponentsInChildren<Transform>(true))
-                    if ((t.name.StartsWith("muzzle_flesh_effect", StringComparison.Ordinal) || t.name.StartsWith("muzzle_flash", StringComparison.Ordinal)) && t.gameObject.activeInHierarchy)
-                    { position = t.position; break; }
-                Senses.Shot(Core.GameRefs.Player, position, kind, true);
+                bool found = false;
+                foreach (var t in si.Muzzles)
+                    if (t != null && t.gameObject.activeInHierarchy) { position = t.position; found = true; break; }
+                if (!found)       // none of the known muzzles is lit: the full search as before (a flash spawned at run time), remembered for next time
+                {
+                    _muzzleBuf.Clear();
+                    foreach (var t in fsm.GameObject.GetComponentsInChildren<Transform>(true))
+                        if (t.name.StartsWith("muzzle_flesh_effect", StringComparison.Ordinal) || t.name.StartsWith("muzzle_flash", StringComparison.Ordinal))
+                        { _muzzleBuf.Add(t); if (!found && t.gameObject.activeInHierarchy) { position = t.position; found = true; } }
+                    si.Muzzles = _muzzleBuf.ToArray();
+                }
+                Senses.Shot(Core.GameRefs.Player, position, si.Kind, true);
             }
             catch (Exception e) { NpcModule.Warn("Vanilla player shot observation: " + e.Message); }
             return true;

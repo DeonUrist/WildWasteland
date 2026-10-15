@@ -13,6 +13,7 @@ namespace WildWasteland.Modules.Patrols
         private readonly List<KeyValuePair<Behaviour,System.Reflection.PropertyInfo>> _sensors=new List<KeyValuePair<Behaviour,System.Reflection.PropertyInfo>>();
         private bool _relationSet,_hostile;
         private float _next;
+        private static readonly List<PlayMakerFSM> Fs=new List<PlayMakerFSM>();
         private void Start()
         {
             foreach(var f in GetComponents<PlayMakerFSM>())if(f.FsmName=="Health")Health=f.FsmVariables.GetFsmFloat("Health");
@@ -31,7 +32,7 @@ namespace WildWasteland.Modules.Patrols
         private void Update()
         { if (!PatrolsModule.Running) return;
             if(Time.time<_next)return;_next=Time.time+0.6f;Relations();if(transform.parent!=null)return;
-            if(Health==null)foreach(var f in GetComponents<PlayMakerFSM>())if(f.FsmName=="Health")Health=f.FsmVariables.GetFsmFloat("Health");
+            if(Health==null){Fs.Clear();GetComponents(Fs);foreach(var f in Fs)if(f.FsmName=="Health")Health=f.FsmVariables.GetFsmFloat("Health");Fs.Clear();}
             if(Health!=null&&Health.Value<=0f)return;
             SimpleBanditBridge.Target(gameObject,TrafficFactions.Target(Faction,transform.position));
         }
@@ -39,6 +40,7 @@ namespace WildWasteland.Modules.Patrols
     internal static class TrafficFactions
     {
         private static PlayMakerFSM _relation;private static float _findRelation;
+        private static PlayMakerFSM _relationOf;private static FsmInt _relationOnOff;   // Perf: "OnOff" resolved once per relation FSM (was FindFsmInt by name per call)
         internal static readonly List<TrafficActor> Actors=new List<TrafficActor>();
         internal static string Normalize(string faction)=>string.Equals(faction,"Coyotes",StringComparison.OrdinalIgnoreCase)?"Coyotes":"Scrapyard";
         internal static bool Opposed(string a,string b)=>Normalize(a)!=Normalize(b);
@@ -47,7 +49,10 @@ namespace WildWasteland.Modules.Patrols
             if(Normalize(faction)!="Coyotes")return true;
             if(_relation==null&&Time.time>=_findRelation)
             {_findRelation=Time.time+2f;var manager=Core.GameRefs.GameManager;if(manager!=null)foreach(var f in manager.GetComponents<PlayMakerFSM>())if(f.FsmName=="FactionRelation_Coyotes"){_relation=f;break;}}
-            return _relation!=null&&_relation.Fsm.Initialized&&(_relation.ActiveStateName=="PlayerEnemy"||_relation.FsmVariables.FindFsmInt("OnOff")?.Value>0);
+            if(_relation==null||!_relation.Fsm.Initialized)return false;
+            if(_relation.ActiveStateName=="PlayerEnemy")return true;
+            if(!ReferenceEquals(_relationOf,_relation)||_relationOnOff==null){_relationOnOff=_relation.FsmVariables.FindFsmInt("OnOff");_relationOf=_relationOnOff!=null?_relation:null;}
+            return _relationOnOff!=null&&_relationOnOff.Value>0;
         }
         internal static void Actor(GameObject npc,string faction)
         {
@@ -80,17 +85,23 @@ namespace WildWasteland.Modules.Patrols
             return PlayerHostile(faction)&&!PlayerRef.GodMode&&PlayerRef.Player!=null?PlayerRef.Player.gameObject:null;
         }
         internal static bool DriveTarget(GameObject car,out Vector3 pos,out Vector3 vel,out GameObject targetCar)
+        {return DriveTarget(car,car!=null?car.GetComponent<PatrolMarker>():null,out pos,out vel,out targetCar);}
+        // marker = car's PatrolMarker, cached by the caller
+        internal static bool DriveTarget(GameObject car,PatrolMarker marker,out Vector3 pos,out Vector3 vel,out GameObject targetCar)
         {
             pos=vel=Vector3.zero;targetCar=null;
-            var marker=car!=null?car.GetComponent<PatrolMarker>():null;
-            var target=marker!=null?ForCar(car):null;
+            var target=marker!=null?ForCar(car,marker):null;
             if(target==null)return false;
             if(PlayerRef.Player!=null&&target==PlayerRef.Player.gameObject)return PlayerRef.Target(out pos,out vel,out targetCar);
             pos=target.transform.position;var body=target.GetComponentInParent<Rigidbody>();if(body!=null){vel=body.velocity;targetCar=body.gameObject;}return true;
         }
         internal static GameObject ForCar(GameObject car)
         {
-            var marker=car!=null?car.GetComponent<PatrolMarker>():null;if(marker==null)return null;
+            return ForCar(car,car!=null?car.GetComponent<PatrolMarker>():null);
+        }
+        internal static GameObject ForCar(GameObject car,PatrolMarker marker)
+        {
+            if(marker==null)return null;
             if(Time.time>=marker.FactionCheck){marker.FactionCheck=Time.time+0.4f;marker.FactionTarget=Target(marker.Faction,car.transform.position);}return marker.FactionTarget;
         }
     }

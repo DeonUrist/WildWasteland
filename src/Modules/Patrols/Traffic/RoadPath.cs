@@ -54,18 +54,26 @@ namespace WildWasteland.Modules.Patrols
             return Vector3.Lerp(route[index-1],route[index],length>0.001f?(distance-metrics.Distance[index-1])/length:0f);
         }
         internal static Vector3 Target(Vector3[] route, int leg, Vector3 actual, float speed)
+        { return TargetAt(route, Progress(route, leg, actual), speed); }
+        // Perf: the same maths from a progress the caller already has (Progress was computed 2-4x per pilot decision)
+        internal static Vector3 TargetAt(Vector3[] route, float progress, float speed)
         {
             float ahead = Mathf.Clamp(6f + speed * 0.45f, 6f, 16f);
             // Reduce the chord through a sharp bend so the vehicle follows the road instead of cutting the corner.
-            float safe = Speed(route, leg, actual, speed);
+            float safe = SpeedAt(route, progress, speed);
             ahead = Mathf.Min(ahead, 6f + safe * 0.45f);
-            return Point(route, Progress(route, leg, actual) + ahead);
+            return Point(route, progress + ahead);
         }
         internal static float Speed(Vector3[] route, int leg, Vector3 actual, float cruise)
         {
             if (route.Length < 3) return cruise;
+            return SpeedAt(route, Progress(route, leg, actual), cruise);
+        }
+        internal static float SpeedAt(Vector3[] route, float progress, float cruise)
+        {
+            if (route.Length < 3) return cruise;
             var metrics=Cache.GetValue(route,Create);
-            float progress = Progress(route, leg, actual), result = cruise;
+            float result = cruise;
             int start=Array.BinarySearch(metrics.Distance,progress-2f);if(start<0)start=~start;
             for (int i = Mathf.Max(1,start); i < route.Length - 1; i++)
             {

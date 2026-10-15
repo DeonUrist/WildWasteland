@@ -12,12 +12,15 @@ namespace WildWasteland.Modules.Patrols.WarRig
         // Captured before player attachments are added. Unity remaps these refs when cloning the prefab.
         [SerializeField] private Renderer[] hiddenRenderers = new Renderer[0];
         internal void SetHiddenRenderers(Renderer[] renderers) { hiddenRenderers = renderers; }
-        private float nextVisualCheck;
+        private float nextVisualCheck, fastVisualUntil;
+        private static readonly string[] CollisionNodes = { "warrig_colliders", "warrig_hulls" };
 
         private void LateUpdate()
         { if (!PatrolsModule.Running) return;
+            if (Core.SaveBus.Loading) fastVisualUntil = Time.unscaledTime + 15f;
             if (Time.unscaledTime < nextVisualCheck) return;
-            nextVisualCheck = Time.unscaledTime + .25f;
+            // Perf: 4 Hz for 15 s after enable / a load (when Easy Save writes), 5 s otherwise (was 4 Hz always)
+            nextVisualCheck = Time.unscaledTime + (Time.unscaledTime < fastVisualUntil ? .25f : 5f);
             // Easy Save can overwrite existing objects after Start, including on a death/reload.
             // Keep collision-only renderers hidden and rebind unresolved visual references after that write.
             try
@@ -44,7 +47,7 @@ namespace WildWasteland.Modules.Patrols.WarRig
         private void HideCollisionRenderers(Transform node)
         {
             if (hiddenRenderers != null) foreach (var r in hiddenRenderers) if (r != null && r.enabled) r.enabled = false;
-            foreach (var name in new[] { "warrig_colliders", "warrig_hulls" })
+            foreach (var name in CollisionNodes)
             {
                 var colliders = node.Find(name);
                 // Attachments such as spikes are children of the hull object and must stay visible.
@@ -52,7 +55,7 @@ namespace WildWasteland.Modules.Patrols.WarRig
             }
         }
 
-        private void OnEnable() { if (!All.Contains(this)) All.Add(this); }
+        private void OnEnable() { if (!All.Contains(this)) All.Add(this); fastVisualUntil = Time.unscaledTime + 15f; nextVisualCheck = 0f; }
         private void OnDisable() { groundRecovery.Reset(); All.Remove(this); if (All.Count == 0) NativeStormProtection.Restore(); }
 
         private Transform leg, leg2;
@@ -74,22 +77,31 @@ namespace WildWasteland.Modules.Patrols.WarRig
 
         // Only the allowed trucks (Rustchief) may hitch: the attacher (layer 20, what TrailerAttach's sphere cast looks for)
         // colliders are enabled only while the nearest truck hitch (within 8 m) is an allowed one.
+        // Perf: 4 Hz per rig with a random phase (was per frame); hitch list (static, 1 Hz) carries each truck's name and Allowed verdict
+        private float gateAt = -1f;
+        private static readonly List<Transform> casterList = new List<Transform>();
+        private static string[] casterTrucks = new string[0];
+        private static bool[] casterAllowed = new bool[0];
         private void GateAttacher()
         {
             if (att == null) return;
+            if (Time.unscaledTime < gateAt) return;
+            gateAt = gateAt < 0f ? Time.unscaledTime + .25f * Random.value : Time.unscaledTime + .25f;
             if (Time.unscaledTime > scanAt)
             {
                 scanAt = Time.unscaledTime + 1f;
-                var list = new List<Transform>();
-                foreach (var v in FindObjectsOfType<NWH.VehiclePhysics2.VehicleController>()) { var h = v.transform.Find("hitch_raycast"); if (h != null) list.Add(h); }
-                casters = list.ToArray();
+                casterList.Clear();
+                foreach (var v in FindObjectsOfType<NWH.VehiclePhysics2.VehicleController>()) { var h = v.transform.Find("hitch_raycast"); if (h != null) casterList.Add(h); }
+                casters = casterList.ToArray(); casterTrucks = new string[casters.Length]; casterAllowed = new bool[casters.Length];
+                for (int i = 0; i < casters.Length; i++) { casterTrucks[i] = casters[i].parent.name; casterAllowed[i] = Allowed(casterTrucks[i]); }
+                casterList.Clear();
             }
-            Transform best = null; float bd = 8f;
-            foreach (var c in casters) { if (c == null) continue; float d = Vector3.Distance(c.position, att.position); if (d < bd) { bd = d; best = c; } }
-            bool ok = best != null && Allowed(best.parent.name);
+            int best = -1; float bd = 8f;
+            for (int i = 0; i < casters.Length; i++) { var c = casters[i]; if (c == null) continue; float d = Vector3.Distance(c.position, att.position); if (d < bd) { bd = d; best = i; } }
+            bool ok = best >= 0 && casterAllowed[best];
             if (attCols == null) attCols = att.GetComponents<Collider>();
             foreach (var c in attCols) if (c != null && c.enabled != ok) c.enabled = ok;
-            NearestTruck = best != null ? best.parent.name : null;
+            NearestTruck = best >= 0 ? casterTrucks[best] : null;
         }
 
         public string NearestTruck;

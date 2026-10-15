@@ -147,6 +147,7 @@ namespace WildWasteland.Modules.Patrols
         private readonly List<Axle> _axles = new List<Axle>();
         private Rigidbody _body;
         private long _comSig; private float _nextCom; private bool _comShifted;
+        private static readonly List<Collider> _cols = new List<Collider>();
 
         // WW: live count, the first-line filter of the shared SetPosition.DoSetPosition postfix (Suspension.AfterSetPosition)
         internal static int Live;
@@ -261,7 +262,9 @@ namespace WildWasteland.Modules.Patrols
             bool kit = Suspension.KitFitted(gameObject);
             long sig = kit ? 19 : 17;
             sig = sig * 31 + (long)(Height * 1000f);
-            foreach (var c in GetComponentsInChildren<Collider>(false)) if (c != null && c.enabled && !c.isTrigger) sig = sig * 31 + c.GetInstanceID();
+            _cols.Clear(); GetComponentsInChildren(false, _cols);   // Perf: reused buffer (1 Hz per tuned car, from FixedUpdate)
+            foreach (var c in _cols) if (c != null && c.enabled && !c.isTrigger) sig = sig * 31 + c.GetInstanceID();
+            _cols.Clear();
             if (!force && sig == _comSig) return;
             _comSig = sig;
             float drop = PatrolsModule.SuspensionLiftCenterOfMass.Value && kit ? KitDrop + LiftFactor * Mathf.Max(0f, -Height) : 0f;

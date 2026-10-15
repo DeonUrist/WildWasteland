@@ -88,6 +88,7 @@ namespace WildWasteland.Modules.NPC
                 l.Value("Structures", I(Nav.StructureCount) + " found, " + I(Nav.BakedCount) + " baked");
                 l.Value("Baking", Nav.BakingText);
                 l.Value("ms per cell", F(Nav.MsPerCell, "0.000"));
+                l.Value("Exit picks", I(Nav.PickQueued) + " queued / running (1 ms a frame); move masks " + I(Nav.MaskedCount) + " of " + I(Nav.BakedCount) + " baked maps");
                 l.Value("Friends passing through", I(Passthrough.Pairs) + " pair(s)");
             }, Sec("Nav")));
 

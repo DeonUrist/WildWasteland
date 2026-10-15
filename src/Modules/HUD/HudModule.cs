@@ -94,7 +94,7 @@ namespace WildWasteland.Modules.HUD
             // old Runner: Update = crosshair + headshot audio, LateUpdate = VanillaHits.Flush + Hud.Flush, OnGUI = Hud.OnGUI
             _crosshairJob = Scheduler.Interval(this, "Crosshair", 0.25f, CrosshairController.Tick);
             Scheduler.EveryFrame(this, "Hit feedback flush", FlushHits, Phase.LateUpdate);
-            Scheduler.Gui(this, "Hit feedback draw", Hud.OnGUI);
+            Scheduler.Gui(this, "Hit feedback draw", Hud.OnGUI, Hud.GuiWanted);   // (WW perf) IMGUI only while a number, line or marker shows
             _crosshairJob.RunNow();
             HeadshotAudio.Refresh();
             Log.Info("[HUD] Combat HUD (ex Gunplay HUD 1.2.2) started");

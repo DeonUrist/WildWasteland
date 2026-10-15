@@ -54,23 +54,25 @@ namespace WildWasteland.Modules.Patrols
                 cruise = journey.speed; stop = false; return true;
             }
             var actual = TrafficSpace.World(transform.position);
-            var rb = GetComponent<Rigidbody>(); float speed = rb != null ? rb.velocity.magnitude : journey.speed;
-            goal = TrafficSpace.Scene(journey.arrived ? journey.route[journey.route.Length - 1] : RoadPath.Target(journey.route, journey.leg, actual, speed));
+            if (!_rbKnown) { _rbKnown = true; _rb = GetComponent<Rigidbody>(); }
+            var rb = _rb; float speed = rb != null ? rb.velocity.magnitude : journey.speed;
+            float ownProgress = RoadPath.Progress(journey.route, journey.leg, actual);   // Perf: once per decision, passed through
+            goal = TrafficSpace.Scene(journey.arrived ? journey.route[journey.route.Length - 1] : RoadPath.TargetAt(journey.route, ownProgress, speed));
             if ((journey.convoy && !Truck) || (!journey.convoy && Slot > 0))
             {
                 // Escorts return to the cargo vehicle after an engagement, keeping a staggered column.
                 float behind = FormationRank(journey, Slot) * 18f;
                 float leaderProgress = RoadPath.Progress(journey.route, journey.leg, journey.position);
-                float ownProgress = RoadPath.Progress(journey.route, journey.leg, actual);
                 if (journey.arrived) goal = TrafficSpace.Scene(RoadPath.Point(journey.route, leaderProgress - behind));
                 cruise = Mathf.Clamp(journey.speed + (leaderProgress - behind - ownProgress) * 0.25f, 2f, journey.speed + 8f);
             }
             else cruise = journey.speed;
-            cruise = RoadPath.Speed(journey.route, journey.leg, actual, cruise);
+            cruise = RoadPath.SpeedAt(journey.route, ownProgress, cruise);
             stop = journey.arrived && (Truck || Slot == 0 || TrafficLocations.FlatDistance(transform.position, goal) < 12f);
             return true;
         }
         private bool _detected;
+        private Rigidbody _rb; private bool _rbKnown;   // the car's root Rigidbody (fixed for the car's life)
 
         internal static int FormationRank(TrafficJourney journey, int slot)
         {
@@ -209,6 +211,8 @@ namespace WildWasteland.Modules.Patrols
             catch (Exception e) { Core.Log.Error("[Patrols] " + "World traffic: " + e); }
         }
 
+        private readonly List<TrafficJourney> _tickJourneys = new List<TrafficJourney>();
+        private readonly List<KeyValuePair<int, GameObject>> _tickCars = new List<KeyValuePair<int, GameObject>>();
         private void Tick(float seconds)
         {
             var player = PlayerRef.Player; if (player == null) return;
@@ -220,14 +224,18 @@ namespace WildWasteland.Modules.Patrols
             PumpPatrolCalls();
             float load = PatrolsModule.TrafficLoadRange.Value;
             float unload = Mathf.Max(load + 100f, PatrolsModule.TrafficUnloadRange.Value);
-            foreach (var journey in _journeys.ToArray())
+            // Perf: reused snapshot buffers and plain loops instead of ToArray/LINQ per journey (4 Hz)
+            _tickJourneys.Clear(); _tickJourneys.AddRange(_journeys);
+            for (int jn = 0; jn < _tickJourneys.Count; jn++)
             {
+                var journey = _tickJourneys[jn];
                 if(journey.merchant&&journey.waitSeconds>0f)journey.waitSeconds=Mathf.Max(TrafficLocations.FlatDistance(journey.position,TrafficSpace.World(player.position))<=100f?1f:0f,journey.waitSeconds-seconds);
                 if(!string.IsNullOrEmpty(journey.battle))continue;
                 _live.TryGetValue(journey.id, out var live);
                 if (live != null && !live.Building)
                 {
-                    foreach (var pair in live.Cars.ToArray())
+                    _tickCars.Clear(); foreach (var entry in live.Cars) _tickCars.Add(entry);
+                    foreach (var pair in _tickCars)
                     {
                         var car = pair.Value;
                         var marker = car != null ? car.GetComponent<PatrolMarker>() : null;
@@ -240,20 +248,34 @@ namespace WildWasteland.Modules.Patrols
                             live.Cars.Remove(pair.Key); // captured cars, wrecks and dismounts remain in the real world
                         }
                     }
-                    var leader = live.Cars.OrderByDescending(p => journey.vehicles[p.Key].truck).Select(p => p.Value).FirstOrDefault(c => c != null);
+                    _tickCars.Clear();
+                    // the first live truck in dictionary order, else the first live car (= the old stable OrderByDescending(truck))
+                    GameObject leader = null, firstOther = null;
+                    foreach (var pair in live.Cars)
+                    {
+                        var c = pair.Value; if (c == null) continue;
+                        if (journey.vehicles[pair.Key].truck) { leader = c; break; }
+                        if (firstOther == null) firstOther = c;
+                    }
+                    if (leader == null) leader = firstOther;
                     if (leader != null)
                     {
                         float reach = journey.leg == journey.route.Length - 1 ? 12f : 22f;
                         journey.Follow(TrafficSpace.World(leader.transform.position), reach);
-                        bool far = TrafficLocations.FlatDistance(journey.position, TrafficSpace.World(player.position)) > unload
-                            && live.Cars.Values.All(c => c == null || Vector3.Distance(c.transform.position, player.position) > unload);
+                        bool far = TrafficLocations.FlatDistance(journey.position, TrafficSpace.World(player.position)) > unload;
+                        if (far) foreach (var c in live.Cars.Values) if (c != null && !(Vector3.Distance(c.transform.position, player.position) > unload)) { far = false; break; }
                         if (far) Unload(journey, live);
                     }
-                    else if (journey.vehicles.All(v => v.retired)) { Remove(journey); continue; }
+                    else
+                    {
+                        bool allRetired = true; foreach (var v in journey.vehicles) if (!v.retired) { allRetired = false; break; }
+                        if (allRetired) { Remove(journey); continue; }
+                    }
                 }
                 if (!_live.ContainsKey(journey.id)&&journey.waitSeconds<=0f) journey.Advance(seconds);
                 bool nearDestination = TrafficLocations.FlatDistance(journey.position, TrafficSpace.World(player.position)) <= load;
-                bool nearMember = live != null && live.Cars.Values.Any(c => c != null && Vector3.Distance(c.transform.position, player.position) <= load);
+                bool nearMember = false;
+                if (live != null) foreach (var c in live.Cars.Values) if (c != null && Vector3.Distance(c.transform.position, player.position) <= load) { nearMember = true; break; }
                 if (journey.Expire(seconds, nearDestination || nearMember, PatrolsModule.TrafficDestinationGrace.Value)) { Remove(journey); continue; }
                 if ((nearby>0||journey.roaming||journey.merchant||journey.freeRoute) && !_live.ContainsKey(journey.id) && nearDestination && !Convoy.AutosaveSoon(30f)
                     && RealCars < PatrolsModule.TrafficMaxRealCars.Value && EventBudget.Available(journey.id)>0)
@@ -264,6 +286,7 @@ namespace WildWasteland.Modules.Patrols
                 else if (live != null && live.Cars.Count == 0 && !live.Building && Time.time >= live.RetryAt)
                 { _live.Remove(journey.id); }
             }
+            _tickJourneys.Clear();
             PumpNearbyRoutes();PopulateMerchants();
             if (!TrafficLocations.DiscoveryReady || !PatrolsModule.ConvoyEnabled.Value || Time.time < _nextPopulation) return;
             _nextPopulation = Time.time + 1f;

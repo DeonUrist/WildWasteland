@@ -45,7 +45,8 @@ namespace WildWasteland.Modules.Patrols.WarRig
             Core.Hooks.SendEventEnter.Prefix(owner, DamageEventEnter.Prefix);
             Core.Hooks.SendEventUpdate.Prefix(owner, DamageEventUpdate.Prefix);
         }
-        internal static void ResetForScene() { player = null; lastFrame = -1; dust.Clear(); emission.Clear(); }
+        internal static void ResetForScene() { player = null; lastFrame = -1; dust.Clear(); emission.Clear(); stormTornado.Clear(); }
+        private static readonly Dictionary<int, bool> stormTornado = new Dictionary<int, bool>();
         private static bool NoRigs { get { return WarRigUnit.All.Count == 0; } }
 
         private static bool StormAction(HutongGames.PlayMaker.FsmStateAction action)
@@ -104,7 +105,13 @@ namespace WildWasteland.Modules.Patrols.WarRig
         private static class Suction
         {
             internal static bool Prefix(Tornado __instance, Collider __0)
-            { return NoRigs || __0 == null || StormRoot(__instance.transform) == null || !Protected(__0.gameObject); }
+            {
+                if (NoRigs || __0 == null) return true;
+                // Perf: the parent walk once per tornado (was per collider per physics step); a tornado never leaves its storm prefab
+                bool storm; int id = __instance.GetInstanceID();
+                if (!stormTornado.TryGetValue(id, out storm)) { if (stormTornado.Count > 256) stormTornado.Clear(); stormTornado[id] = storm = StormRoot(__instance.transform) != null; }
+                return !storm || !Protected(__0.gameObject);
+            }
         }
         private static class DamageValue
         {

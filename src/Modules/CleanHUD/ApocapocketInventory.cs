@@ -95,9 +95,18 @@ namespace WildWasteland.Modules.CleanHUD
                 if (Selected < 0 || Selected >= Count) Selected = -1;
                 for (int i = 0; i < 6; i++) { Items[i] = _content(slots, i); Ordinary[i] = _kind(slots, i) == 1; }
                 int origin = _origin(run); var held = origin >= 0 && origin < 6 ? _held(run) : null;
-                if (held != null && Items[origin] == null && held.name == _handName(run)) { Items[origin] = held; Ordinary[origin] = true; }
+                if (held != null && Items[origin] == null && HeldMatches(held, _handName(run))) { Items[origin] = held; Ordinary[origin] = true; }
             }
             catch (Exception e) { Clear(); Active = false; Count = 3; Selected = -1; CleanHudModule.Warn("Apocapocket inventory read failed; using native slots: " + e.Message); }
+        }
+        // held.name allocates; the comparison is reused while the held object and hand name stay the same (re-read every 0.5 s).
+        private GameObject _heldObject; private string _heldHand; private bool _heldMatch; private float _heldCheck;
+        private bool HeldMatches(GameObject held, string hand)
+        {
+            float now = Time.unscaledTime;
+            if (!ReferenceEquals(held, _heldObject) || !ReferenceEquals(hand, _heldHand) || now >= _heldCheck)
+            { _heldObject = held; _heldHand = hand; _heldMatch = held.name == hand; _heldCheck = now + .5f; }
+            return _heldMatch;
         }
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal static Texture ItemIcon(GameObject item) { return _icon != null && item != null ? _icon(item) : null; }

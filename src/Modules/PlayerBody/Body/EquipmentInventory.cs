@@ -73,6 +73,8 @@ namespace WildWasteland.Modules.PlayerBody
                 }
         }
 
+        // (WW perf) the vanilla Weapons FSM's state (its state's name: the same string object until it changes), a cheap per-frame change signal
+        public string WeaponState { get { return _weaponFsm != null ? _weaponFsm.ActiveStateName : null; } }
         // False preserves previous mount assignments during transactions and saves.
         public bool Read()
         {

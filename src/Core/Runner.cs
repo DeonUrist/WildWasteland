@@ -21,12 +21,13 @@ namespace WildWasteland.Core
             Host.AddComponent<EarlyRunner>();
             Instance = Host.AddComponent<Runner>();
             Host.AddComponent<LateRunner>();
+            Gui = Host.AddComponent<GuiRunner>();
         }
+        internal static GuiRunner Gui;
 
         void Update() { Scheduler.Run(Phase.Update); }
         void LateUpdate() { Scheduler.Run(Phase.LateUpdate); }
         void FixedUpdate() { Scheduler.Run(Phase.FixedUpdate); }
-        void OnGUI() { Scheduler.Run(Phase.Gui); UI.ToolWindow.Draw(); }
         void OnApplicationQuit() { ModuleHost.Quit(); }
         void OnDestroy() { if (Instance == this) Instance = null; }
     }
@@ -41,6 +42,24 @@ namespace WildWasteland.Core
     [DefaultExecutionOrder(20000)]
     internal sealed class LateRunner : MonoBehaviour
     {
-        void LateUpdate() { Scheduler.Run(Phase.LateUpdateLast); }
+        void LateUpdate()
+        {
+            Scheduler.Run(Phase.LateUpdateLast);
+            // (WW perf, D18) OnGUI lives on its own component, enabled only while the F7 window needs it or some Gui job wants to draw
+            // (jobs registered without a predicate always do): with nothing to draw Unity skips the IMGUI Layout/Repaint/event passes
+            var g = Runner.Gui;
+            if (!ReferenceEquals(g, null))
+            {
+                bool on;
+                try { on = UI.ToolWindow.NeedsGui || Scheduler.GuiWanted(); } catch (System.Exception) { on = true; }
+                if (g.enabled != on && g != null) g.enabled = on;
+            }
+        }
+    }
+
+    /// <summary>The runner's OnGUI (Phase.Gui jobs, then the F7 window). Enabled by <see cref="LateRunner"/>.</summary>
+    internal sealed class GuiRunner : MonoBehaviour
+    {
+        void OnGUI() { Scheduler.Run(Phase.Gui); UI.ToolWindow.Draw(); }
     }
 }

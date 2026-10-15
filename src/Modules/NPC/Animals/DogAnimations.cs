@@ -31,7 +31,11 @@ namespace WildWasteland.Modules.NPC
             public bool Boss, WasQuiet, Dashing;
             public float NextIdleChange, AttackRate = 1f, RecoveryUntil, DashSpeed;
             public Vector3 DashDirection;
-            public PlayMakerFSM DamageComponent;
+            public PlayMakerFSM DamageComponent; public float NextDamageLook;
+            // (WW perf, D10) the target's collider (looked up once per target, again when it is destroyed or after 2 s) and this frame's
+            // closest point / line of reach to it (TargetPoint and InReach ran the lookup, ClosestPoint and the Linecast up to 4 times a frame)
+            public GameObject ColOf; public Collider TargetCol; public float ColAt;
+            public int ReachFrame = -1; public GameObject ReachOf; public Vector3 ReachOrigin, ReachPoint; public sbyte ReachLine;
             public readonly Dictionary<Wait, float> OriginalWaits = new Dictionary<Wait, float>();
             public GameObject BiteTarget; public Fsm DamageFsm;
             public Transform[] LegTop, LegPaw;      // (1.9.2) the two front legs: shoulder bone and paw (deepest skinned bone)
@@ -51,6 +55,7 @@ namespace WildWasteland.Modules.NPC
         internal static int DogCount { get { return Dogs.Count; } }
         internal static int ClipCount { get { int n = 0; foreach (var c in Clips.Values) n += c.Count; return n; } }
         private static readonly List<int> _dead = new List<int>();      // (WW) reused (was a new List per frame)
+        private static readonly List<PlayMakerFSM> _fsms = new List<PlayMakerFSM>();
         private static AssetBundle wildHoundBundle;
         private static Dictionary<string, AnimationClip> wildHoundClips;
         private const int Solid = (1 << 0) | (1 << 8) | (1 << 9) | (1 << 11) | (1 << 14) | (1 << 16);
@@ -264,28 +269,55 @@ namespace WildWasteland.Modules.NPC
         {
             if (target == null || !target.activeInHierarchy || d.Agent.Target != target) return false;
             if (d.Companion != null && !d.Companion.TargetAlive(target)) return false;
-            var col = target.GetComponent<Collider>() ?? target.GetComponentInChildren<Collider>();
             Vector3 origin = Origin(d);
-            Vector3 point = col != null ? col.ClosestPoint(origin) : target.transform.position;
+            Vector3 point = ReachPoint(d, target, origin);
             Vector3 to = point - origin;
             if (to.magnitude > d.Reach + .2f || Mathf.Abs(to.y) > 1.2f) return false;
             Vector3 planar = to; planar.y = 0f;
             if (planar.sqrMagnitude > .01f && Vector3.Dot(d.Agent.T.forward, planar.normalized) < (d.Pose == Pose.RunningBite ? .65f : .45f)) return false;
-            RaycastHit hit;
-            return !Physics.Linecast(origin, point, out hit, Solid, QueryTriggerInteraction.Ignore) || IntendedTarget(hit.collider, target);
+            if (d.ReachLine == 0)
+            {
+                RaycastHit hit;
+                d.ReachLine = (sbyte)(!Physics.Linecast(origin, point, out hit, Solid, QueryTriggerInteraction.Ignore) || IntendedTarget(hit.collider, target) ? 1 : 2);
+            }
+            return d.ReachLine == 1;
+        }
+        // the target's point nearest origin, once per frame per (target, origin); a new point clears the remembered line of reach
+        private static Vector3 ReachPoint(Dog d, GameObject target, Vector3 origin)
+        {
+            int frame = UnityEngine.Time.frameCount;
+            if (d.ReachFrame == frame && ReferenceEquals(d.ReachOf, target) && d.ReachOrigin.x == origin.x && d.ReachOrigin.y == origin.y && d.ReachOrigin.z == origin.z) return d.ReachPoint;
+            var col = TargetCollider(d, target);
+            d.ReachFrame = frame; d.ReachOf = target; d.ReachOrigin = origin; d.ReachLine = 0;
+            d.ReachPoint = col != null ? col.ClosestPoint(origin) : target.transform.position;
+            return d.ReachPoint;
+        }
+        private static Collider TargetCollider(Dog d, GameObject target)
+        {
+            float now = UnityEngine.Time.time;
+            if (!ReferenceEquals(d.ColOf, target) || now >= d.ColAt + 2f || (!ReferenceEquals(d.TargetCol, null) && d.TargetCol == null))
+            {
+                d.ColOf = target; d.ColAt = now;
+                d.TargetCol = target.GetComponent<Collider>() ?? target.GetComponentInChildren<Collider>();
+            }
+            return d.TargetCol;
         }
         private static bool IntendedTarget(Collider collider, GameObject target)
         { return collider != null && target != null && (collider.gameObject == target || collider.transform.IsChildOf(target.transform)); }
-        private static Vector3 TargetPoint(Dog d, GameObject target)
-        {
-            var col = target.GetComponent<Collider>() ?? target.GetComponentInChildren<Collider>();
-            return col != null ? col.ClosestPoint(Origin(d)) : target.transform.position;
-        }
+        private static Vector3 TargetPoint(Dog d, GameObject target) { return ReachPoint(d, target, Origin(d)); }
         private static bool DamageReady(Dog d)
         {
             if (d.Companion != null) return !d.Companion.Riding && d.Companion.TargetAlive(d.Agent.Target);
-            if (d.DamageComponent == null || !d.DamageComponent.enabled)
-                d.DamageComponent = d.Agent.Owner.GetComponents<PlayMakerFSM>().FirstOrDefault(f => f != null && f.enabled && f.FsmName == "Damage");
+            // (WW perf, D10) no enabled Damage FSM: looked for again at most every 0.5 s (was GetComponents + LINQ every frame)
+            if ((d.DamageComponent == null || !d.DamageComponent.enabled) && UnityEngine.Time.time >= d.NextDamageLook)
+            {
+                d.NextDamageLook = UnityEngine.Time.time + .5f;
+                PlayMakerFSM found = null;
+                d.Agent.Owner.GetComponents(_fsms);
+                for (int i = 0; i < _fsms.Count; i++) { var f = _fsms[i]; if (f != null && f.enabled && f.FsmName == "Damage") { found = f; break; } }
+                _fsms.Clear();
+                d.DamageComponent = found;
+            }
             return d.DamageComponent != null && d.DamageComponent.enabled && d.DamageComponent.Fsm != null && d.DamageComponent.Fsm.Initialized && d.DamageComponent.Fsm.ActiveStateName == "trigger";
         }
         private static void StartAttack(Dog d, Fsm damage, bool running)

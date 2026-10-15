@@ -18,33 +18,37 @@ namespace WildWasteland.Modules.Patrols.WarRig
             previousTerrain = safeTerrain = null;
             hasPrevious = hasSafe = crossed = false;
             safeAge = aboveTime = belowTime = holdTime = cooldown = observeTime = 0;
-            held.Clear();
+            held.Clear(); colliders.Clear(); collidersOf = null; collidersAt = 0;
         }
 
         internal void Tick(Rigidbody body, float dt)
         {
-            if (!S.GroundRecoveryEnabled.Value)
+            bool enabled = S.GroundRecoveryEnabled.Value;
+            if (!enabled)
             {
                 // Observe at 5 Hz so opting in after a fall can use real crossing evidence.
                 // Disabled recovery never writes body positions or velocities, even mid-hold.
                 holdTime = belowTime = 0; held.Clear();
-                observeTime += dt;
-                if (observeTime + .000001f < .2f) return;
-                dt = observeTime; observeTime = 0;
             }
-            else observeTime = 0;
-            if (holdTime > 0)
+            else if (holdTime > 0)
             {
+                // the post-rescue hold stays per physics step
                 Stop(held); holdTime -= dt;
                 if (holdTime <= 0) held.Clear();
                 return;
             }
+            // Perf: sampled at 10 Hz enabled (was every physics step) / 5 Hz disabled, with the accumulated dt
+            observeTime += dt;
+            if (observeTime + .000001f < (enabled ? .1f : .2f)) return;
+            dt = observeTime; observeTime = 0;
             cooldown = Mathf.Max(0, cooldown - dt); safeAge += dt;
             if (body == null || body.isKinematic || !body.gameObject.activeInHierarchy)
             { hasPrevious = hasSafe = crossed = false; aboveTime = belowTime = 0; return; }
             Terrain terrain; float surface;
             Bounds bounds;
-            if (!Surface(body.position, out terrain, out surface) || !BodyBounds(body, out bounds))
+            if (Time.unscaledTime >= collidersAt || !ReferenceEquals(collidersOf, body))
+            { collidersAt = Time.unscaledTime + 2f; collidersOf = body; body.GetComponentsInChildren(colliders); }
+            if (!Surface(body.position, out terrain, out surface) || !BodyBounds(body, colliders, out bounds))
             { hasPrevious = hasSafe = crossed = false; aboveTime = belowTime = 0; return; }
 
             if (hasPrevious && previousTerrain == terrain && hasSafe && safeAge < 30 && cooldown == 0)
@@ -53,7 +57,7 @@ namespace WildWasteland.Modules.Patrols.WarRig
                 var movement = body.position - before;
                 Terrain oldTerrain; float oldHeight;
                 RaycastHit hit;
-                var col = terrain.GetComponent<TerrainCollider>();
+                var col = ColliderOf(terrain);
                 // A falling body must actually cross the solid top surface. Excludes teleports,
                 // sideways cave entry, terrain holes, and a world-origin translation.
                 if (before.y >= surface && body.position.y < surface && body.velocity.y < -2f &&
@@ -92,13 +96,33 @@ namespace WildWasteland.Modules.Patrols.WarRig
             crossed = hasPrevious = hasSafe = false; belowTime = aboveTime = 0; cooldown = 5f;
         }
 
+        // Perf: active terrains and their colliders cached once per rendered frame (was an array alloc + GetComponent per sample)
+        private static Terrain[] terrains = new Terrain[0];
+        private static TerrainCollider[] terrainCols = new TerrainCollider[0];
+        private static int terrainFrame = -1;
+        private static void CacheTerrains()
+        {
+            if (terrainFrame == Time.frameCount) return;
+            terrainFrame = Time.frameCount; terrains = Terrain.activeTerrains;
+            if (terrainCols.Length != terrains.Length) terrainCols = new TerrainCollider[terrains.Length];
+            for (int i = 0; i < terrains.Length; i++) terrainCols[i] = terrains[i] != null ? terrains[i].GetComponent<TerrainCollider>() : null;
+        }
+        private static TerrainCollider ColliderOf(Terrain t)
+        {
+            CacheTerrains();
+            for (int i = 0; i < terrains.Length; i++) if (ReferenceEquals(terrains[i], t)) return terrainCols[i];
+            return t.GetComponent<TerrainCollider>();
+        }
+
         internal static bool Surface(Vector3 point, out Terrain terrain, out float height)
         {
             terrain = null; height = 0;
-            foreach (var t in Terrain.activeTerrains)
+            CacheTerrains();
+            for (int i = 0; i < terrains.Length; i++)
             {
+                var t = terrains[i];
                 if (t == null || t.terrainData == null || !t.gameObject.activeInHierarchy) continue;
-                var col = t.GetComponent<TerrainCollider>();
+                var col = terrainCols[i];
                 if (col == null || !col.enabled || col.terrainData != t.terrainData) continue;
                 var p = point - t.transform.position; var size = t.terrainData.size;
                 if (p.x < 0 || p.z < 0 || p.x > size.x || p.z > size.z) continue;
@@ -126,12 +150,17 @@ namespace WildWasteland.Modules.Patrols.WarRig
             return true;
         }
 
+        private static readonly List<Collider> scratch = new List<Collider>();
+        private readonly List<Collider> colliders = new List<Collider>();   // the rig's colliders, refreshed every 2 s
+        private float collidersAt; private Rigidbody collidersOf;
         private static bool BodyBounds(Rigidbody body, out Bounds bounds)
+        { body.GetComponentsInChildren(scratch); bool found = BodyBounds(body, scratch, out bounds); scratch.Clear(); return found; }
+        private static bool BodyBounds(Rigidbody body, List<Collider> list, out Bounds bounds)
         {
             bounds = new Bounds(); bool found = false;
-            foreach (var c in body.GetComponentsInChildren<Collider>())
+            foreach (var c in list)
             {
-                if (!c.enabled || c.isTrigger || c.attachedRigidbody != body || !c.gameObject.activeInHierarchy) continue;
+                if (c == null || !c.enabled || c.isTrigger || c.attachedRigidbody != body || !c.gameObject.activeInHierarchy) continue;
                 if (!found) bounds = c.bounds; else bounds.Encapsulate(c.bounds);
                 found = true;
             }

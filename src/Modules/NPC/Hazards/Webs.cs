@@ -21,7 +21,8 @@ namespace WildWasteland.Modules.NPC
 
         private static readonly List<Web> _all = new List<Web>();        // (1.7.3) every web (nests): lit each second / by the flashlight
         private static MaterialPropertyBlock _mpb; private static float _k = 0.88f; private static Light _flLight; private static Transform _flOf;
-        private static Material _mat; private static Texture2D _tex; private static float _nextTint;
+        private static Material _mat; private static Texture2D _tex; private static float _nextTint, _nextFlash;
+        private static readonly int ColorId = Shader.PropertyToID("_Color");
         private const int Anchors = (1 << 0) | (1 << 8) | (1 << 11) | (1 << 14) | (1 << 16);    // Default, Car, Door, Ground, SeeThrough
         private const int GroundMask = (1 << 0) | (1 << 8) | (1 << 11) | (1 << 14) | (1 << 16);
 
@@ -37,7 +38,8 @@ namespace WildWasteland.Modules.NPC
         internal static void Tick()
         {
             float now = Time.time;
-            if (_all.Count > 0) { if (now >= _nextTint) { _nextTint = now + 1f; Tint(); } else Flash(false); }
+            // (WW perf) the flashlight pass at 15 Hz (was every frame): a web lights up / dims at most 67 ms late
+            if (_all.Count > 0) { if (now >= _nextTint) { _nextTint = now + 1f; Tint(); } else if (now >= _nextFlash) { _nextFlash = now + 1f / 15f; Flash(false); } }
         }
 
         internal static int Count { get { return _all.Count; } }
@@ -378,7 +380,7 @@ namespace WildWasteland.Modules.NPC
             if (w.Rend == null) return;
             if (!force && Mathf.Abs(v - w.Shown) < 0.004f) return;
             if (_mpb == null) _mpb = new MaterialPropertyBlock();
-            _mpb.SetColor("_Color", new Color(v, v, v * 1.03f, 1f));
+            _mpb.SetColor(ColorId, new Color(v, v, v * 1.03f, 1f));
             w.Rend.SetPropertyBlock(_mpb);
             w.Shown = v;
         }

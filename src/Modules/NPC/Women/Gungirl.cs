@@ -82,6 +82,12 @@ namespace WildWasteland.Modules.NPC
         private static readonly Stack<Transform> _walk = new Stack<Transform>();
         private static readonly List<GameObject> _roots = new List<GameObject>();
         private static readonly Dictionary<int, string> _prefabNames = new Dictionary<int, string>();
+        // (WW perf, D9) discovery is event driven: a full walk when the world is ready (load / new game / scene), then the spawn events
+        // (CreateObject hook, Senses registering an NPC, Patrols' DressCrew) and a slow safety pass every 60 s. Each object's name is read
+        // once per scene (_seen); a Rigidbody root (a creature, car, item) is descended once, later passes stop at it (_bodies).
+        private static readonly HashSet<int> _seen = new HashSet<int>(), _bodies = new HashSet<int>();
+        private static bool _wantFull; private static float _lastPass = -1000f;
+        private const float SafetyEvery = 60f;
 
         private static BodyState State(GameObject root)
         {
@@ -207,13 +213,27 @@ namespace WildWasteland.Modules.NPC
 
         public static void OnSceneLoaded()
         {
-            _walk.Clear(); _roots.Clear(); _pending.Clear(); _queued.Clear(); _prefabNames.Clear();
+            _walk.Clear(); _roots.Clear(); _pending.Clear(); _queued.Clear(); _prefabNames.Clear(); _seen.Clear(); _bodies.Clear();
             Sweep(); Voice.OnSceneLoaded(); BeginScan();
         }
 
-        internal static void BeginScan()
+        // a full walk (world ready / scene loaded / module start): every object looked at again; no player yet = as soon as there is one
+        internal static void BeginScan() { _wantFull = true; StartPass(); }
+
+        // "Female discovery" (5 s): a pending full walk, else the safety pass once a minute
+        internal static void SafetyScan()
         {
-            if (!WomenFeature.Active || _walk.Count > 0 || GameRefs.Player == null) return;
+            if (_walk.Count > 0 && !_wantFull) return;
+            if (_wantFull || Time.unscaledTime >= _lastPass + SafetyEvery) StartPass();
+        }
+
+        private static void StartPass()
+        {
+            if (!WomenFeature.Active || GameRefs.Player == null) return;
+            if (_wantFull) { _seen.Clear(); _bodies.Clear(); _walk.Clear(); }
+            else if (_walk.Count > 0) return;
+            _wantFull = false; _lastPass = Time.unscaledTime;
+            if (_seen.Count > 300000) { _seen.Clear(); _bodies.Clear(); }
             for (int i = 0; i < SceneManager.sceneCount; i++)
             {
                 var scene = SceneManager.GetSceneAt(i); if (!scene.isLoaded) continue;
@@ -242,8 +262,11 @@ namespace WildWasteland.Modules.NPC
             var t = _walk.Pop();
             if (t != null)
             {
-                Registered(t.gameObject);
-                for (int i = 0; i < t.childCount; i++) _walk.Push(t.GetChild(i));
+                int id = t.GetInstanceID();
+                bool first = _seen.Add(id);
+                if (first) Registered(t.gameObject);
+                if (first ? t.GetComponent<Rigidbody>() == null || _bodies.Add(id) : !_bodies.Contains(id))
+                    for (int i = 0; i < t.childCount; i++) _walk.Push(t.GetChild(i));
             }
             return _pending.Count > 0 || _walk.Count > 0;
         }
@@ -274,7 +297,7 @@ namespace WildWasteland.Modules.NPC
                 if (variant.Tex != null) UnityEngine.Object.Destroy(variant.Tex);
             }
             _variants = null; _prefab = null; _ours.Clear(); _dressed.Clear(); _original.Clear();
-            _pending.Clear(); _queued.Clear(); _walk.Clear(); _roots.Clear(); _prefabNames.Clear();
+            _pending.Clear(); _queued.Clear(); _walk.Clear(); _roots.Clear(); _prefabNames.Clear(); _seen.Clear(); _bodies.Clear(); _wantFull = false; _lastPass = -1000f;
         }
 
         // ---------- the body swap ----------

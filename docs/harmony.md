@@ -177,3 +177,22 @@ All targets below are optional external DLL methods, installed only for Talk 2.0
 | CleanHUD | Quests.Plugin.Shadowed | QuestTracker.BeforeShadowed prefix; suppresses only the tracker style while an attached CleanHUD owns its replacement, preserving source log/toast drawing | Per source GUI text; cached GUIStyle reference comparison, original when CleanHUD off |
 | CleanHUD | Quests.Plugin.RefreshLines | QuestTracker.LinesChanged postfix; snapshots stable quest-ID colors in tracker row order to match map/compass flags for objectives and returns | Approximately 1 s; published active quest list, no scene scans |
 | QuestsCompat | Talk.Plugin.OnDestroy; TalkApi.LoadFile / Reload; Quests.Hooks.OpenPostfix / ClosePostfix / CreateObjectPostfix; Hire.GetPlugin | KeepDialogueModel prefix / PluginLifetime transpilers: retain managed plugin-backed callbacks across native component destruction, while keeping Unity null semantics for world objects | On destruction / API calls / source hooks; BaseUnityPlugin-only identity substitution |
+
+### Talk/Quests performance patches (perf pass 2026-10-15, Testing)
+
+Installed by `QuestsCompat/QuestsPerf.cs` through `QuestsPerf.Optional`: a failed target logs `Optional speed-up unavailable` and the source behaviour stays (the compatibility module is not rolled back), except the four `SplitOnly` gates, which use the module's normal `Patch`.
+
+| Owner | Target | Kind / handler | Frequency / filter |
+|---|---|---|---|
+| QuestsCompat | Hire.NearestByName | PeopleScan transpiler + 0.25 s retry prefix/postfix per name | While the hire is unattached (<= 60 s window) |
+| QuestsCompat | Hire.IsRangedNpc | Prefix cache per instance id (1 s) + CachedFsms transpiler | Per hire update |
+| QuestsCompat | Hire.FindFsm / FootMagazine / FootWatch / Hostile / HoldFire / FireShots / WatchShots / FeedTarget / Calm | CachedFsms transpiler: `GetComponents<PlayMakerFSM>()` -> cached array per GameObject (1 s) | Per frame while a hire exists |
+| QuestsCompat | Hire.ClearShot(GameObject) | NonAllocRays transpiler: RaycastAll -> RaycastNonAlloc + reused exact-length array | Per frame with a target |
+| QuestsCompat | Hire.Clear / Reset / DetachGuard | Postfixes clear the caches | On hire changes |
+| QuestsCompat | Takeover.MoveFsm | Prefix/postfix memo (positive live, negative 5 s) | Per walker per frame |
+| QuestsCompat | Takeover.InactiveExists / ScanForPrefab | Shared FindObjectsOfTypeAll array transpiler + miss memo (30 s, GiverTick only) | ~30 s while a giver is missing |
+| QuestsCompat | Takeover.NeutralizeTick / GiverTick; Plugin.SyncMapMarkers / ReputationTick | SplitOnly prefixes; each runs from its own 0.5 s Interval job (internal timers unchanged) | Per Tick |
+| QuestsCompat | Game.Matches | Prefix/postfix memo per (ItemName FSM id, token), re-validated against the live names, 30 s | Per item query |
+| QuestsCompat | Plugin.Aim | Prefix: at most one directions recompute per frame; others keep their cached AimInfo | Per RefreshLines |
+| QuestsCompat | TalkBridge.get_TalkingNow; TalkBridge.NeedsSync | Compiled-accessor prefix; Signature cache transpiler (same TalkBtn references) | Per frame |
+| QuestsCompat | Talk DialogueUI.ShowPrompt | Prefix/postfix skip when name/key/hint unchanged | Every 0.25 s near an NPC |

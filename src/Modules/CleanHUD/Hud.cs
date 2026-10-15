@@ -112,9 +112,14 @@ namespace WildWasteland.Modules.CleanHUD
         private readonly List<Text> _letters = new List<Text>();
         private readonly List<MarkerView> _markers = new List<MarkerView>();
         private RawImage _caret;
+        private RectTransform _markerRoot, _insanity;
+        private static readonly ShownOrder ByDrawOrder = new ShownOrder();
 
-        private sealed class MarkerView { internal RectTransform Rt; internal RawImage Icon; internal Text Dist; internal CanvasGroup Group; internal int Distance = int.MinValue; internal bool Km; }
+        private sealed class MarkerView { internal RectTransform Rt; internal RawImage Icon; internal Text Dist; internal CanvasGroup Group; internal int Distance = int.MinValue; internal bool Km; internal float NextText; internal ApiCompass.Entry Entry; }
         private struct Shown { internal ApiCompass.Entry E; internal float Rel, Dist; internal bool Edge; }
+        // far first, near last (on top); priority wins over distance
+        private sealed class ShownOrder : IComparer<Shown>
+        { public int Compare(Shown a, Shown b) { return a.E.Style.Priority != b.E.Style.Priority ? a.E.Style.Priority.CompareTo(b.E.Style.Priority) : b.Dist.CompareTo(a.Dist); } }
 
         internal bool Valid { get { return !_disposed && _src.Canvas != null && _root != null; } }
 
@@ -130,7 +135,12 @@ namespace WildWasteland.Modules.CleanHUD
             rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; rt.offsetMin = Vector2.zero; rt.offsetMax = Vector2.zero; rt.pivot = new Vector2(.5f, .5f);
             try
             {
+                // Nested canvases (no sorting override, no raycaster: nothing here takes input) keep HUD changes from rebatching
+                // the game's whole canvas, and compass motion from rebatching the rest of the HUD. Draw order is unchanged.
+                SubCanvas(_root);
                 foreach (var id in Layout.Ids) Group(id);
+                _insanity = _groups["insanity"];
+                SubCanvas(_groups["compass"].gameObject);
                 BuildVitals(); BuildWeapon(); BuildSlots(); BuildCompass();
                 BuildDriving();
                 _quests = new QuestTracker(_root.transform, _font, Gold, HudWhite);
@@ -159,6 +169,11 @@ namespace WildWasteland.Modules.CleanHUD
         }
 
         // ------------------------------------------------------------------ builders
+        private void SubCanvas(GameObject go)
+        {
+            var c = go.AddComponent<Canvas>(); c.overrideSorting = false;
+            c.additionalShaderChannels = _src.Canvas.additionalShaderChannels;
+        }
         private void Group(string id)
         {
             var go = new GameObject(id, typeof(RectTransform));
@@ -177,7 +192,11 @@ namespace WildWasteland.Modules.CleanHUD
             t.anchoredPosition = new Vector2(x, -y); t.sizeDelta = new Vector2(w, h);
             return t;
         }
-        private static void Place(RectTransform t, float x, float y, float w, float h) { t.anchoredPosition = new Vector2(x, -y); t.sizeDelta = new Vector2(w, h); }
+        private static void Place(RectTransform t, float x, float y, float w, float h)
+        {
+            var p = new Vector2(x, -y); if (t.anchoredPosition != p) t.anchoredPosition = p;
+            var s = new Vector2(w, h); if (t.sizeDelta != s) t.sizeDelta = s;
+        }
 
         private static Image Img(Transform p, string n, float x, float y, float w, float h, Color c)
         { var g = R(p, n, x, y, w, h).gameObject.AddComponent<Image>(); g.color = c; g.raycastTarget = false; return g; }
@@ -284,8 +303,8 @@ namespace WildWasteland.Modules.CleanHUD
             if (_driving.gameObject.activeSelf != visible) _driving.gameObject.SetActive(visible);
             if (!visible) return;
             float scale = ChaseCameraHud.Scale;
-            _driving.localScale = new Vector3(scale, scale, 1);
-            _driving.anchoredPosition = new Vector2(356 - 356 * scale, 40 + 8 * scale + ChaseCameraHud.Gap);
+            var ls = new Vector3(scale, scale, 1); if (_driving.localScale != ls) _driving.localScale = ls;
+            var ap = new Vector2(356 - 356 * scale, 40 + 8 * scale + ChaseCameraHud.Gap); if (_driving.anchoredPosition != ap) _driving.anchoredPosition = ap;
             var color = ChaseCameraHud.Fraction >= .9f ? new Color(.95f, .22f, .12f) : Gold;
             _rpm.color = color;
             if (Time.unscaledTime >= _nextDrivingText)
@@ -309,14 +328,16 @@ namespace WildWasteland.Modules.CleanHUD
             bool visible = WildWasteland.Core.GameRefs.InGame && _vehicleFrame >= Time.frameCount - 1 && (_vehicleIgnition || _vehicleBrake || _vehiclePlaying);
             if (_vehicle.gameObject.activeSelf != visible) _vehicle.gameObject.SetActive(visible);
             if (!visible) return;
-            _vehicleIcons[0].enabled = _vehicleIgnition; _vehicleIcons[1].enabled = _vehicleBrake; _vehicleIcons[2].enabled = _vehiclePlaying;
-            _vehicleVolumeText.enabled = _vehiclePlaying;
+            if (_vehicleIcons[0].enabled != _vehicleIgnition) _vehicleIcons[0].enabled = _vehicleIgnition;
+            if (_vehicleIcons[1].enabled != _vehicleBrake) _vehicleIcons[1].enabled = _vehicleBrake;
+            if (_vehicleIcons[2].enabled != _vehiclePlaying) _vehicleIcons[2].enabled = _vehiclePlaying;
+            if (_vehicleVolumeText.enabled != _vehiclePlaying) _vehicleVolumeText.enabled = _vehiclePlaying;
             if (_vehiclePlaying && _vehicleVolumeText.text != (_vehicleVolume ?? ""))
             {
                 _vehicleVolumeText.text = _vehicleVolume ?? "";
                 _vehicleVolumeWidth = Mathf.Ceil(_vehicleVolumeText.preferredWidth);
             }
-            float right = _groups["insanity"].gameObject.activeSelf ? _sanIcon.rectTransform.anchoredPosition.x - 24f : 180f;
+            float right = _insanity.gameObject.activeSelf ? _sanIcon.rectTransform.anchoredPosition.x - 24f : 180f;
             if (_vehiclePlaying)
             {
                 right -= _vehicleVolumeWidth;
@@ -403,10 +424,15 @@ namespace WildWasteland.Modules.CleanHUD
             _cmp = _groups["compass"];
             Raw(_cmp, "line shadow", 0, 25.5f, 1100, 16, Assets.CompassShadow(), Color.white);
             Raw(_cmp, "line", 0, 30, 1100, 3, Assets.CompassLine(), Color.white);
-            _caret = Raw(_cmp, "caret", 543, 16, 14, 9, Assets.Caret(), Gold);
             for (int i = 0; i < 24; i++) Tick(i).enabled = false;
             for (int i = 0; i < 8; i++) Letter(i).enabled = false;
+            // Markers draw above the strip in pool order (= sorted order), the caret above them; no per-frame sibling moves.
+            _markerRoot = R(_cmp, "markers", 0, 0, 0, 0);
+            _markerRoot.anchorMin = Vector2.zero; _markerRoot.anchorMax = Vector2.one; _markerRoot.offsetMin = _markerRoot.offsetMax = Vector2.zero;
+            _caret = Raw(_cmp, "caret", 543, 16, 14, 9, Assets.Caret(), Gold);
         }
+        // Ticks/letters added later (wider arc) go below the markers, as before.
+        private void BelowMarkers(Transform t) { if (_markerRoot != null) t.SetSiblingIndex(_markerRoot.GetSiblingIndex()); }
 
         private Image Tick(int i)
         {
@@ -414,7 +440,7 @@ namespace WildWasteland.Modules.CleanHUD
             {
                 var t = Img(_cmp, "tick", 0, 0, 2, 6, TickColor);
                 var o = t.gameObject.AddComponent<Outline>(); o.effectColor = new Color(0, 0, 0, .3f); o.effectDistance = new Vector2(.75f, .75f);
-                _ticks.Add(t);
+                BelowMarkers(t.transform); _ticks.Add(t);
             }
             return _ticks[i];
         }
@@ -425,7 +451,7 @@ namespace WildWasteland.Modules.CleanHUD
                 var t = Txt(_cmp, "dir", 0, 0, 100, 30, 26, TextAnchor.MiddleCenter, HudWhite);
                 var s = t.gameObject.AddComponent<Shadow>(); s.effectColor = new Color(0, 0, 0, .95f); s.effectDistance = new Vector2(0, -1);
                 var o = t.gameObject.AddComponent<Outline>(); o.effectColor = new Color(0, 0, 0, .45f); o.effectDistance = new Vector2(1, 1);
-                _letters.Add(t);
+                BelowMarkers(t.transform); _letters.Add(t);
             }
             return _letters[i];
         }
@@ -433,7 +459,7 @@ namespace WildWasteland.Modules.CleanHUD
         {
             while (_markers.Count <= i)
             {
-                var rt = R(_cmp, "marker", 0, 0, 160, 70);
+                var rt = R(_markerRoot, "marker", 0, 0, 160, 70);
                 var mv = new MarkerView { Rt = rt, Group = rt.gameObject.AddComponent<CanvasGroup>() };
                 mv.Group.blocksRaycasts = false; mv.Group.interactable = false;
                 mv.Icon = Raw(rt, "icon", 62, 0, 36, 36, null, Color.white); Drop(mv.Icon, .9f);
@@ -510,7 +536,7 @@ namespace WildWasteland.Modules.CleanHUD
                 ApplyLayout(l);
             }
             try { TickVitals(); } catch (Exception e) { CleanHudModule.Throttled("vitals", e); }
-            _quests.Tick(_groups["insanity"], _cmp);
+            _quests.Tick(_insanity, _cmp);
             TickVehicleStatus();
             TickDriving();
             ChaseCameraHud.TraceState(_rpm, true);
@@ -520,7 +546,7 @@ namespace WildWasteland.Modules.CleanHUD
             try { TickWeapon(sel); } catch (Exception e) { CleanHudModule.Throttled("weapon", e); }
             try { TickCompass(l); } catch (Exception e) { CleanHudModule.Throttled("compass", e); }
             try { TickEvents(); _log.Tick(); } catch (Exception e) { CleanHudModule.Throttled("log", e); }
-            _src.Hide();
+            // The vanilla hide runs in willRenderCanvases (BeforeRender), after this tick in the same frame.
         }
 
         private void TickVitals()
@@ -539,7 +565,7 @@ namespace WildWasteland.Modules.CleanHUD
             }
             // insanity (top right of the screen) while above 0
             float sanV = CleanHudModule.ShowInsanity.Value ? Bindings.Number(_src.Sanity) : 0f;
-            var sg = _groups["insanity"].gameObject;
+            var sg = _insanity.gameObject;
             if (sg.activeSelf != sanV > 0f) sg.SetActive(sanV > 0f);
             if (sanV > 0f)
             {
@@ -721,23 +747,23 @@ namespace WildWasteland.Modules.CleanHUD
                 float fade = Assets.Fade(x / 1100f);
                 float len = is90 ? 14f : is45 ? 10f : 6f;
                 var t = Tick(ti++);
-                t.enabled = true;
+                if (!t.enabled) t.enabled = true;
                 Place(t.rectTransform, x - 1f, is45 ? 30f - len : 33f, 2f, len);
-                var tc = TickColor; tc.a *= fade; t.color = tc;
+                Fade(t, fade);   // colour stays TickColor; the renderer alpha fades without a mesh rebuild
                 if (is90 || (is45 && l.EightPoint))
                 {
                     var txt = Letter(li++);
-                    txt.enabled = true;
+                    if (!txt.enabled) txt.enabled = true;
                     int size = is90 ? 26 : 19;
                     if (txt.fontSize != size) txt.fontSize = size;
                     var s = Dirs[d / 45]; if (txt.text != s) txt.text = s;
                     float cy = 40f + .81f * size / 2f;
                     Place(txt.rectTransform, x - 50f, cy - 15f, 100f, 30f);
-                    var c = HudWhite; c.a = fade * (is90 ? 1f : .8f); txt.color = c;
+                    Fade(txt, fade * (is90 ? 1f : .8f));
                 }
             }
-            for (int i = ti; i < _ticks.Count; i++) _ticks[i].enabled = false;
-            for (int i = li; i < _letters.Count; i++) _letters[i].enabled = false;
+            for (int i = ti; i < _ticks.Count; i++) if (_ticks[i].enabled) _ticks[i].enabled = false;
+            for (int i = li; i < _letters.Count; i++) if (_letters[i].enabled) _letters[i].enabled = false;
 
             // markers from the API
             _shown.Clear();
@@ -761,36 +787,50 @@ namespace WildWasteland.Modules.CleanHUD
                 }
                 _shown.Add(new Shown { E = e, Rel = rel, Dist = dist, Edge = edge });
             }
-            // far first, near last (on top); priority wins over distance
-            _shown.Sort((a, b) => a.E.Style.Priority != b.E.Style.Priority ? a.E.Style.Priority.CompareTo(b.E.Style.Priority) : b.Dist.CompareTo(a.Dist));
-            int mi = 0;
-            foreach (var s in _shown)
+            _shown.Sort(ByDrawOrder);
+            int mi = 0; float now = Time.unscaledTime;
+            for (int si = 0; si < _shown.Count; si++)
             {
+                var s = _shown[si];
                 bool ambiguous = s.E.Owner == "WildWasteland.VehicleGroups" ? CleanHudModule.AmbiguousPatrols.Value
                     : s.E.Owner == "WildWasteland.Locations" && CleanHudModule.AmbiguousLocations.Value && !LocationMarkers.Known(s.E.Target);
-                var tex = IconFor(ambiguous && s.E.Owner == "WildWasteland.Locations" ? "unknown" : s.E.Style.Icon);
+                var tex = IconFor(s.E, ambiguous && s.E.Owner == "WildWasteland.Locations" ? "unknown" : s.E.Style.Icon);
                 if (tex == null) continue;
                 var mv = Mark(mi++);
-                mv.Rt.gameObject.SetActive(true);
-                mv.Rt.SetAsLastSibling();
+                if (!mv.Rt.gameObject.activeSelf) { mv.Rt.gameObject.SetActive(true); mv.Distance = int.MinValue; }
                 float x = cx + s.Rel * ppd;
                 Place(mv.Rt, x - 80f, 13f, 160f, 70f);
                 mv.Icon.texture = tex; mv.Icon.color = ambiguous ? Color.white : s.E.Style.Color;
-                mv.Group.alpha = s.Edge ? .55f : 1f;
-                mv.Dist.enabled = s.E.Style.ShowDistance;
+                float alpha = s.Edge ? .55f : 1f; if (mv.Group.alpha != alpha) mv.Group.alpha = alpha;
+                if (mv.Dist.enabled != s.E.Style.ShowDistance) mv.Dist.enabled = s.E.Style.ShowDistance;
                 if (s.E.Style.ShowDistance)
                 {
+                    // The text (Shadow + Outline mesh) is rewritten at most 5 times a second per view, or at once when the view
+                    // takes another marker; values and format are unchanged.
                     bool km = s.Dist >= 1000f;
                     int distance = Mathf.RoundToInt(km ? s.Dist / 100f : s.Dist);
-                    if (mv.Distance != distance || mv.Km != km)
+                    if ((mv.Distance != distance || mv.Km != km) && (now >= mv.NextText || !ReferenceEquals(mv.Entry, s.E)))
                     {
-                        mv.Distance = distance; mv.Km = km;
-                        mv.Dist.text = km ? (distance / 10f).ToString("0.0", CultureInfo.InvariantCulture) + " km" : distance.ToString(CultureInfo.InvariantCulture) + " m";
+                        mv.Distance = distance; mv.Km = km; mv.NextText = now + .2f;
+                        mv.Dist.text = DistanceText(distance, km);
                     }
                 }
+                mv.Entry = s.E;
             }
-            for (int i = mi; i < _markers.Count; i++) if (_markers[i].Rt.gameObject.activeSelf) _markers[i].Rt.gameObject.SetActive(false);
-            if (_caret.enabled) _caret.transform.SetAsLastSibling();
+            for (int i = mi; i < _markers.Count; i++) if (_markers[i].Rt.gameObject.activeSelf) { _markers[i].Rt.gameObject.SetActive(false); _markers[i].Entry = null; }
+        }
+
+        private static void Fade(Graphic g, float alpha) { var r = g.canvasRenderer; if (r.GetAlpha() != alpha) r.SetAlpha(alpha); }
+
+        // "428 m" / "1.9 km" strings, built once per value.
+        private static readonly Dictionary<int, string> MetreText = new Dictionary<int, string>(), KmText = new Dictionary<int, string>();
+        private static string DistanceText(int distance, bool km)
+        {
+            var cache = km ? KmText : MetreText; string text;
+            if (cache.TryGetValue(distance, out text)) return text;
+            text = km ? (distance / 10f).ToString("0.0", CultureInfo.InvariantCulture) + " km" : distance.ToString(CultureInfo.InvariantCulture) + " m";
+            if (cache.Count < 4096) cache[distance] = text;
+            return text;
         }
 
         private static bool Resolve(ApiCompass.Entry e, out Vector3 pos)
@@ -806,6 +846,11 @@ namespace WildWasteland.Modules.CleanHUD
             return false;
         }
 
+        private static Texture IconFor(ApiCompass.Entry e, string key)
+        {
+            if (ReferenceEquals(e.IconKey, key) && e.IconRevision == ApiCompass.IconRevision && e.Icon != null) return e.Icon;
+            e.IconKey = key; e.IconRevision = ApiCompass.IconRevision; e.Icon = IconFor(key); return e.Icon;
+        }
         private static Texture IconFor(string key)
         {
             if (string.IsNullOrEmpty(key)) key = "diamond";
@@ -850,7 +895,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (_quests != null) _quests.Dispose();
             Canvas.willRenderCanvases -= BeforeRender;
             _src.Restore();
-            MarkerIcons.Clear();
+            MarkerIcons.Clear(); ApiCompass.IconRevision++;
             if (_root != null) UnityEngine.Object.Destroy(_root);
         }
     }
