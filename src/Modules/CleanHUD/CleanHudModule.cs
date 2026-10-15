@@ -43,7 +43,7 @@ namespace WildWasteland.Modules.CleanHUD
             ShowInsanity = Bind(cfg, "HUD", "ShowInsanity", true, "Show insanity in the top right while above zero.");
             ShowConvoys = cfg.Player("HUD", "ShowConvoys", true, "Compass icons and distances for vehicle groups: merchants yellow, Coyotes green, patrols red and convoys orange.");
             ShowLocations = cfg.Player("HUD", "ShowLocations", true, "Compass icons and distances for native locations within 1 km.");
-            AmbiguousPatrols = cfg.Player("HUD", "AmbiguousPatrols", false, "Show compass vehicle groups as neutral question marks, keeping their distances.");
+            AmbiguousPatrols = cfg.Player("HUD", "AmbiguousPatrols", false, "Show all compass vehicle groups with white vehicle icons, keeping their distances.");
             AmbiguousLocations = cfg.Player("HUD", "AmbiguousLocations", false, "Show native compass locations as neutral question marks, keeping their distances. Quest flags are unchanged.");
             ShowCompass = cfg.Player("HUD", "Compass", true, "Show the compass, including its direction strip and all markers.");
             MapEnabled = cfg.Player("Map", "Enabled", true, "Enable the native debug map on the game's Map key.");

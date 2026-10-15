@@ -763,7 +763,7 @@ namespace WildWasteland.Modules.CleanHUD
             {
                 bool ambiguous = s.E.Owner == "WildWasteland.VehicleGroups" ? CleanHudModule.AmbiguousPatrols.Value
                     : s.E.Owner == "WildWasteland.Locations" && CleanHudModule.AmbiguousLocations.Value;
-                var tex = IconFor(ambiguous ? "unknown" : s.E.Style.Icon);
+                var tex = IconFor(ambiguous && s.E.Owner == "WildWasteland.Locations" ? "unknown" : s.E.Style.Icon);
                 if (tex == null) continue;
                 var mv = Mark(mi++);
                 mv.Rt.gameObject.SetActive(true);

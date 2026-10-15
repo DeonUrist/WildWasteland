@@ -2,7 +2,7 @@
 
 A BepInEx 5 mod for **Apocalypter** that combines gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
 
-Version **0.1.13 RC10** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
+Version **0.1.14 RC11** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
 
 | Module | What it is | Replaces (remove these from `BepInEx\plugins`) |
 |---|---|---|
@@ -30,11 +30,13 @@ While any of those standalone plugins is still installed, the module that replac
    BepInEx\plugins\WildWasteland\Patrols\             templates, textures, sounds, layouts, WarRig\ models
    ```
    If an asset is missing, WW falls back to the old plugin folder (`plugins\Apocaplayer\`, `plugins\NPCAI\Models\`, `plugins\Gunplay\Sounds\`, `plugins\GunplayHUD\Sounds\`, `plugins\Apocapatrol\`, `plugins\WarRig\`) or to a copy built into the DLL, and warns in the log. Patrols copies its old data into its new folder on the first run.
-4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.13]` and a summary `Wild Wasteland 0.1.13 modules:` with every module `on`.
+4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.14]` and a summary `Wild Wasteland 0.1.14 modules:` with every module `on`.
 
 Engine Sim compatibility (#127, Testing): **Engine Sim is optional; WW works normally without it and the bridge stays idle.** If you want its features, install [Engine Sim 1.3.0](https://github.com/Wad67/Apocalypter-enginesim/releases/tag/v1.3.0) separately, including its native library and impulse responses. WW schedules its manager and supplies a 500 microsecond scene-discovery cache; the original native simulation/audio threads, engine selection, settings and vehicle-part physics remain with Engine Sim. With its experimental simulated drivetrain enabled, the existing Ignition key supports click to toggle and hold to crank; vehicle hints and CleanHUD's existing engine-status icon follow the coupled engine. Patrols start/stop requests use the simulated switch. Turn off the Engine Sim compatibility module to restore the standalone callbacks. Engine Sim is not included in this archive. Its settings remain in its own Apocasetter page and cfg files; only `[EngineSimCompat] Enabled` is added to WW settings.cfg. Performance and in-game verification remain pending.
 
 ## Settings: F6 and F7
+
+RC11: Settings → Game → HUD → Patrols on compass → Ambiguous keeps vehicle icons and makes every group white. Locations on compass → Ambiguous uses white question marks. Both keep distances; map modes and quest flags retain their existing behavior. Existing ambiguity settings are preserved.
 
 - **F6 (Apocasetter → Wild Wasteland)** shows `In-Game Settings Button` (default **F3**) and `Enable Debug` (default false). The Apocasetter opt-in remains enabled and hidden. File: `BepInEx\config\com.denis.apocalypter.wildwasteland.cfg`.
 - **Internal SETTINGS menu** (default **F3**, historically called F7) has **Game** (Player, World, HUD), **Modules** (module switches and performance), and **Debug** when enabled in F6. It pauses the game; Esc or CLOSE closes it. Gameplay values and keys live in `BepInEx\config\WildWasteland\settings.cfg`; technical settings live in `tools.cfg`. Debug includes editors and switches; fine tuning stays in the config file.
