@@ -258,6 +258,8 @@ namespace WildWasteland.Core.UI
         static void Developer(ToolLayout l)
         {
             l.Text("Editors, debug switches, gameplay values and diagnostics. Changes are saved immediately unless an editor has its own Save button. Fine tuning (offsets, poses, AI constants) is kept in config/WildWasteland/tools.cfg.");
+            l.Heading("Performance");
+            WildWasteland.Modules.Performance.PerformancePage.Instance.DrawDeveloper(l);
             l.EntryFilter = DeveloperSetting; l.DeduplicateEntries = true;
             l.Heading("Tools");
             foreach (var p in _debugPages) if (p.IsTool && IsPatrolsTool(p)) DrawDebugPage(l, p);   // patrol / convoy / merchant editors first

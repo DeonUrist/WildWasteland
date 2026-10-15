@@ -7,8 +7,7 @@ namespace WildWasteland.Modules.Performance
 {
     /// <summary>
     /// The separate "Performance" tab of the settings window (between Modules and Debug; registered by Core's CorePages).
-    /// All Performance settings live here only: the module switch, the preset, every optimization's mode, tuning overrides
-    /// and live measurements. They are stored in tools.cfg so they never appear on the Game, Modules list or Debug pages.
+    /// The module switch, preset and measurements stay here. Individual optimization modes, stats and tuning live in Developer.
     /// </summary>
     public sealed class PerformancePage : ToolPage
     {
@@ -30,7 +29,7 @@ namespace WildWasteland.Modules.Performance
             if (entry != null && entry.Config != null) l.Toggle(entry.Config.Enabled, "Performance optimizations");
             bool running = ModuleHost.IsRunning(m);
             l.Text(running
-                ? "Optimizations of the base game (issue #133). Each one can be switched off on its own; changes apply immediately. Shadow = the original game code keeps running and the optimized result is only compared (mismatches are counted below and logged)."
+                ? "Experimental base-game optimizations. Choose a preset and compare measurements in the same scene. Changes apply immediately."
                 : "The Performance module is off: the game runs unmodified.", running ? (Color?)null : Ledger.Danger);
 
             var p = PerformanceModule.PresetEntry;
@@ -43,7 +42,14 @@ namespace WildWasteland.Modules.Performance
 
             l.Heading("Measurements");
             Telemetry.Draw(l);
+        }
 
+        internal void DrawDeveloper(ToolLayout l)
+        {
+            var m = PerformanceModule.Instance;
+            if (m == null) { l.Text("Performance module not loaded."); return; }
+            bool running = ModuleHost.IsRunning(m);
+            l.Text("Individual optimization modes, feature statistics and tuning overrides. Shadow keeps the original game code running and compares the optimized result. Presets and overall measurements are on the Performance tab.");
             string cat = null;
             foreach (var f in m.Features)
             {

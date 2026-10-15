@@ -16,8 +16,8 @@ namespace WildWasteland.Modules.Performance
 {
     /// <summary>
     /// Vanilla game optimization (issue #133, notes/plan-Performance.md). Every optimization is a <see cref="Feature"/> with its own
-    /// Off / On (/ Shadow) switch in tools.cfg ("Performance / ..." sections), edited only on the separate Performance tab of the
-    /// settings window (not in Game, Modules or Debug). Preset-driven features follow [Performance / Preset] Preset.
+    /// Off / On (/ Shadow) switch in tools.cfg ("Performance / ..." sections), edited in Developer. The Performance tab retains
+    /// the module switch, preset and measurements. Preset-driven features follow [Performance / Preset] Preset.
     /// </summary>
     public sealed class PerformanceModule : ModuleBase
     {
@@ -47,7 +47,7 @@ namespace WildWasteland.Modules.Performance
             {
                 f.Module = this;
                 string sub = f.Category == Categories.PlayMaker ? "PlayMaker" : f.Category == Categories.Content ? "Game logic" : f.Category == Categories.Rendering ? "Rendering" : "World";
-                f.ModeEntry = cfg.Tool(sub, f.Key, f.DefaultMode, f.PlanId + " " + f.Title + ". " + f.Help + (f.SupportsShadow ? " Shadow = vanilla runs, the optimized result is only compared (mismatches shown on the Performance tab)." : ""));
+                f.ModeEntry = cfg.Tool(sub, f.Key, f.DefaultMode, f.PlanId + " " + f.Title + ". " + f.Help + (f.SupportsShadow ? " Shadow = vanilla runs, the optimized result is only compared (mismatches shown in Developer)." : ""));
                 var captured = f;
                 f.ModeEntry.SettingChanged += (s, a) => { if (_running) Apply(captured, true); };
                 try { f.Bind(cfg); } catch (Exception e) { f.LastError = e.Message; Log.Error("[Performance] " + f.PlanId + " Bind", e); }

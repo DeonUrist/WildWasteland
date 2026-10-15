@@ -14,16 +14,19 @@ namespace WildWasteland.Core.UI
         private static readonly Color[] Palette = { C("1B1610"), C("282119"), C("332C21"), C("17130D"), C("EEE4CF"), C("B8AD99"), C("514835"), C("E4CB69"), C("3B3321"), C("F09578") };
         private static readonly Color[] CleanPalette = { C("10100F"), C("171715"), C("20201D"), C("111110"), C("F3EFE4"), new Color(243 / 255f, 239 / 255f, 228 / 255f, .5f), C("FF6152") };
         private static bool _settings, _skinSettings;
-        private static Color _settingsAccent, _skinAccent;
-        private static GUIStyle _settingsPlate;
-        private static Action<Rect, string, float, Color, TextAnchor> _settingsText;
+        private static Color _settingsAccent, _settingsBorder, _skinAccent;
+        private static GUIStyle _settingsPlate, _settingsHiddenInput;
+        private static Texture2D _settingsGradient;
+        private static Action<Rect, string, float, Color, TextAnchor> _settingsText, _settingsWrap;
+        private static Func<string, float, float, float> _settingsHeight;
+        internal static bool SettingsActive { get { return _settings; } }
         public static Color Background { get { return _settings ? CleanPalette[0] : Palette[0]; } }
         public static Color Surface { get { return _settings ? CleanPalette[1] : Palette[1]; } }
         public static Color Raised { get { return _settings ? CleanPalette[2] : Palette[2]; } }
         public static Color Field { get { return _settings ? CleanPalette[3] : Palette[3]; } }
         public static Color Text { get { return _settings ? CleanPalette[4] : Palette[4]; } }
         public static Color Muted { get { return _settings ? CleanPalette[5] : Palette[5]; } }
-        public static Color Line { get { return _settings ? new Color(_settingsAccent.r, _settingsAccent.g, _settingsAccent.b, .35f) : Palette[6]; } }
+        public static Color Line { get { return _settings ? _settingsBorder : Palette[6]; } }
         public static Color Accent { get { return _settings ? _settingsAccent : Palette[7]; } }
         public static Color Selected { get { return _settings ? Color.Lerp(CleanPalette[1], _settingsAccent, .16f) : Palette[8]; } }
         public static Color Danger { get { return _settings ? CleanPalette[6] : Palette[9]; } }
@@ -48,14 +51,15 @@ namespace WildWasteland.Core.UI
             }
             return _scannedFont;
         }
-        internal static GUISkin BeginSettings(Color accent, Texture2D plate, Action<Rect, string, float, Color, TextAnchor> text)
+        internal static GUISkin BeginSettings(Color accent, Color border, Texture2D plate, Texture2D gradient, Action<Rect, string, float, Color, TextAnchor> text,
+            Action<Rect, string, float, Color, TextAnchor> wrap, Func<string, float, float, float> height)
         {
-            _settingsAccent = accent; _settingsText = text;
+            _settingsAccent = accent; _settingsBorder = border; _settingsText = text; _settingsWrap = wrap; _settingsHeight = height; _settingsGradient = gradient;
             if (_settingsPlate == null) _settingsPlate = new GUIStyle(GUIStyle.none) { border = new RectOffset(110, 110, 110, 110) };
             _settingsPlate.normal.background = plate;
             return Begin(true);
         }
-        internal static void EndSettings() { _settings = false; _settingsText = null; }
+        internal static void EndSettings() { _settings = false; _settingsText = _settingsWrap = null; _settingsHeight = null; }
         public static GUISkin Begin() { return Begin(false); }
         private static GUISkin Begin(bool settings)
         {
@@ -69,13 +73,19 @@ namespace WildWasteland.Core.UI
                 if (_body == null) _body = Font.CreateDynamicFontFromOSFont("Segoe UI", 14);
                 if (_bold == null) _bold = Font.CreateDynamicFontFromOSFont(new[] { "Segoe UI Semibold", "Segoe UI" }, 14);
                 _game = font;
-                Body = Style(_body, settings ? 16 : 14); Small = Style(_body, settings ? 13 : 12); Heading = Style(_bold, settings ? 22 : 14); Heading.fontStyle = FontStyle.Bold;
-                DialogTitle = Style(_bold, settings ? 32 : 18); DialogTitle.fontStyle = FontStyle.Bold; Brand = Style(_game ?? _bold, settings ? 46 : 26); GameButton = Style(_game ?? _bold, settings ? 22 : 15); CloseText = Style(_game ?? _bold, settings ? 22 : 13);
+                Body = Style(_body, settings ? 26 : 14); Small = Style(_body, settings ? 20 : 12); Heading = Style(_bold, settings ? 30 : 14); Heading.fontStyle = FontStyle.Bold;
+                DialogTitle = Style(_bold, settings ? 40 : 18); DialogTitle.fontStyle = FontStyle.Bold; Brand = Style(_game ?? _bold, settings ? 76 : 26); GameButton = Style(_game ?? _bold, settings ? 26 : 15); CloseText = Style(_game ?? _bold, settings ? 34 : 13);
                 string field = settings ? "111110" : "17130D", line = settings ? ColorUtility.ToHtmlStringRGBA(Line) : "514835", accent = settings ? ColorUtility.ToHtmlStringRGBA(Accent) : "E4CB69";
-                Input = Style(_body, settings ? 16 : 14); Input.padding = new RectOffset(9, 9, settings ? 3 : 6, settings ? 3 : 6); Input.border = new RectOffset(1, 1, 1, 1);
+                Input = Style(_body, settings ? 26 : 14); Input.padding = new RectOffset(9, 9, settings ? 3 : 6, settings ? 3 : 6); Input.border = new RectOffset(1, 1, 1, 1);
                 Input.normal.background = Box(field, line); Input.hover.background = Input.normal.background;
                 Input.focused.background = Box(field, accent); Input.active.background = Input.focused.background;
                 InputRight = new GUIStyle(Input) { alignment = TextAnchor.MiddleRight };
+                if (settings)
+                {
+                    _settingsHiddenInput = new GUIStyle(Input);
+                    foreach (var state in new[] { _settingsHiddenInput.normal, _settingsHiddenInput.hover, _settingsHiddenInput.active, _settingsHiddenInput.focused })
+                    { state.textColor = Color.clear; state.background = null; }
+                }
                 _skin = UnityEngine.Object.Instantiate(old); _skin.label = Body; _skin.textField = Input;
                 Scrollbar = new GUIStyle(old.verticalScrollbar) { fixedWidth = 7, padding = new RectOffset(), margin = new RectOffset(), border = new RectOffset() };
                 Scrollbar.normal.background = Box(field, field);
@@ -84,13 +94,6 @@ namespace WildWasteland.Core.UI
                 thumb.normal.background = thumb.hover.background = thumb.active.background = Box(settings ? accent : "514835", settings ? accent : "514835");
                 _skin.verticalScrollbarThumb = thumb;
                 _skin.verticalScrollbarUpButton = _skin.verticalScrollbarDownButton = new GUIStyle(GUIStyle.none) { fixedHeight = 0, fixedWidth = 0 };
-                if (settings)
-                {
-                    var track = new GUIStyle(old.horizontalSlider) { fixedHeight = 5, border = new RectOffset(1, 1, 1, 1), margin = new RectOffset() };
-                    track.normal.background = track.hover.background = track.active.background = Box(field, line); _skin.horizontalSlider = track;
-                    var knob = new GUIStyle(old.horizontalSliderThumb) { fixedWidth = 10, fixedHeight = 16, border = new RectOffset(1, 1, 1, 1), margin = new RectOffset(0, 0, -5, 0) };
-                    knob.normal.background = knob.hover.background = knob.active.background = Box(accent, accent); _skin.horizontalSliderThumb = knob;
-                }
             }
             GUI.skin = _skin; return old;
         }
@@ -109,16 +112,75 @@ namespace WildWasteland.Core.UI
         public static void Fill(Rect r, Color color) { Skin.Fill(r, color); }
         public static void Panel(Rect r, Color? fill = null, Color? border = null)
         {
-            Fill(r, fill ?? Surface); var edge = border ?? Line;
-            Fill(new Rect(r.x, r.y, r.width, 1), edge); Fill(new Rect(r.x, r.yMax - 1, r.width, 1), edge);
-            Fill(new Rect(r.x, r.y, 1, r.height), edge); Fill(new Rect(r.xMax - 1, r.y, 1, r.height), edge);
+            Fill(r, fill ?? Surface); var edge = border ?? Line; float stroke = _settings ? 1.5f : 1;
+            Fill(new Rect(r.x, r.y, r.width, stroke), edge); Fill(new Rect(r.x, r.yMax - stroke, r.width, stroke), edge);
+            Fill(new Rect(r.x, r.y, stroke, r.height), edge); Fill(new Rect(r.xMax - stroke, r.y, stroke, r.height), edge);
         }
         public static void Label(Rect r, string text, GUIStyle font = null, Color? color = null, TextAnchor align = TextAnchor.MiddleLeft)
         {
             var style = font ?? Body; var previous = style.alignment; style.alignment = align;
-            if (_settings && _settingsText != null && (style == Brand || style == Heading || style == DialogTitle || style == GameButton || style == CloseText))
-            { _settingsText(r, text, style.fontSize, color ?? Text, align); style.alignment = previous; return; }
+            if (_settings && _settingsText != null)
+            { var draw = style.wordWrap ? _settingsWrap : _settingsText; draw(r, text, style.fontSize, color ?? Text, align); style.alignment = previous; return; }
             Skin.Label(r, text, style, color ?? Text); style.alignment = previous;
+        }
+        internal static float TextHeight(string text, GUIStyle style, float width)
+        { return _settings ? _settingsHeight(text, style.fontSize, width) : style.CalcHeight(new GUIContent(text), width); }
+
+        internal static void RowHighlight(Rect rect, bool selected = false)
+        {
+            if (!_settings || !GUI.enabled || (!selected && !rect.Contains(Event.current.mousePosition))) return;
+            Fill(new Rect(rect.x, rect.center.y - 12, 7, 24), Accent);
+        }
+
+        internal static bool Choice(Rect rect, string text, bool selected)
+        {
+            bool hit = GUI.Button(rect, GUIContent.none, GUIStyle.none);
+            bool hover = GUI.enabled && rect.Contains(Event.current.mousePosition);
+            Label(rect, text, GameButton, !GUI.enabled ? Muted : selected || hover ? Accent : Text, TextAnchor.MiddleCenter);
+            if (selected) Fill(new Rect(rect.x + 14, rect.yMax - 7, rect.width - 28, 2), Accent);
+            return hit;
+        }
+
+        internal static bool KeyButton(Rect rect, string text)
+        {
+            if (!_settings) return Button(rect, text);
+            bool hit = GUI.Button(rect, GUIContent.none, GUIStyle.none);
+            bool hover = GUI.enabled && rect.Contains(Event.current.mousePosition);
+            Panel(new Rect(rect.x, rect.y + 7, rect.width, rect.height - 14), Color.clear, hover ? Accent : Line);
+            Label(rect, text, GameButton, !GUI.enabled ? Muted : hover ? Accent : Text, TextAnchor.MiddleCenter);
+            return hit;
+        }
+
+        internal static string TextField(Rect rect, string key, string text, bool right = false)
+        {
+            if (!_settings) return GUI.TextField(rect, text, right ? InputRight : Input);
+            string name = "WW.Settings/" + key; GUI.SetNextControlName(name);
+            bool focused = GUI.GetNameOfFocusedControl() == name;
+            if (!focused && GUI.enabled && rect.Contains(Event.current.mousePosition)) Panel(rect, Color.clear, Accent);
+            string next = GUI.TextField(rect, text, focused ? (right ? InputRight : Input) : _settingsHiddenInput);
+            if (!focused) Label(new Rect(rect.x + 10, rect.y, rect.width - 20, rect.height), next, Body, GUI.enabled ? Text : Muted, right ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft);
+            return next;
+        }
+
+        internal static float Slider(Rect rect, float value, float min, float max)
+        {
+            int id = GUIUtility.GetControlID(FocusType.Passive, rect); var e = Event.current;
+            bool down = e.type == EventType.MouseDown && e.button == 0 && rect.Contains(e.mousePosition);
+            if (GUI.enabled && (down || GUIUtility.hotControl == id && (e.type == EventType.MouseDrag || e.type == EventType.MouseUp)))
+            {
+                if (down) GUIUtility.hotControl = id;
+                value = Mathf.Lerp(min, max, Mathf.Clamp01((e.mousePosition.x - rect.x) / rect.width));
+                if (e.type == EventType.MouseUp) GUIUtility.hotControl = 0;
+                e.Use();
+            }
+            Panel(rect, new Color(0, 0, 0, .25f), Line);
+            float width = (rect.width - 3) * Mathf.InverseLerp(min, max, value);
+            if (width > 0)
+            {
+                var previous = GUI.color; GUI.color = Accent;
+                GUI.DrawTexture(new Rect(rect.x + 1.5f, rect.y + 1.5f, width, rect.height - 3), _settingsGradient); GUI.color = previous;
+            }
+            return value;
         }
         public static bool Button(Rect r, string text, bool enabled = true, bool primary = false, bool gameFont = false, Color? color = null, bool transparent = false)
         {
@@ -127,8 +189,10 @@ namespace WildWasteland.Core.UI
             bool hit = GUI.Button(r, GUIContent.none, GUIStyle.none);
             if (_settings)
             {
-                Panel(r, primary || hover ? Selected : transparent ? Color.clear : Field, primary || hover ? Accent : Line);
-                Label(r, text, GameButton, color ?? (!GUI.enabled ? Muted : primary || hover ? Accent : Text), TextAnchor.MiddleCenter);
+                bool arrow = text == "<" || text == ">";
+                if (!arrow) RowHighlight(r, primary);
+                var caption = gameFont ? new Rect(r.x + 22, r.y, r.width - 22, r.height) : r;
+                Label(caption, text, gameFont ? CloseText : GameButton, color ?? (!GUI.enabled ? Muted : primary || hover || arrow ? Accent : Text), gameFont ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter);
                 GUI.enabled = previous; return hit;
             }
             var fill = primary ? Accent : hover ? Selected : transparent ? Color.clear : Raised; var border = primary || hover ? Accent : Line;
@@ -148,6 +212,7 @@ namespace WildWasteland.Core.UI
         }
         public static void ButtonLabel(Rect r, string text, GUIStyle style, Color ink, TextAnchor alignment)
         {
+            if (_settings) { Label(r, text, style, ink, alignment); return; }
             // Centre the visible glyphs, rather than Segoe UI's asymmetric ascent/descent line box.
             string key = style.font.GetInstanceID() + "/" + style.fontSize + "/" + text; float shift;
             if (!ButtonOffsets.TryGetValue(key, out shift))
@@ -267,9 +332,12 @@ namespace WildWasteland.Core.UI
             {
                 bool clicked = GUI.Button(r, GUIContent.none, GUIStyle.none);
                 bool hover = GUI.enabled && r.Contains(Event.current.mousePosition);
-                Panel(new Rect(r.x, r.center.y - 9, 18, 18), Field, hover || value ? Accent : Line);
-                if (value) Fill(new Rect(r.x + 4, r.center.y - 5, 10, 10), Accent);
-                Label(new Rect(r.x + 30, r.y, r.width - 30, r.height), label, Body, !GUI.enabled ? Muted : hover ? Accent : Text);
+                RowHighlight(r);
+                float x = r.x + r.width * ToolLayout.LabelWidth;
+                Panel(new Rect(x, r.center.y - 14, 28, 28), Color.clear, Accent);
+                if (value) Fill(new Rect(x + 6, r.center.y - 8, 16, 16), Accent);
+                Label(new Rect(r.x + 22, r.y, x - r.x - 36, r.height), label, Body, !GUI.enabled ? Muted : hover ? Accent : Text);
+                Label(new Rect(x + 44, r.y, 120, r.height), value ? "ON" : "OFF", GameButton, GUI.enabled ? Text : Muted);
                 return clicked ? !value : value;
             }
             bool hit = GUI.Button(r, GUIContent.none, GUIStyle.none); Panel(new Rect(r.x, r.center.y - 8, 16, 16), value ? Accent : Field);
@@ -279,7 +347,7 @@ namespace WildWasteland.Core.UI
         public static float Number(Rect r, string key, float value, float min, float max, Action changed, bool right = false)
         {
             string text; if (!Numbers.TryGetValue(key, out text)) text = value.ToString("0.####", CultureInfo.InvariantCulture);
-            var next = GUI.TextField(r, text, right ? InputRight : Input); if (next == text) return value; Numbers[key] = next;
+            var next = TextField(r, key, text, right); if (next == text) return value; Numbers[key] = next;
             float parsed; if ((!float.TryParse(next, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed) && !float.TryParse(next, NumberStyles.Float, CultureInfo.CurrentCulture, out parsed)) || float.IsNaN(parsed) || float.IsInfinity(parsed)) return value;
             var number = Mathf.Clamp(parsed, min, max); if (number != parsed) Numbers[key] = number.ToString("0.####", CultureInfo.InvariantCulture);
             if (number != value) changed(); return number;

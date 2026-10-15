@@ -113,11 +113,28 @@ namespace WildWasteland.Core.UI
         internal bool CanShowEntry(ConfigEntryBase e) { return e != null && (EntryFilter == null || EntryFilter(e)) && (!DeduplicateEntries || !_drawn.Contains(e)); }
         bool BeginEntry(ConfigEntryBase e) { if (!CanShowEntry(e)) return false; if (DeduplicateEntries && GUI.enabled) _drawn.Add(e); return true; }
 
-        public Rect Next(float h = Row) { var r = new Rect(X + 8, Y, Width - 16, h); Y += h + 4; return r; }
+        public Rect Next(float h = Row)
+        {
+            if (Ledger.SettingsActive && h <= 40) h = h <= 22 ? 46 : 54;
+            var r = new Rect(X + (Ledger.SettingsActive ? 0 : 8), Y, Width - (Ledger.SettingsActive ? 0 : 16), h); Y += h + 4; return r;
+        }
         public void Space(float h = 8) { Y += h; }
+
+        void Caption(Rect row, string text, float fraction = LabelWidth, GUIStyle style = null, Color? color = null)
+        {
+            float inset = Ledger.SettingsActive ? 22 : 0;
+            Ledger.RowHighlight(row);
+            var ink = color ?? (Ledger.SettingsActive && GUI.enabled && row.Contains(Event.current.mousePosition) ? Ledger.Accent : Ledger.Text);
+            Ledger.Label(new Rect(row.x + inset, row.y, row.width * fraction - inset, row.height), text, style ?? Ledger.Body, ink);
+        }
 
         public void Heading(string text)
         {
+            if (Ledger.SettingsActive)
+            {
+                Y += 12; Ledger.Label(new Rect(X + 22, Y, Width - 44, 40), text, Ledger.Heading, Ledger.Accent);
+                Y += 48; return;
+            }
             Y += 6;
             Ledger.Label(new Rect(X + 8, Y, Width - 16, 24), text.ToUpperInvariant(), Ledger.Heading, Ledger.Accent);
             Y += 24; Ledger.Rule(X + 8, Y, Width - 16); Y += 6;
@@ -127,15 +144,16 @@ namespace WildWasteland.Core.UI
         {
             if (_wrap == null || _wrapSource != Ledger.Small) { _wrap = new GUIStyle(Ledger.Small) { wordWrap = true }; _wrapSource = Ledger.Small; }
             var st = _wrap;
-            float h = Mathf.Max(20, st.CalcHeight(new GUIContent(text), Width - 16));
-            Ledger.Label(new Rect(X + 8, Y, Width - 16, h), text, st, color ?? Ledger.Muted, TextAnchor.UpperLeft);
-            Y += h + 4;
+            float inset = Ledger.SettingsActive ? 22 : 8;
+            float h = Mathf.Max(20, Ledger.TextHeight(text, st, Width - inset * 2));
+            Ledger.Label(new Rect(X + inset, Y, Width - inset * 2, h), text, st, color ?? Ledger.Muted, TextAnchor.UpperLeft);
+            Y += h + (Ledger.SettingsActive ? 10 : 4);
         }
 
         public void Value(string label, string value)
         {
             var r = Next(22);
-            Ledger.Label(new Rect(r.x, r.y, r.width * LabelWidth, r.height), label, Ledger.Small, Ledger.Muted);
+            Caption(r, label, LabelWidth, Ledger.Small, Ledger.Muted);
             Ledger.Label(new Rect(r.x + r.width * LabelWidth, r.y, r.width * (1 - LabelWidth), r.height), value, Ledger.Body, Ledger.Text);
         }
 
@@ -173,22 +191,28 @@ namespace WildWasteland.Core.UI
 
         public int Choices(string label, int selected, params string[] choices)
         {
+            if (Ledger.SettingsActive && choices.Length == 2 && choices[0] == "Off" && choices[1] == "On") return Toggle(label, selected == 1) ? 1 : 0;
             var r = Next(28);
-            Ledger.Label(new Rect(r.x, r.y, r.width * 0.34f, r.height), label, Ledger.Body);
-            float x = r.x + r.width * 0.34f, w = (r.width * 0.66f - (choices.Length - 1) * 6) / choices.Length;
+            float fraction = Ledger.SettingsActive ? LabelWidth : .34f;
+            Caption(r, label, fraction);
+            float x = r.x + r.width * fraction, w = (r.width * (1 - fraction) - (choices.Length - 1) * 6) / choices.Length;
             for (int i = 0; i < choices.Length; i++)
-                if (Ledger.Button(new Rect(x + i * (w + 6), r.y, w, r.height), choices[i], true, i == selected)) selected = i;
+            {
+                var option = new Rect(x + i * (w + 6), r.y, w, r.height);
+                if (Ledger.SettingsActive ? Ledger.Choice(option, choices[i], i == selected) : Ledger.Button(option, choices[i], true, i == selected)) selected = i;
+            }
             return selected;
         }
 
         public float Slider(string label, string key, float value, float min, float max)
         {
             var r = Next(26);
-            Ledger.Label(new Rect(r.x, r.y, r.width * LabelWidth, r.height), label, Ledger.Body);
+            Caption(r, label);
             float x = r.x + r.width * LabelWidth, w = r.width * (1 - LabelWidth);
-            float s = GUI.HorizontalSlider(new Rect(x, r.y + 9, w - 96, 12), value, min, max);
+            float s = Ledger.SettingsActive ? Ledger.Slider(new Rect(x, r.center.y - 10, w - 120, 20), value, min, max)
+                : GUI.HorizontalSlider(new Rect(x, r.y + 9, w - 96, 12), value, min, max);
             if (s != value) { Ledger.ClearNumbers(); value = s; }
-            value = Ledger.Number(new Rect(x + w - 88, r.y, 88, r.height), Prefix + key, value, min, max, () => { }, true);
+            value = Ledger.Number(new Rect(x + w - (Ledger.SettingsActive ? 112 : 88), r.y, Ledger.SettingsActive ? 112 : 88, r.height), Prefix + key, value, min, max, () => { }, true);
             return value;
         }
 
@@ -196,7 +220,7 @@ namespace WildWasteland.Core.UI
         public void KeyPair(string label, ConfigEntryBase a, string label2, ConfigEntryBase b)
         {
             var r = Next(28);
-            Ledger.Label(new Rect(r.x, r.y, r.width * 0.34f, r.height), label, Ledger.Body);
+            Caption(r, label, .34f);
             float x = r.x + r.width * 0.34f, w = r.width * 0.66f, bw = (w - 6) * 0.3f, lw = (w - 6) * 0.4f;
             KeyButton(new Rect(x, r.y, bw, r.height), a);
             Ledger.Label(new Rect(x + bw + 6, r.y, lw, r.height), label2, Ledger.Body, Ledger.Text, TextAnchor.MiddleCenter);
@@ -207,7 +231,7 @@ namespace WildWasteland.Core.UI
         {
             if (e == null) return;
             bool waiting = ReferenceEquals(_rebinding, e);
-            if (Ledger.Button(r, waiting ? "press a key" : e.BoxedValue.ToString())) _rebinding = waiting ? null : e;
+            if (Ledger.KeyButton(r, waiting ? "press a key" : e.BoxedValue.ToString())) _rebinding = waiting ? null : e;
         }
 
         /// <summary>Generic editor row for any BepInEx entry (bool, numbers with/without range, enum, Key, string, Vector3...).</summary>
@@ -231,7 +255,7 @@ namespace WildWasteland.Core.UI
                 else
                 {
                     var r = Next(26);
-                    Ledger.Label(new Rect(r.x, r.y, r.width * LabelWidth, r.height), label, Ledger.Body);
+                    Caption(r, label);
                     n = Ledger.Number(new Rect(r.x + r.width * LabelWidth, r.y, 140, r.height), Prefix + e.Definition.Section + "/" + label, v, float.MinValue, float.MaxValue, () => { });
                 }
                 if (t == typeof(int)) n = Mathf.Round(n);
@@ -245,29 +269,30 @@ namespace WildWasteland.Core.UI
             else if (t == typeof(Key) || t == typeof(KeyCode))
             {
                 var r = Next(26);
-                Ledger.Label(new Rect(r.x, r.y, r.width * LabelWidth, r.height), label, Ledger.Body);
+                Caption(r, label);
                 bool waiting = ReferenceEquals(_rebinding, e);
-                if (Ledger.Button(new Rect(r.x + r.width * LabelWidth, r.y, 200, r.height), waiting ? "press a key (Esc = none)" : e.BoxedValue.ToString())) _rebinding = waiting ? null : e;
+                if (Ledger.KeyButton(new Rect(r.x + r.width * LabelWidth, r.y, Ledger.SettingsActive ? r.width * (1 - LabelWidth) : 200, r.height), waiting ? "press a key (Esc = none)" : e.BoxedValue.ToString())) _rebinding = waiting ? null : e;
             }
             else if (t.IsEnum || ListValues(e) != null)
             {
                 var r = Next(26);
-                Ledger.Label(new Rect(r.x, r.y, r.width * LabelWidth, r.height), label, Ledger.Body);
+                Caption(r, label);
                 object[] values = t.IsEnum ? ToObjects(Enum.GetValues(t)) : ListValues(e);
                 int i = Array.IndexOf(values, e.BoxedValue);
                 float x = r.x + r.width * LabelWidth;
-                if (Ledger.Button(new Rect(x, r.y, 30, r.height), "<")) e.BoxedValue = values[(i - 1 + values.Length) % values.Length];
-                Ledger.Label(new Rect(x + 36, r.y, 200, r.height), e.BoxedValue.ToString(), Ledger.Body, Ledger.Text, TextAnchor.MiddleCenter);
-                if (Ledger.Button(new Rect(x + 242, r.y, 30, r.height), ">")) e.BoxedValue = values[(i + 1) % values.Length];
+                float arrow = Ledger.SettingsActive ? 44 : 30, valueWidth = Ledger.SettingsActive ? r.width * (1 - LabelWidth) - 100 : 200;
+                if (Ledger.Button(new Rect(x, r.y, arrow, r.height), "<")) e.BoxedValue = values[(i - 1 + values.Length) % values.Length];
+                Ledger.Label(new Rect(x + arrow + 6, r.y, valueWidth, r.height), e.BoxedValue.ToString(), Ledger.Body, Ledger.Text, TextAnchor.MiddleCenter);
+                if (Ledger.Button(new Rect(x + arrow + valueWidth + 12, r.y, arrow, r.height), ">")) e.BoxedValue = values[(i + 1) % values.Length];
             }
             else
             {
                 var r = Next(26);
-                Ledger.Label(new Rect(r.x, r.y, r.width * LabelWidth, r.height), label, Ledger.Body);
+                Caption(r, label);
                 string key = Prefix + e.Definition.Section + "/" + label;
                 string cur; if (!_text.TryGetValue(key, out cur)) cur = e.GetSerializedValue();
                 var rr = new Rect(r.x + r.width * LabelWidth, r.y, r.width * (1 - LabelWidth) - 70, r.height);
-                string next = GUI.TextField(rr, cur, Ledger.Input);
+                string next = Ledger.TextField(rr, key, cur);
                 if (next != cur) _text[key] = next;
                 string pending; bool dirty = _text.TryGetValue(key, out pending) && pending != e.GetSerializedValue();
                 if (Ledger.Button(new Rect(rr.xMax + 6, r.y, 60, r.height), "SET", dirty))

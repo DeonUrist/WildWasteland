@@ -19,8 +19,10 @@ namespace WildWasteland.Core.UI
         static Vector2 _navScroll, _scroll;
         static float _contentHeight = 400, _navHeight = 400;
         static Rect _rect;
-        const float Width = 1420, Height = 900;
+        const float Width = 1920, Height = 1080;
         static readonly Action<Rect, string, float, Color, TextAnchor> SettingsText = CleanHud.GlyphFont.Draw;
+        static readonly Action<Rect, string, float, Color, TextAnchor> SettingsWrap = CleanHud.GlyphFont.DrawWrapped;
+        static readonly Func<string, float, float, float> SettingsHeight = CleanHud.GlyphFont.WrappedHeight;
         static bool _open;
         static Action _deferred;
         public static bool IsOpen { get { return _open; } }
@@ -66,6 +68,7 @@ namespace WildWasteland.Core.UI
                 if (EditorSession.Busy || !_session.Acquire(true, fromMenu)) { Log.Info("Settings: another editor is open or the game is paused"); return; }
                 _open = true;
                 CollectModulePages();
+                Log.Always("[Core] Settings opened: CleanHUD atlas UI, 54-unit rows");
             }
             if (page != null) { _current = page; _scroll = Vector2.zero; Ledger.ClearNumbers(); ToolLayout.CancelRebind(); }
             if (_current == null && _pages.Count > 0) _current = Sorted()[0];
@@ -133,41 +136,43 @@ namespace WildWasteland.Core.UI
             }
             if (Skin.GameFont == null) { var f = ApocasetterBridge.GameFont; if (f != null) Skin.SetGameFont(f); }
             int depth = GUI.depth; GUI.depth = -900;
-            float s = Mathf.Min((Screen.width - 96) / Width, (Screen.height - 96) / Height);
+            float s = Mathf.Min(Screen.width / Width, Screen.height / Height);
             var accent = CleanHud.CleanHudModule.Running ? CleanHud.AccentTheme.Resolve(CleanHud.DialogueWidgets.Gold) : CleanHud.DialogueWidgets.Gold;
-            var old = Ledger.BeginSettings(accent, CleanHud.Assets.Tex("panel_menu"), SettingsText); var m = GUI.matrix;
+            var border = new Color(214 / 255f, 203 / 255f, 176 / 255f, .55f);
+            if (CleanHud.CleanHudModule.Running) border = CleanHud.AccentTheme.Resolve(border);
+            var old = Ledger.BeginSettings(accent, border, CleanHud.Assets.Tex("panel_menu"), CleanHud.Assets.VGradient(.75f), SettingsText, SettingsWrap, SettingsHeight); var m = GUI.matrix;
             Ledger.Fill(new Rect(0, 0, Screen.width, Screen.height), new Color(0, 0, 0, .6f));
             GUI.matrix = Matrix4x4.TRS(new Vector3((Screen.width - Width * s) / 2, (Screen.height - Height * s) / 2, 0), Quaternion.identity, new Vector3(s, s, 1));
             _rect = new Rect(0, 0, Width, Height);
-            try { GUI.Window(0x57570007, _rect, DrawWindow, "", GUIStyle.none); }
-            finally { Ledger.EndSettings(); GUI.skin = old; GUI.matrix = m; GUI.depth = depth; }
+            GUI.BeginGroup(_rect);
+            try { DrawWindow(); }
+            finally { GUI.EndGroup(); Ledger.EndSettings(); GUI.skin = old; GUI.matrix = m; GUI.depth = depth; }
         }
 
         static readonly ToolLayout _layout = new ToolLayout();
 
-        static void DrawWindow(int id)
+        static void DrawWindow()
         {
-            Ledger.Window(_rect);
-            Ledger.Label(new Rect(40, 24, 900, 60), "WILD WASTELAND", Ledger.Brand, Ledger.Accent);
-            Ledger.Label(new Rect(44, 84, 700, 24), "CONFIGURATION  /  " + Plugin.VERSION, Ledger.Small, Ledger.Muted);
-            if (Ledger.Button(new Rect(_rect.width - 170, 40, 126, 48), "CLOSE", true, false, true, null, true)) { Close(); return; }
-            Ledger.Rule(32, 124, _rect.width - 64);
-            Ledger.Label(new Rect(40, _rect.height - 42, 600, 24), "CHANGES APPLY IMMEDIATELY", Ledger.Small, Ledger.Muted);
-            Ledger.Label(new Rect(_rect.width - 440, _rect.height - 42, 400, 24), Plugin.ToolWindowKey.Value + " / ESC TO CLOSE", Ledger.Small, Ledger.Muted, TextAnchor.MiddleRight);
+            Ledger.Label(new Rect(120, 120, 1420, 104), "WILD WASTELAND", Ledger.Brand, Ledger.Accent);
+            Ledger.Label(new Rect(126, 228, 900, 36), "CONFIGURATION  /  " + Plugin.VERSION, Ledger.Small, Ledger.Muted);
+            Ledger.Window(new Rect(120, 280, 1680, 704));
+            if (Ledger.Button(new Rect(128, 900, 290, 64), "BACK", true, false, true, null, true)) { Close(); return; }
+            Ledger.Label(new Rect(126, 1012, 600, 44), "CHANGES APPLY IMMEDIATELY", Ledger.Small, Ledger.Muted);
+            Ledger.Label(new Rect(1340, 1012, 460, 44), Plugin.ToolWindowKey.Value + " / ESC TO CLOSE", Ledger.Small, Ledger.Muted, TextAnchor.MiddleRight);
             if (CleanHud.CleanHudModule.Running && CleanHud.AccentTheme.Setting != null)
                 for (int i = 0; i < CleanHud.AccentTheme.DisplayOrder.Length; i++)
                 {
                     int choice = CleanHud.AccentTheme.DisplayOrder[i];
-                    var swatch = new Rect(_rect.width / 2 - 112 + i * 28, _rect.height - 42, 22, 22);
+                    var swatch = new Rect(_rect.width / 2 - 156 + i * 40, 1020, 30, 30);
                     bool selected = choice == CleanHud.AccentTheme.Index || swatch.Contains(Event.current.mousePosition);
                     Ledger.Panel(swatch, Ledger.Field, selected ? Ledger.Accent : Ledger.Line);
-                    Ledger.Fill(new Rect(swatch.x + 4, swatch.y + 4, 14, 14), CleanHud.AccentTheme.Colors[choice]);
+                    Ledger.Fill(new Rect(swatch.x + 4, swatch.y + 4, 22, 22), CleanHud.AccentTheme.Colors[choice]);
                     if (GUI.Button(swatch, GUIContent.none, GUIStyle.none)) CleanHud.AccentTheme.Setting.Value = CleanHud.AccentTheme.Names[choice];
                 }
 
             var pages = Sorted();
             // ---- left: groups and pages
-            var nav = new Rect(32, 144, 260, _rect.height - 204);
+            var nav = new Rect(128, 304, 290, 572);
             _navScroll = Ledger.Scroll(nav, _navScroll, _navHeight, w =>
             {
                 float y = 0; string group = null;
@@ -175,27 +180,29 @@ namespace WildWasteland.Core.UI
                 {
                     if (p.Group != group)
                     {
-                        group = p.Group; y += group == pages[0].Group ? 2 : 18;
-                        Ledger.Label(new Rect(14, y, w - 28, 24), group == ToolGroups.General ? "SETTINGS" : group.ToUpperInvariant(), Ledger.Small, Ledger.Muted); y += 34;
+                        group = p.Group;
+                        if (group != ToolGroups.General)
+                        {
+                            y += 18; Ledger.Label(new Rect(22, y, w - 44, 30), group, Ledger.Small, Ledger.Muted); y += 38;
+                        }
                     }
                     bool off = p.Owner != null && !ModuleHost.IsRunning(p.Owner);
-                    var r = new Rect(2, y, w - 4, 52);
+                    var r = new Rect(0, y, w, 60);
                     bool highlighted = p == _current || r.Contains(Event.current.mousePosition);
-                    if (highlighted) { Ledger.Fill(r, Ledger.Selected); Ledger.Fill(new Rect(r.x, r.y + 14, 4, r.height - 28), Ledger.Accent); }
-                    Ledger.Label(new Rect(r.x + 20, r.y, r.width - 30, r.height), p.Title.ToUpperInvariant() + (off ? "  (OFF)" : ""), Ledger.GameButton, off ? Ledger.Muted : highlighted ? Ledger.Accent : Ledger.Text);
+                    Ledger.RowHighlight(r, p == _current);
+                    Ledger.Label(new Rect(r.x + 22, r.y, r.width - 30, r.height), p.Title + (off ? "  (OFF)" : ""), Ledger.Heading, off ? Ledger.Muted : highlighted ? Ledger.Accent : Ledger.Text);
                     if (GUI.Button(r, GUIContent.none, GUIStyle.none) && p != _current) { _current = p; _scroll = Vector2.zero; Ledger.ClearNumbers(); ToolLayout.CancelRebind(); p.OnShow(); }
-                    y += 58;
+                    y += 60;
                 }
                 _navHeight = y + 6;
             });
 
             // ---- right: page content
-            var body = new Rect(316, 144, _rect.width - 348, _rect.height - 204);
-            Ledger.Panel(body, Ledger.Surface, Ledger.Line);
+            var body = new Rect(460, 280, 1316, 704);
+            Ledger.Fill(new Rect(438, 304, 1.5f, 656), new Color(Ledger.Accent.r, Ledger.Accent.g, Ledger.Accent.b, .35f));
             if (_current == null) return;
-            Ledger.Label(new Rect(body.x + 24, body.y + 14, body.width - 48, 44), _current.Title.ToUpperInvariant(), Ledger.DialogTitle, Ledger.Accent);
-            Ledger.Rule(body.x + 24, body.y + 70, body.width - 48);
-            var inner = new Rect(body.x + 16, body.y + 88, body.width - 32, body.height - 104);
+            Ledger.Label(new Rect(body.x + 22, body.y + 22, body.width - 44, 50), _current.Title, Ledger.DialogTitle, Ledger.Accent);
+            var inner = new Rect(body.x, body.y + 92, body.width, body.height - 116);
             var page = _current;
             _scroll = Ledger.Scroll(inner, _scroll, _contentHeight, w =>
             {

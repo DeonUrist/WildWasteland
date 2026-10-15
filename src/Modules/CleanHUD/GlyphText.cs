@@ -59,23 +59,72 @@ namespace WildWasteland.Modules.CleanHUD
         {
             if (Event.current.type != EventType.Repaint || string.IsNullOrEmpty(text)) return;
             var font = Get(); if (font == null || font.Atlas == null) return;
-            float width = font.Measure(text, size, 0);
+            font.DrawRange(rect, text, 0, text.Length, size, color, align);
+        }
+
+        private float TextWidth(string text, int start, int end, float size)
+        {
+            float width = 0; G glyph;
+            for (int i = start; i < end; i++)
+                if (Map.TryGetValue(char.ToUpperInvariant(text[i]), out glyph) || Map.TryGetValue('?', out glyph)) width += glyph.Adv;
+            return width * size / Size;
+        }
+
+        private void DrawRange(Rect rect, string text, int start, int end, float size, Color color, TextAnchor align)
+        {
+            float width = TextWidth(text, start, end, size);
             if (width > rect.width && width > 0) { size *= rect.width / width; width = rect.width; }
-            float scale = size / font.Size, x = rect.x;
+            float scale = size / Size, x = rect.x;
             if (align == TextAnchor.MiddleCenter || align == TextAnchor.UpperCenter || align == TextAnchor.LowerCenter) x = rect.center.x - width / 2;
             else if (align == TextAnchor.MiddleRight || align == TextAnchor.UpperRight || align == TextAnchor.LowerRight) x = rect.xMax - width;
-            float baseline = rect.center.y + (font.Ascent - font.Descent) * scale / 2;
+            float baseline = rect.center.y + (Ascent - Descent) * scale / 2;
             var previous = GUI.color; GUI.color = color;
-            foreach (char ch in text)
+            for (int i = start; i < end; i++)
             {
-                G glyph;
-                if (!font.Map.TryGetValue(ch, out glyph) && !font.Map.TryGetValue('?', out glyph)) continue;
+                char ch = char.ToUpperInvariant(text[i]); G glyph;
+                if (!Map.TryGetValue(ch, out glyph) && !Map.TryGetValue('?', out glyph)) continue;
                 if (ch != ' ' && glyph.W > 1 && glyph.H > 1)
-                    GUI.DrawTextureWithTexCoords(new Rect(x + glyph.Ox * scale, baseline - glyph.Top * scale, glyph.W * scale, glyph.H * scale), font.Atlas,
-                        new Rect(glyph.X / font.AtlasW, 1f - (glyph.Y + glyph.H) / font.AtlasH, glyph.W / font.AtlasW, glyph.H / font.AtlasH));
+                    GUI.DrawTextureWithTexCoords(new Rect(x + glyph.Ox * scale, baseline - glyph.Top * scale, glyph.W * scale, glyph.H * scale), Atlas,
+                        new Rect(glyph.X / AtlasW, 1f - (glyph.Y + glyph.H) / AtlasH, glyph.W / AtlasW, glyph.H / AtlasH));
                 x += glyph.Adv * scale;
             }
             GUI.color = previous;
+        }
+
+        private int LineEnd(string text, int start, float size, float width, out int next)
+        {
+            float used = 0; int space = -1; G glyph;
+            for (int i = start; i < text.Length; i++)
+            {
+                char ch = text[i];
+                if (ch == '\n') { next = i + 1; return i; }
+                if (char.IsWhiteSpace(ch)) space = i;
+                if (Map.TryGetValue(char.ToUpperInvariant(ch), out glyph) || Map.TryGetValue('?', out glyph)) used += glyph.Adv * size / Size;
+                if (used > width && i > start)
+                { int end = space > start ? space : i; next = end; while (next < text.Length && char.IsWhiteSpace(text[next]) && text[next] != '\n') next++; return end; }
+            }
+            next = text.Length; return text.Length;
+        }
+
+        internal static float WrappedHeight(string text, float size, float width)
+        {
+            if (string.IsNullOrEmpty(text)) return size * 1.2f;
+            var font = Get(); int lines = 0, next;
+            for (int start = 0; start < text.Length; start = next) { font.LineEnd(text, start, size, width, out next); lines++; }
+            return lines * size * 1.2f;
+        }
+
+        internal static void DrawWrapped(Rect rect, string text, float size, Color color, TextAnchor align)
+        {
+            if (Event.current.type != EventType.Repaint || string.IsNullOrEmpty(text)) return;
+            var font = Get(); if (font == null || font.Atlas == null) return;
+            float y = rect.y; int next;
+            for (int start = 0; start < text.Length; start = next)
+            {
+                int end = font.LineEnd(text, start, size, rect.width, out next);
+                font.DrawRange(new Rect(rect.x, y, rect.width, size * 1.2f), text, start, end, size, color, TextAnchor.MiddleLeft);
+                y += size * 1.2f;
+            }
         }
     }
 
