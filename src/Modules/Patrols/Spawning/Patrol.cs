@@ -465,7 +465,7 @@ namespace WildWasteland.Modules.Patrols
         // Used by the build and when a saved car is revived after a load.
         internal static IEnumerator StartUp(GameObject car)
         {
-            if (Explode.IsWreck(car)) yield break;
+            if (Explode.IsWreck(car) || car.GetComponent<Crew>()?.MerchantWaiting==true) yield break;
             if (Core.Services.VehicleIgnition != null && Core.Services.VehicleIgnition.TryStart(car)) { yield return new WaitForSeconds(1.5f); yield break; }
             var start = FindFsm(car, "START", "Start");
             if (start == null) { Core.Log.Warn("[Patrols] " + "No START/Start FSM on " + (car != null ? car.name : "?")); yield break; }
@@ -473,10 +473,10 @@ namespace WildWasteland.Modules.Patrols
             start.Fsm.SetState("Ignition");
             yield return null;
             yield return null;
-            if (Explode.IsWreck(car)) yield break;   // blew up mid-start: no more ignition
+            if (Explode.IsWreck(car) || car.GetComponent<Crew>()?.MerchantWaiting==true) yield break;   // blew up mid-start: no more ignition
             start.Fsm.SetState("Start");
             yield return new WaitForSeconds(1.5f);
-            if (Explode.IsWreck(car)) yield break;
+            if (Explode.IsWreck(car) || car.GetComponent<Crew>()?.MerchantWaiting==true) yield break;
             bool running = Nwh.EngineRunning(car);
             PatrolsModule.Verbose("START state: " + start.ActiveStateName + "  engine running: " + running);
             if (!running)

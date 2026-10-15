@@ -222,7 +222,7 @@ namespace WildWasteland.Modules.Patrols
             float unload = Mathf.Max(load + 100f, PatrolsModule.TrafficUnloadRange.Value);
             foreach (var journey in _journeys.ToArray())
             {
-                if(journey.merchant)journey.waitSeconds=Mathf.Max(0f,journey.waitSeconds-seconds);
+                if(journey.merchant&&journey.waitSeconds>0f)journey.waitSeconds=Mathf.Max(TrafficLocations.FlatDistance(journey.position,TrafficSpace.World(player.position))<=100f?1f:0f,journey.waitSeconds-seconds);
                 if(!string.IsNullOrEmpty(journey.battle))continue;
                 _live.TryGetValue(journey.id, out var live);
                 if (live != null && !live.Building)

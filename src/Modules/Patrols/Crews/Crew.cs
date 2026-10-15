@@ -54,6 +54,16 @@ namespace WildWasteland.Modules.Patrols
         // A car built for a convoy waits for Convoy to release the whole group at once (so the group departs together and
         // the builds do not pile up on one frame); the driver sits with the engine running until then.
         internal bool Hold;
+        internal bool MerchantWaiting;
+
+        internal void WaitForMerchant(bool waiting)
+        {
+            if (MerchantWaiting == waiting) return;
+            MerchantWaiting = waiting;
+            PatrolsModule.Verbose("Merchant: " + _car.name + (waiting ? " parked; ignition off, handbrake on" : " wait ended; resuming route"));
+            if (waiting) _revived = false;
+            else if (!_dead && !_done && !Hold) Revive();
+        }
 
         internal static Crew Attach(GameObject car, GameObject driver)
         {
@@ -116,7 +126,7 @@ namespace WildWasteland.Modules.Patrols
         // Same start-up as a fresh build, once the car's FSMs are initialized. Safe to call more than once.
         internal void Revive()
         {
-            if (_revived || _done || Marker?.SetupOnly==true || Explode.IsWreck(_car)) return;
+            if (_revived || _done || MerchantWaiting || Marker?.SetupOnly==true || Explode.IsWreck(_car)) return;
             _revived = true;
             StartCoroutine(ReviveRoutine());
         }
@@ -133,7 +143,7 @@ namespace WildWasteland.Modules.Patrols
                 if (hb != null && hb.Fsm.Initialized && start != null && start.Fsm.Initialized) break;
                 yield return null;
             }
-            if (_car == null || _done || Explode.IsWreck(_car)) yield break;
+            if (_car == null || _done || MerchantWaiting || Explode.IsWreck(_car)) yield break;
             Patrol.Handbrake(_car, false);
             if (!Nwh.EngineRunning(_car)) yield return Patrol.StartUp(_car);
             if (_car == null) yield break;
@@ -290,6 +300,7 @@ namespace WildWasteland.Modules.Patrols
                 if (!DriverAlive()) { OnDriverDied(); return; }
                 if (Time.time >= _nextGuard) { _nextGuard = Time.time + 0.5f; MuteAi(); }
                 _seated += Time.deltaTime;
+                if (MerchantWaiting) return;
                 float delay = _delayOverride >= 0f ? _delayOverride : 0f;
                 if (!Hold&&!_driving && !_outOfFuel && _seated >= delay && Time.time >= _nextEngineCheck)
                 {
@@ -355,6 +366,7 @@ namespace WildWasteland.Modules.Patrols
             if (_car == null || _done || Time.timeScale <= 0f || Marker?.SetupOnly==true) return;
             if (!_dead)
             {
+                if (MerchantWaiting) { Nwh.SetInput(_car, 0f, 0f, 1f); Nwh.SetHandbrake(_car, 1f); return; }
                 if (!_driving) return;
                 if (_pilot != null) _pilot.Step();
                 return;

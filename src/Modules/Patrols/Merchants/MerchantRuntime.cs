@@ -42,10 +42,21 @@ namespace WildWasteland.Modules.Patrols
         private Transform _inactiveProbes;
         private readonly List<GameObject> _probes=new List<GameObject>();
         private Transform _root;private float _next;private Collider[] _chassis;internal bool Ready;
+        private PlayMakerFSM _start;
         private void OnEnable(){All.Add(this);}
         private void OnDestroy(){All.Remove(this);foreach(var pair in _stock)if(pair.Value!=null&&!pair.Key.purchased)Register.RemoveTree(pair.Value);}
         internal void Park()
-        {if(Data?.travelling==true)return;var marker=GetComponent<PatrolMarker>();if(marker?.PlayerEntered==true)return;var crew=GetComponent<Crew>();if(crew!=null)crew.Hold=true;Nwh.StopEngine(gameObject);Nwh.SetInput(gameObject,0f,0f,1f);Nwh.SetHandbrake(gameObject,1f);Patrol.Handbrake(gameObject,true);}
+        {
+            var marker=GetComponent<PatrolMarker>();if(marker?.PlayerEntered==true)return;
+            var journey=WorldTraffic.Find(marker?.TrafficId);var crew=GetComponent<Crew>();
+            bool waiting=Data?.travelling!=true||(journey?.merchant==true&&(journey.arrived||journey.waitSeconds>0f));
+            if(Data?.travelling!=true&&crew!=null)crew.Hold=true;
+            if(crew!=null)crew.WaitForMerchant(waiting);if(!waiting)return;
+            Nwh.StopEngine(gameObject);
+            if(_start==null)_start=Patrol.FindFsm(gameObject,"START","Start");
+            if(_start!=null&&_start.enabled&&_start.Fsm.Initialized&&_start.ActiveStateName!="off")_start.Fsm.SetState("off");
+            Nwh.SetInput(gameObject,0f,0f,1f);Nwh.SetHandbrake(gameObject,1f);Patrol.Handbrake(gameObject,true);
+        }
         private IEnumerator Start()
         {
             if(Data==null){Destroy(this);yield break;}Park();
