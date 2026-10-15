@@ -24,6 +24,11 @@ namespace WildWasteland.Modules.QuestsCompat
         private static readonly EditorSession DialogueSession = new EditorSession();
         private static Func<object, object> _book;
         private static Func<object, MethodInfo> _immersiveAdd;
+        private static Func<object, Vector3> _deliveryPosition;
+        private static Func<object, BepInEx.Configuration.ConfigEntry<float>> _deliveryRadius;
+        private static Func<GameObject, bool> _deliveryEnemy;
+        private static Func<Collider, Transform> _deliveryNpc;
+        private static Func<Transform, bool> _deliveryFriendly;
         private static Action<object, bool> _setReady;
         private static Action<object, PlayMakerFSM> _saveFsm;
         private static Action<object, bool> _hadSaveFsm;
@@ -61,6 +66,8 @@ namespace WildWasteland.Modules.QuestsCompat
                 _talkUpdate = Binding.Call(type, "Update"); _talkLate = Binding.Call(type, "LateUpdate"); _talkClose = Binding.Call(type, "Close");
                 _talking = Binding.Get<bool>(type, "Talking");
                 _pauseTalk = Binding.Get<BepInEx.Configuration.ConfigEntry<bool>>(type, "pauseWhileTalking");
+                _deliveryNpc = (Func<Collider, Transform>)Delegate.CreateDelegate(typeof(Func<Collider, Transform>), _talk, AccessTools.Method(type, "ResolveNpc"));
+                _deliveryFriendly = (Func<Transform, bool>)Delegate.CreateDelegate(typeof(Func<Transform, bool>), _talk, AccessTools.Method(type, "IsFriendly"));
                 Patch(type, "Update", "ScheduledOnly"); Patch(type, "LateUpdate", "ScheduledOnly");
                 Patch(type, "Open", "BeforeOpen");
                 Patch(type, "Open", postfix: "AfterOpen"); Patch(type, "Close", postfix: "AfterClose");
@@ -87,6 +94,10 @@ namespace WildWasteland.Modules.QuestsCompat
                 _immersiveAdd = Binding.Get<MethodInfo>(map, "addQ");
                 Patch(map, "get_Available", null, "MapAvailable"); Patch(map, "Sync", "ForwardMap"); Patch(map, "Reset", null, "ClearMarkers");
                 var game = asm.GetType("ApocalypterQuests.Game", true);
+                _deliveryPosition = Binding.Get<Vector3>(asm.GetType("ApocalypterQuests.Poi", true), "Pos");
+                _deliveryRadius = Binding.Get<BepInEx.Configuration.ConfigEntry<float>>(type, "deliverRadius");
+                _deliveryEnemy = (Func<GameObject, bool>)Delegate.CreateDelegate(typeof(Func<GameObject, bool>), AccessTools.Method(game, "IsPlayerEnemy"));
+                Patch(asm.GetType("ApocalypterQuests.QuestGen", true), "PickDeliveryCamp", transpiler: "DeliverySelection");
                 Patch(game, "FindItems", transpiler: "ItemScan");
                 foreach (var name in new[] { "FindPeople", "FindEnemies", "FindBodies", "LiveNames", "FindNpcNames" }) Patch(game, name, transpiler: "PeopleScan");
                 QuestFollower.Install(this, asm, _quests);
@@ -189,6 +200,37 @@ namespace WildWasteland.Modules.QuestsCompat
         }
         private static IEnumerable<CodeInstruction> ItemScan(IEnumerable<CodeInstruction> code) { return ReplaceScan(code, "CachedItems"); }
         private static IEnumerable<CodeInstruction> PeopleScan(IEnumerable<CodeInstruction> code) { return ReplaceScan(code, "CachedPeople"); }
+        private static IEnumerable<CodeInstruction> DeliverySelection(IEnumerable<CodeInstruction> code)
+        {
+            int matched = 0;
+            foreach (var c in code)
+            {
+                yield return c; var m = c.operand as MethodInfo;
+                if (m == null || m.Name != "FindPois" || m.DeclaringType.FullName != "ApocalypterQuests.Game") continue;
+                matched++; yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(QuestsCompatModule), "DeliveryCamps"));
+                yield return new CodeInstruction(OpCodes.Castclass, m.ReturnType);
+            }
+            if (matched != 1) throw new InvalidOperationException("Delivery camp query not found exactly once");
+        }
+        private static IList DeliveryCamps(IList camps)
+        {
+            float radius = Mathf.Min(120f, _deliveryRadius(_quests).Value);
+            for (int i = camps.Count - 1; i >= 0; i--)
+            {
+                bool found = false; Vector3 position = _deliveryPosition(camps[i]);
+                foreach (var f in People)
+                {
+                    if (_deliveryNpc == null || f == null || f.FsmName != "Health" || f.ActiveStateName != "health" || !f.gameObject.activeInHierarchy) continue;
+                    var health = f.FsmVariables.GetFsmFloat("Health"); if (health == null || health.Value <= 0f) continue;
+                    Vector3 delta = f.transform.position - position; if (delta.x * delta.x + delta.z * delta.z > radius * radius) continue;
+                    var collider = f.GetComponent<Collider>(); if (collider == null || !collider.enabled) continue;
+                    var npc = _deliveryNpc(collider);
+                    if (npc != null && _deliveryFriendly(npc) && !_deliveryEnemy(npc.gameObject)) { found = true; break; }
+                }
+                if (!found) { if (Log.Verbose) Log.Info("[QuestsCompat] Delivery camp skipped: no living talkable recipient at " + position); camps.RemoveAt(i); }
+            }
+            return camps;
+        }
         private static void MapAvailable(ref bool __result) { __result |= Services.Map != null || Services.Compass != null; }
         private static bool ForwardMap(Dictionary<string, Vector3> __0)
         { MapSync(__0); return _immersiveAdd(null) != null; }
@@ -232,6 +274,7 @@ namespace WildWasteland.Modules.QuestsCompat
             if (_quests != null && _saveFsm != null) { _saveFsm(_quests, GameRefs.SaveLoadGame); _hadSaveFsm(_quests, GameRefs.SaveLoadGame != null); _saveState(_quests, SaveBus.State); }
             if (_talk != null && _talking != null && _talking(_talk)) _talkClose(_talk);
             DialogueSession.Close(true);
+            _deliveryNpc = null; _deliveryFriendly = null; _deliveryEnemy = null; _deliveryPosition = null; _deliveryRadius = null;
             _talk = _quests = null; _owner = null; _dispatch = _tickDispatch = false;
         }
     }
