@@ -499,7 +499,7 @@ namespace WildWasteland.Modules.CleanHUD
             bool visible = _src.Visible;
             if (_root.activeSelf != visible) _root.SetActive(visible);
             MessageHook.Active = visible;
-            if (!visible) { if (_wasVisible) _src.Restore(); _wasVisible = false; return; }
+            if (!visible) { ChaseCameraHud.TraceState(_rpm, false); if (_wasVisible) _src.Restore(); _wasVisible = false; return; }
             _wasVisible = true;
             _src.RefreshHiddenIfNeeded();
             var l = _layoutFile.Current;
@@ -513,6 +513,7 @@ namespace WildWasteland.Modules.CleanHUD
             _quests.Tick(_groups["insanity"], _cmp);
             TickVehicleStatus();
             TickDriving();
+            ChaseCameraHud.TraceState(_rpm, true);
             _src.Pocket.Read();
             int sel = _src.Selected;
             try { TickSlots(l, sel); } catch (Exception e) { CleanHudModule.Throttled("slots", e); }
@@ -836,7 +837,7 @@ namespace WildWasteland.Modules.CleanHUD
             _savingWas = saving;
         }
 
-        private void BeforeRender() { if (Valid && _root.activeSelf) { _src.Hide(); if (_driving.gameObject.activeInHierarchy) ChaseCameraHud.HideNative(); } }
+        private void BeforeRender() { if (Valid && _root.activeSelf) _src.Hide(); }
 
         public void Dispose()
         {

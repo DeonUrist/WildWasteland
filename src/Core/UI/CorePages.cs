@@ -165,6 +165,7 @@ namespace WildWasteland.Core.UI
 
         static bool DebugSetting(ConfigEntryBase e)
         {
+            if (VerboseSetting(e)) return false;
             if (ReferenceEquals(e, CleanHudSettings.Enabled) || ReferenceEquals(e, CleanHudSettings.MenuEnabled)
                 || ReferenceEquals(e, CleanHudSettings.ShowNeeds) || ReferenceEquals(e, CleanHudSettings.ShowHealthNumbers)
                 || ReferenceEquals(e, CleanHudSettings.ShowInsanity) || ReferenceEquals(e, CleanHudSettings.Scale)
@@ -194,8 +195,29 @@ namespace WildWasteland.Core.UI
             return key == "Log" || key.IndexOf("Verbose", System.StringComparison.Ordinal) >= 0 || key == "DebugMap" || key == "Real patrol names" || key == "hide route type";
         }
 
+        static bool VerboseSetting(ConfigEntryBase e)
+        {
+            if (e.SettingType != typeof(bool)) return false;
+            string key = e.Definition.Key;
+            return key.IndexOf("Verbose", System.StringComparison.OrdinalIgnoreCase) >= 0 || key == "Log" || key.EndsWith("Log", System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        static void Logging(ToolLayout l, ConfigFile file)
+        {
+            foreach (var key in file.Keys)
+            {
+                var e = file[key];
+                if (!ReferenceEquals(e, Plugin.VerboseLog) && VerboseSetting(e)) l.Toggle((ConfigEntry<bool>)e, key.Section + " / " + key.Key);
+            }
+        }
+
         static void Debug(ToolLayout l)
         {
+            l.DeduplicateEntries = true;
+            l.Heading("Logging");
+            l.Toggle(Plugin.VerboseLog, "VerboseLog");
+            l.Text("General verbose logging. The module log switches below retain their own behavior; NPC traces also work with general logging off.");
+            Logging(l, Plugin.Settings); Logging(l, Plugin.Tools);
             l.Text("Editors, debug switches, gameplay values and diagnostics. Changes are saved immediately unless an editor has its own Save button. Fine tuning (offsets, poses, AI constants) is kept in config/WildWasteland/tools.cfg.");
             l.EntryFilter = DebugSetting; l.DeduplicateEntries = true;
             l.Heading("Tools");

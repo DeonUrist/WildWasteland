@@ -27,6 +27,9 @@ namespace WildWasteland.Modules.CleanHUD
         private static float _nextVehicleSearch;
         private static object _enabled, _hudEnabled, _size, _gap;
         private static float _nextHiddenLog;
+        private static string _state = "not sampled", _lastTraceState;
+        private static bool _lastHudVisible;
+        private static float _nextStateLog;
         private static FieldInfo[] _fields;
         private static bool _attempted, _ready;
         private static int _frame = -1, _selected;
@@ -80,7 +83,7 @@ namespace WildWasteland.Modules.CleanHUD
                 var reading = Expression.Variable(snapshot, "reading");
                 _capture = Expression.Lambda<Func<VehicleController, bool>>(Expression.Block(new[] { reading }, Expression.Call(capture, vehicle, reading)), vehicle).Compile();
                 _ready = true;
-                CleanHudModule.Log("ChaseCamera 0.2.5 HUD bridge ready: first/third-person source speed/RPM/gear, text above weapon UI and rendered compass heading.");
+                CleanHudModule.Log("ChaseCamera 0.2.5 HUD bridge ready: first/third-person source speed/RPM/gear, driving-only visibility, text above weapon UI and rendered compass heading.");
             }
             catch (Exception e) { _ready = false; CleanHudModule.Warn("ChaseCamera HUD bridge unavailable; retaining its original HUD: " + e.Message); }
         }
@@ -119,19 +122,40 @@ namespace WildWasteland.Modules.CleanHUD
         }
         internal static bool Refresh()
         {
-            if (!_ready || !((ConfigEntry<bool>)_enabled).Value || !((ConfigEntry<bool>)_hudEnabled).Value
-                || !Core.GameRefs.InGame || Core.ApocasetterBridge.InputBlocked || !Application.isFocused) return false;
-            if (!_resolve() || _specialView()) { _owner = null; _drivingVehicle = null; return false; }
+            if (!_ready) return Unavailable("bridge unavailable");
+            if (!((ConfigEntry<bool>)_enabled).Value || !((ConfigEntry<bool>)_hudEnabled).Value) return Unavailable("disabled");
+            if (!Core.GameRefs.InGame) return Unavailable("game gate");
+            if (Core.ApocasetterBridge.InputBlocked || !Application.isFocused) return Unavailable("input/focus gate");
+            if (!_resolve()) { _owner = null; _drivingVehicle = null; return Unavailable("driving binding"); }
+            // Camera scope/binocular state can remain latched until ESC; it does not own vehicle instrument visibility.
             var car = _car();
             if (_owner != car) { _owner = car; _drivingVehicle = null; _nextVehicleSearch = 0; }
-            if (car == null) return false;
+            if (car == null) return Unavailable("no car");
             if (_drivingVehicle == null && Time.unscaledTime >= _nextVehicleSearch)
             {
                 _nextVehicleSearch = Time.unscaledTime + .5f;
                 _drivingVehicle = car.GetComponent<VehicleController>();
                 if (_drivingVehicle == null) _drivingVehicle = car.GetComponentInChildren<VehicleController>(true);
             }
-            return _capture(_drivingVehicle) && Live;
+            if (_drivingVehicle == null) return Unavailable("no vehicle controller");
+            if (!_capture(_drivingVehicle)) return Unavailable("capture failed");
+            if (!Live) return Unavailable("snapshot missing");
+            _state = "live"; return true;
+        }
+        private static bool Unavailable(string state) { _state = state; return false; }
+        internal static void TraceState(UnityEngine.UI.Text rpm, bool hudVisible)
+        {
+            if (!Core.Log.Verbose || !_ready) return;
+            if (_lastTraceState == _state && _lastHudVisible == hudVisible && Time.unscaledTime < _nextStateLog) return;
+            _lastTraceState = _state; _lastHudVisible = hudVisible; _nextStateLog = Time.unscaledTime + 5f;
+            var menu = Core.GameRefs.Menu;
+            Core.Log.Info("[CleanHUD] ChaseCamera readout state: " + _state + ", HUD visible=" + hudVisible
+                + ", menu=" + (menu == null ? "missing" : menu.ActiveStateName) + ", save=" + Core.GameRefs.SaveLoadState + ", time scale=" + Time.timeScale
+                + ", snapshot age=" + (Time.frameCount - _frame) + ", car=" + (_owner == null ? "none" : _owner.name)
+                + ", controller=" + (_drivingVehicle == null ? "none" : _drivingVehicle.name)
+                + ", special view=" + _specialView()
+                + ", RPM active=" + rpm.gameObject.activeInHierarchy + ", enabled=" + rpm.enabled + ", alpha=" + rpm.canvasRenderer.GetAlpha()
+                + ", culled=" + rpm.canvasRenderer.cull + ", text=" + rpm.text + ", position=" + rpm.rectTransform.position);
         }
         internal static void HideNative() { if (Live) _hide(); }
         internal static void TraceHidden()
@@ -154,6 +178,7 @@ namespace WildWasteland.Modules.CleanHUD
             _ready = _attempted = false; _frame = -1; _vehicle = null;
             _gear = null; _hide = null; _chaseHeading = _bodyHeading = null;
             _thirdPerson = _specialView = null; _nextHiddenLog = 0;
+            _state = "not sampled"; _lastTraceState = null; _lastHudVisible = false; _nextStateLog = 0;
             _resolve = null; _car = null; _capture = null; _owner = null; _drivingVehicle = null; _nextVehicleSearch = 0;
             _enabled = _hudEnabled = _size = _gap = null; _fields = null;
         }
