@@ -310,6 +310,8 @@ namespace WildWasteland.Modules.CleanHUD
         private readonly Dictionary<CanvasGroup, GroupState> _original = new Dictionary<CanvasGroup, GroupState>();
         private readonly Dictionary<Transform, CanvasGroup> _hiddenGroups = new Dictionary<Transform, CanvasGroup>();
         private Button _modsButton;
+        private Button _modsFallback;
+        private float _nextFallbackScan;
         private Button _languageButton;
         private bool _languageShown;
         private readonly List<MenuButton> _accentButtons = new List<MenuButton>();
@@ -323,6 +325,7 @@ namespace WildWasteland.Modules.CleanHUD
         private string _screen = "main";
         private RectTransform _main, _sub, _modal, _status;
         private GlyphText _statusText;
+        private Image _statusBar;
         private float _nextScan, _nextLabels;
         private readonly List<Action> _nextFrame = new List<Action>();
         private readonly List<Action> _later = new List<Action>();
@@ -459,6 +462,7 @@ namespace WildWasteland.Modules.CleanHUD
         {
             foreach (var p in VanillaHidden()) HideGo(SettingsModel.FindPath(p));
             var mods = FindModsButton(); if (mods != null) HideGo(mods.transform);
+            var fallback = FindModsFallback(); if (fallback != null) HideGo(fallback.transform);
         }
         private void HideGo(Transform t)
         {
@@ -525,16 +529,28 @@ namespace WildWasteland.Modules.CleanHUD
         {
             if (_van == null) return null;
             if (_modsButton != null) return _modsButton;
-            if (Time.unscaledTime < _nextModsScan) return null;
+            if (Time.unscaledTime < _nextModsScan) return FindModsFallback();
             _nextModsScan = Time.unscaledTime + .5f;
             _buttonBuffer.Clear(); _van.GetComponentsInChildren<Button>(true, _buttonBuffer);
             foreach (var b in _buttonBuffer)
             {
                 if (b is MenuButton) continue;
+                if (b.name == "Apocasetter_Mods") { _modsButton = b; return b; }
                 var tx = b.GetComponentInChildren<Text>(true);
                 if (tx != null && tx.text != null && string.Equals(tx.text.Trim(), "MODS", StringComparison.OrdinalIgnoreCase)) { _modsButton = b; return b; }
             }
-            return null;
+            return FindModsFallback();
+        }
+
+        private Button FindModsFallback()
+        {
+            if (_modsFallback != null) return _modsFallback;
+            if (!WildWasteland.Core.ApocasetterBridge.Present || Time.unscaledTime < _nextFallbackScan) return null;
+            _nextFallbackScan = Time.unscaledTime + .5f;
+            var root = GameObject.Find("Apocasetter.MenuFallback");
+            var t = root != null ? root.transform.Find("Apocasetter_Mods") : null;
+            if (t != null) _modsFallback = t.GetComponent<Button>();
+            return _modsFallback;
         }
 
         private Button FindLanguageButton()
@@ -693,8 +709,9 @@ namespace WildWasteland.Modules.CleanHUD
 
             _status = R(_rootRt, "status", 0, 0, 1920, 1080);
             _status.anchorMin = _status.anchorMax = new Vector2(0, 0); _status.pivot = new Vector2(0, 0); _status.anchoredPosition = Vector2.zero;
-            _statusText = T(_status, "status", 120, 1080 - 96, 1200, 40, 24, TextAnchor.MiddleLeft, Dim, "");
-            Shade(_statusText, .7f);
+            _statusText = T(_status, "status", 136, 1080 - 96, 1184, 40, 26, TextAnchor.MiddleLeft, White, "");
+            Shade(_statusText, .95f);
+            _statusBar = Img(_status, "bar", 120, 1080 - 86, 6, 20, Gold); _statusBar.enabled = false;
 
             BuildMain();
             _screen = "main";
@@ -815,6 +832,7 @@ namespace WildWasteland.Modules.CleanHUD
                     s = tx != null && !string.IsNullOrEmpty(tx.text) ? "DISTANCE TRAVELLED  " + tx.text.Trim() + " KM" : "";
                 }
                 _statusText.Set(s);
+                _statusBar.enabled = !string.IsNullOrEmpty(s);
             }
         }
 
