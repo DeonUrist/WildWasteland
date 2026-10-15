@@ -61,7 +61,8 @@ namespace WildWasteland.Modules.Patrols
             }
             var rigs=WarRig.WorldSpawning.NaturalRigs;
             for(int i=rigs.Count-1;i>=0;i--)if(rigs[i]==null)rigs.RemoveAt(i);
-            bool traffic=PatrolsModule.WorldTrafficEnabled.Value&&PatrolsModule.TrafficDebugMap.Value;
+            var mapApi=Core.Services.Map;
+            bool traffic=PatrolsModule.WorldTrafficEnabled.Value&&(mapApi!=null?mapApi.Routes!=Core.MapDetail.Off:PatrolsModule.TrafficDebugMap.Value);
             if((!traffic&&rigs.Count==0)||!Core.GameRefs.InGame)
             {_gameInkAt=0f;_mapWasOpen=false;return;}
             bool mapOpen=_mapCheat!=null&&_mapCheat.isActiveAndEnabled&&_mapCheat.ActiveStateName=="on";
@@ -79,10 +80,10 @@ namespace WildWasteland.Modules.Patrols
             var rect=new Rect(_mapCorners[0].x,Screen.height-_mapCorners[1].y,_mapCorners[2].x-_mapCorners[0].x,_mapCorners[1].y-_mapCorners[0].y);
             if(rect.width<1f||rect.height<1f)return;
             var old=GUI.color;GUI.BeginGroup(rect);
-            if(traffic&&(Time.unscaledTime>=_gameInkAt||_gameInkSize!=rect.size||_inkNames!=PatrolsModule.RealPatrolNames.Value||_inkHide!=PatrolsModule.HideRouteType.Value))
+            if(traffic&&(Time.unscaledTime>=_gameInkAt||_gameInkSize!=rect.size||_inkNames!=MapNames||_inkHide!=MapUnknown))
             {
                 _gameInkAt=Time.unscaledTime+1f;_gameInkSize=rect.size;
-                _inkNames=PatrolsModule.RealPatrolNames.Value;_inkHide=PatrolsModule.HideRouteType.Value;
+                _inkNames=MapNames;_inkHide=MapUnknown;
                 var canvas=new Rect(0,0,Mathf.Min(512f,rect.width),Mathf.Min(512f,rect.height));
                 _gameInk.Begin(Mathf.RoundToInt(canvas.width),Mathf.RoundToInt(canvas.height));
                 foreach(var journey in _journeys)for(int i=1;i<journey.route.Length;i++)
@@ -91,12 +92,12 @@ namespace WildWasteland.Modules.Patrols
                 _mapLabels.Clear();_mapBattles.Clear();
                 foreach(var journey in _journeys)
                 CacheMapLabel(journey.position,rect,RouteColor(journey),MapName(journey));
-                foreach(var camp in TrafficLocations.Known.Values)if(camp.cleared)
+                foreach(var camp in TrafficLocations.Known.Values)if(camp.cleared&&mapApi==null)
                 CacheMapLabel(camp.center,rect,Color.gray,camp.name+" [Cleared]");
                 foreach(var battle in _battles)
                 {var p=MapPoint(battle.position,rect);_mapBattles.Add(new Rect(p.x-9f,p.y-9f,18f,18f));}
                 foreach(var merchant in MerchantHost.All)if(merchant!=null&&!Owns(merchant.GetComponent<PatrolMarker>()))
-                CacheMapLabel(TrafficSpace.World(merchant.transform.position),rect,_inkHide?Color.gray:Color.yellow,_inkHide?"Distant traffic":_inkNames?merchant.Data?.group??"Coyote merchant":"Merchant");
+                CacheMapLabel(TrafficSpace.World(merchant.transform.position),rect,_inkHide?Color.gray:Color.yellow,_inkHide?"Unknown":_inkNames?merchant.Data?.group??"Coyote merchant":"Merchant");
             }
             if(traffic)
             {
@@ -106,10 +107,13 @@ namespace WildWasteland.Modules.Patrols
             }
             foreach(var rig in rigs)
             {
+                if(mapApi!=null&&mapApi.Markers==Core.MapDetail.Off)continue;
                 var p=_gameMap.WorldToViewportPoint(rig.transform.position);
                 if(p.z<=0f||p.x<0f||p.x>1f||p.y<0f||p.y>1f)continue;
                 if(_rigXStyle==null)_rigXStyle=new GUIStyle(GUI.skin.label){fontSize=24,fontStyle=FontStyle.Bold,alignment=TextAnchor.MiddleCenter,normal={textColor=Color.yellow}};
-                GUI.color=Color.white;GUI.Label(new Rect(p.x*rect.width-12f,(1f-p.y)*rect.height-12f,24f,24f),"X",_rigXStyle);
+                bool unknown=mapApi!=null&&mapApi.Markers==Core.MapDetail.Ambiguous;
+                _rigXStyle.normal.textColor=unknown?Color.white:Color.yellow;
+                GUI.color=Color.white;GUI.Label(new Rect(p.x*rect.width-12f,(1f-p.y)*rect.height-12f,24f,24f),unknown?"?":"X",_rigXStyle);
             }
             GUI.EndGroup();GUI.color=old;
         }
@@ -143,10 +147,12 @@ namespace WildWasteland.Modules.Patrols
         private Vector2 MapPoint(Vector3 world,Rect rect)
         {var p=_gameMap.WorldToViewportPoint(TrafficSpace.Scene(world));return new Vector2(p.x*rect.width,(1f-p.y)*rect.height);}
         internal static string MapName(TrafficJourney journey)
-        {return PatrolsModule.HideRouteType.Value?"Distant traffic":PatrolsModule.RealPatrolNames.Value&&!string.IsNullOrEmpty(journey.name)?journey.name:journey.merchant?"Merchant":journey.convoy?"Convoy":"Patrol";}
+        {return MapUnknown?"Unknown":MapNames&&!string.IsNullOrEmpty(journey.name)?journey.name:journey.merchant?"Merchant":journey.convoy?"Convoy":"Patrol";}
+        private static bool MapUnknown {get{return Core.Services.Map!=null?Core.Services.Map.Routes==Core.MapDetail.Ambiguous:PatrolsModule.HideRouteType.Value;}}
+        private static bool MapNames {get{return Core.Services.Map!=null?Core.Services.Map.Routes==Core.MapDetail.On:PatrolsModule.RealPatrolNames.Value;}}
         internal static Color32 RouteColor(TrafficJourney journey)
         {
-            if(PatrolsModule.HideRouteType.Value)return new Color32(150,150,150,255);
+            if(MapUnknown)return new Color32(150,150,150,255);
             if(journey.merchant)return new Color32(255,220,50,255);
             if(TrafficFactions.Normalize(journey.faction)=="Coyotes")return journey.convoy?new Color32(110,210,255,255):new Color32(80,220,100,255);
             return journey.convoy?new Color32(255,150,40,255):new Color32(255,80,80,255);

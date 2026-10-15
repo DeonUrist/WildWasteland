@@ -204,8 +204,12 @@ namespace WildWasteland.Core
 
     // ------------------------------------------------------------------ HUD
 
+    public enum MapDetail { Off, Ambiguous, On }
+
     public interface IMapMarkers
     {
+        MapDetail Markers { get; }
+        MapDetail Routes { get; }
         int Add(string owner, Func<Vector3> position, string icon, Color color, string label);
         bool Exists(int id);
         void Remove(int id);

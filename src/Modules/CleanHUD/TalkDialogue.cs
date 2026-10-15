@@ -114,18 +114,18 @@ namespace WildWasteland.Modules.CleanHUD
                 {
                     var source = choices.GetChild(i).GetComponent<Button>(); if (source == null || !source.gameObject.activeSelf) continue;
                     var text = source.GetComponentInChildren<TMP_Text>(true); if (text == null) continue;
-                    var lines = Wrap(Tags.Replace(text.text ?? "", ""), 1040);
-                    var button = DialogueWidgets.Button(_choices, 0, y, 1080, Math.Max(52, lines.Count * 32 + 12), "", () => { if (source != null && source.interactable) source.onClick.Invoke(); });
+                    var lines = Wrap(Tags.Replace(text.text ?? "", ""), 1040, 20);
+                    var button = DialogueWidgets.Button(_choices, 0, y, 1080, Math.Max(36, lines.Count * 24 + 8), "", () => { if (source != null && source.interactable) source.onClick.Invoke(); });
                     var labels = new List<GlyphText>(); float ly = 4;
-                    foreach (var line in lines) { labels.Add(DialogueWidgets.Text(button.transform, "text", 20, ly, 1040, 32, 26, Color.white, line)); ly += 32; }
-                    button.OnVisual = on => { foreach (var label in labels) label.color = !button.interactable ? Color.gray : on ? DialogueWidgets.Gold : Color.white; };
-                    Buttons.Add(button); Sources.Add(source); y += button.GetComponent<RectTransform>().sizeDelta.y + 8;
+                    foreach (var line in lines) { labels.Add(DialogueWidgets.Text(button.transform, "text", 20, ly, 1040, 24, 20, DialogueWidgets.Gold, line)); ly += 24; }
+                    button.OnVisual = on => { foreach (var label in labels) label.color = !button.interactable ? Color.gray : on ? Color.white : DialogueWidgets.Gold; };
+                    Buttons.Add(button); Sources.Add(source); y += button.GetComponent<RectTransform>().sizeDelta.y + 4;
                 }
                 _choices.sizeDelta = new Vector2(1100, y);
             }
             for (int i = 0; i < Buttons.Count; i++) { Buttons[i].interactable = Sources[i] != null && Sources[i].interactable; Buttons[i].Refresh(); }
         }
-        private static List<string> Wrap(string text, float width)
+        private static List<string> Wrap(string text, float width, float size = 26)
         {
             var lines = new List<string>(); var font = GlyphFont.Get();
             foreach (var paragraph in text.Replace("\r", "").Split('\n'))
@@ -133,7 +133,7 @@ namespace WildWasteland.Modules.CleanHUD
                 var line = new StringBuilder();
                 foreach (var word in paragraph.Split(' '))
                 {
-                    if (line.Length > 0 && font.Measure(line.ToString() + " " + word, 26, 0) > width) { lines.Add(line.ToString()); line.Length = 0; }
+                    if (line.Length > 0 && font.Measure(line.ToString() + " " + word, size, 0) > width) { lines.Add(line.ToString()); line.Length = 0; }
                     if (line.Length > 0) line.Append(' '); line.Append(word);
                 }
                 lines.Add(line.ToString());

@@ -18,6 +18,8 @@ namespace WildWasteland.Modules.CleanHUD
         internal static ConfigEntry<bool> Enabled, ShowNeeds, ShowHealthNumbers, ShowInsanity, MenuEnabled, EnableCheats;
         internal static ConfigEntry<float> Scale;
         internal static ConfigEntry<bool> ShowConvoys, ShowLocations;
+        internal static ConfigEntry<bool> ShowCompass, MapEnabled;
+        internal static ConfigEntry<MapDetail> MapMarkers, MapRoutes;
         internal static LayoutFile Layout;
         private Hud _hud;
         private Menu _menu;
@@ -40,6 +42,17 @@ namespace WildWasteland.Modules.CleanHUD
             ShowInsanity = Bind(cfg, "HUD", "ShowInsanity", true, "Show insanity in the top right while above zero.");
             ShowConvoys = cfg.Player("HUD", "ShowConvoys", true, "Compass icons and distances for vehicle groups: merchants yellow, Coyotes green, patrols red and convoys orange.");
             ShowLocations = cfg.Player("HUD", "ShowLocations", true, "Compass icons and distances for native locations within 1 km.");
+            ShowCompass = cfg.Player("HUD", "Compass", true, "Show the compass, including its direction strip and all markers.");
+            MapEnabled = cfg.Player("Map", "Enabled", true, "Enable the native debug map on the game's Map key.");
+            MapMarkers = cfg.Player("Map", "Markers", MapDetail.On, "Off hides map markers; Ambiguous shows question marks; On shows their icons and colors. Map icons have no name labels.");
+            bool savedRoutes = Legacy.Get(cfg.Main.ConfigFilePath, cfg.Section("Map"), "Routes") != null;
+            MapRoutes = cfg.Player("Map", "Routes", MapDetail.On, "Off hides traffic routes; Ambiguous shows gray unknown routes; On shows faction colors and full names.");
+            if (!savedRoutes)
+            {
+                string section = "Patrols / Traffic tuning";
+                if (Legacy.Get(cfg.Tools.ConfigFilePath, section, "DebugMap") == "false") MapRoutes.Value = MapDetail.Off;
+                else if (Legacy.Get(cfg.Tools.ConfigFilePath, section, "hide route type") == "true") MapRoutes.Value = MapDetail.Ambiguous;
+            }
             MenuEnabled = Bind(cfg, "Menu", "Enabled", true, "Replace the title and pause menus with CleanHUD's menus.");
             EnableCheats = Bind(cfg, "Menu", "EnableCheats", false, "Add the game's cheat controls to the menu settings.");
             bool saved = Legacy.Get(cfg.Main.ConfigFilePath, cfg.Section("HUD"), "Scale") != null;
@@ -48,6 +61,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (!saved) Import(Scale, "HUD", "Scale");
             Enabled.SettingChanged += HudChanged;
             MenuEnabled.SettingChanged += MenuChanged;
+            MapEnabled.SettingChanged += MapChanged;
         }
 
         // Newly absorbed settings migrate even when Wild Wasteland was already installed.
@@ -91,6 +105,8 @@ namespace WildWasteland.Modules.CleanHUD
             Services.Compass = this;
             _questMap = new QuestMap(); Services.Map = _questMap;
             TalkDialogue.Install(this);
+            QuestNotifications.Install(this);
+            QuestTracker.Install(this);
             Core.Patches.Patch(this, AccessTools.Method(typeof(UiTextSetText), "OnEnter"), postfix: AccessTools.Method(typeof(MessageHook), "Postfix"));
             Hooks.GetButtonDownUpdate.Prefix(this, CancelHook.Prefix);
             Scheduler.Sliced(this, "Scene key discovery", 500, SceneCache.Step);
@@ -109,6 +125,7 @@ namespace WildWasteland.Modules.CleanHUD
         }
 
         private void PollLayout() { Layout.Poll(false); }
+        private void MapChanged(object sender, EventArgs args) { if (Running && _questMap != null) _questMap.ApplyEnabled(); }
         private void AttachHud()
         {
             if (!KeyCatalog.ScanStarted) KeyCatalog.StartScan();
@@ -131,7 +148,7 @@ namespace WildWasteland.Modules.CleanHUD
             _hud.SetVehicleStatus(ignitionOff, handbrakeOn, playing, volume);
             return true;
         }
-        bool ICompassMarkers.VehiclesEnabled { get { return Running && Enabled.Value && ShowConvoys.Value; } }
+        bool ICompassMarkers.VehiclesEnabled { get { return Running && Enabled.Value && ShowCompass.Value && ShowConvoys.Value; } }
         int ICompassMarkers.Add(string owner, Func<Vector3> position, string icon, Color color)
         { return Api.Compass.Add(owner, position, new Api.Marker { Icon = icon, Color = color, ShowDistance = true }); }
         bool ICompassMarkers.Exists(int id) { return Api.Compass.Exists(id); }
@@ -162,6 +179,7 @@ namespace WildWasteland.Modules.CleanHUD
         {
             Running = false; Release();
             TalkDialogue.Dispose();
+            QuestTracker.Clear();
             if (ReferenceEquals(Services.Map, _questMap)) Services.Map = null;
             if (_questMap != null) _questMap.Dispose(); _questMap = null;
             if (ReferenceEquals(Services.VehicleStatus, this)) Services.VehicleStatus = null;

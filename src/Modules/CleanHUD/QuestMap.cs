@@ -11,26 +11,31 @@ namespace WildWasteland.Modules.CleanHUD
     {
         private sealed class Entry
         {
-            internal int Id; internal string Owner, Icon, Label; internal Color Color; internal Func<Vector3> Position;
-            internal RectTransform Root; internal RawImage Image;
+            internal int Id; internal string Owner, Icon; internal Color Color; internal Func<Vector3> Position;
+            internal RectTransform Root; internal RawImage Image; internal Texture IconTexture;
         }
         private readonly List<Entry> _entries = new List<Entry>();
+        private readonly HashSet<int> _ids = new HashSet<int>();
         private int _next;
         private PlayMakerFSM _fsm;
         private Camera _camera;
         private RectTransform _map, _root;
+        private bool _captured, _nativeEnabled;
+        public MapDetail Markers { get { return CleanHudModule.MapMarkers.Value; } }
+        public MapDetail Routes { get { return CleanHudModule.MapRoutes.Value; } }
         public int Add(string owner, Func<Vector3> position, string icon, Color color, string label)
-        { var e = new Entry { Id = ++_next, Owner = owner, Position = position, Icon = icon, Color = color, Label = label }; _entries.Add(e); return e.Id; }
-        public bool Exists(int id) { return _entries.Exists(e => e.Id == id); }
+        { var e = new Entry { Id = ++_next, Owner = owner, Position = position, Icon = icon, Color = color }; _entries.Add(e); _ids.Add(e.Id); return e.Id; }
+        public bool Exists(int id) { return _ids.Contains(id); }
         public void Remove(int id)
-        { for (int i = _entries.Count - 1; i >= 0; i--) if (_entries[i].Id == id) { Destroy(_entries[i]); _entries.RemoveAt(i); } }
+        { for (int i = _entries.Count - 1; i >= 0; i--) if (_entries[i].Id == id) { Destroy(_entries[i]); _ids.Remove(id); _entries.RemoveAt(i); } }
         public void RemoveAll(string owner)
-        { for (int i = _entries.Count - 1; i >= 0; i--) if (_entries[i].Owner == owner) { Destroy(_entries[i]); _entries.RemoveAt(i); } }
+        { for (int i = _entries.Count - 1; i >= 0; i--) if (_entries[i].Owner == owner) { Destroy(_entries[i]); _ids.Remove(_entries[i].Id); _entries.RemoveAt(i); } }
         private static void Destroy(Entry e) { if (e.Root != null) UnityEngine.Object.Destroy(e.Root.gameObject); e.Root = null; }
         internal void FindMap()
         {
-            if (_entries.Count == 0) return;
             if (_fsm == null) _fsm = FsmUtil.Find(GameRefs.GameManager, "MapCheat");
+            if (_fsm != null && !_captured) { _captured = true; _nativeEnabled = _fsm.enabled; }
+            ApplyEnabled();
             if (_map == null && _fsm != null)
                 foreach (var state in _fsm.FsmStates) foreach (var action in state.Actions)
                 {
@@ -52,7 +57,7 @@ namespace WildWasteland.Modules.CleanHUD
         internal void Tick()
         {
             if (_root == null) return;
-            bool open = CleanHudModule.Enabled.Value && GameRefs.Menu != null && GameRefs.Menu.ActiveStateName == "play"
+            bool open = CleanHudModule.Enabled.Value && CleanHudModule.MapEnabled.Value && Markers != MapDetail.Off && GameRefs.Menu != null && GameRefs.Menu.ActiveStateName == "play"
                 && _fsm != null && _fsm.isActiveAndEnabled && _fsm.ActiveStateName == "on" && _camera != null && _map.gameObject.activeInHierarchy;
             if (_root.gameObject.activeSelf != open) _root.gameObject.SetActive(open);
             if (!open) return;
@@ -61,21 +66,41 @@ namespace WildWasteland.Modules.CleanHUD
                 if (e.Root == null)
                 {
                     e.Root = DialogueWidgets.Rect(_root, "quest", 0, 0, 28, 28);
-                    e.Image = e.Root.gameObject.AddComponent<RawImage>(); e.Image.texture = Assets.Tex("g_" + e.Icon); e.Image.color = e.Color; e.Image.raycastTarget = false;
-                    DialogueWidgets.Text(e.Root, "label", 32, 0, 480, 28, 19, e.Color, e.Label);
+                    e.Image = e.Root.gameObject.AddComponent<RawImage>(); e.Image.raycastTarget = false;
+                    e.IconTexture = MapIcons.Get(e.Icon) ?? Assets.Tex("g_" + e.Icon);
                 }
+                bool ambiguous = Markers == MapDetail.Ambiguous;
+                e.Image.texture = ambiguous ? MapIcons.Get("unknown") : e.IconTexture;
+                e.Image.color = ambiguous ? Color.white : e.Color;
                 var p = _camera.WorldToViewportPoint(e.Position());
                 bool visible = p.z > 0 && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1;
                 if (e.Root.gameObject.activeSelf != visible) e.Root.gameObject.SetActive(visible);
                 if (visible) e.Root.anchoredPosition = new Vector2(p.x * _map.rect.width - 14, -(1 - p.y) * _map.rect.height + 14);
             }
         }
+        internal void ApplyEnabled()
+        {
+            if (_fsm == null || !_captured) return;
+            bool enabled = CleanHudModule.MapEnabled.Value;
+            if (!enabled && _fsm.enabled && _fsm.ActiveStateName == "on") _fsm.SendEvent("back");
+            if (_fsm.enabled != enabled) _fsm.enabled = enabled;
+        }
         internal void SceneLoaded()
         {
+            RestoreNative();
             if (_root != null) UnityEngine.Object.Destroy(_root.gameObject);
             foreach (var e in _entries) e.Root = null;
             _root = _map = null; _camera = null; _fsm = null;
         }
-        public void Dispose() { SceneLoaded(); _entries.Clear(); }
+        private void RestoreNative()
+        {
+            if (_captured && _fsm != null)
+            {
+                if (!_nativeEnabled && _fsm.enabled && _fsm.ActiveStateName == "on") _fsm.SendEvent("back");
+                _fsm.enabled = _nativeEnabled;
+            }
+            _captured = false;
+        }
+        public void Dispose() { SceneLoaded(); _entries.Clear(); _ids.Clear(); }
     }
 }

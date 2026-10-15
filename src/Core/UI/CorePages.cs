@@ -81,8 +81,12 @@ namespace WildWasteland.Core.UI
             Switch(l, "Needs", CleanHudSettings.ShowNeeds);
             Switch(l, "HP and armor numbers", CleanHudSettings.ShowHealthNumbers);
             Switch(l, "Insanity", CleanHudSettings.ShowInsanity);
+            Switch(l, "Compass", CleanHudSettings.ShowCompass);
             Switch(l, "Convoys on compass", CleanHudSettings.ShowConvoys);
             Switch(l, "Locations on compass (1 km)", CleanHudSettings.ShowLocations);
+            Switch(l, "Map", CleanHudSettings.MapEnabled);
+            CleanHudSettings.MapMarkers.Value = (MapDetail)l.Choices("Map markers", (int)CleanHudSettings.MapMarkers.Value, "Off", "Ambiguous", "On");
+            CleanHudSettings.MapRoutes.Value = (MapDetail)l.Choices("Map Routes", (int)CleanHudSettings.MapRoutes.Value, "Off", "Ambiguous", "On");
             l.Entry(CleanHudSettings.Scale);
             CrosshairSelection(l);
             Switch(l, "Grabbing dot", HudSettings.SelectionDot);
@@ -156,7 +160,9 @@ namespace WildWasteland.Core.UI
             if (ReferenceEquals(e, CleanHudSettings.Enabled) || ReferenceEquals(e, CleanHudSettings.MenuEnabled)
                 || ReferenceEquals(e, CleanHudSettings.ShowNeeds) || ReferenceEquals(e, CleanHudSettings.ShowHealthNumbers)
                 || ReferenceEquals(e, CleanHudSettings.ShowInsanity) || ReferenceEquals(e, CleanHudSettings.Scale)
-                || ReferenceEquals(e, CleanHudSettings.ShowConvoys) || ReferenceEquals(e, CleanHudSettings.ShowLocations)) return false;
+                || ReferenceEquals(e, CleanHudSettings.ShowConvoys) || ReferenceEquals(e, CleanHudSettings.ShowLocations)
+                || ReferenceEquals(e, CleanHudSettings.ShowCompass) || ReferenceEquals(e, CleanHudSettings.MapEnabled)
+                || ReferenceEquals(e, CleanHudSettings.MapMarkers) || ReferenceEquals(e, CleanHudSettings.MapRoutes)) return false;
             if (ReferenceEquals(e, Player.Character) || ReferenceEquals(e, Player.BodyFirstPerson) || ReferenceEquals(e, Player.FullBodyOnlyOnFoot)
                 || ReferenceEquals(e, Player.EmptyHandArms) || ReferenceEquals(e, Player.FirstPersonArmsOnlyOnFoot) || ReferenceEquals(e, Player.OcclusionPrototype)
                 || ReferenceEquals(e, Player.ThirdPersonOnFoot) || ReferenceEquals(e, Player.ClimbingOn) || ReferenceEquals(e, Patrols.FuryRoad)

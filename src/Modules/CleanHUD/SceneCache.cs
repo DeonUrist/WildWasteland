@@ -62,7 +62,7 @@ namespace WildWasteland.Modules.CleanHUD
             while (Walk.Count > 0)
             {
                 var t = Walk.Pop(); if (t == null) continue;
-                if (t.name == "mapIcon") LocationMarkers.Observe(t.parent);
+                if (t.name == "mapIcon") LocationMarkers.Observe(t);
                 for (int i = 0; i < t.childCount; i++) Walk.Push(t.GetChild(i));
                 FsmBuffer.Clear(); t.GetComponents<PlayMakerFSM>(FsmBuffer);
                 for (int i = 0; i < FsmBuffer.Count; i++)

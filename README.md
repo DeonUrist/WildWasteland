@@ -2,7 +2,7 @@
 
 A BepInEx 5 mod for **Apocalypter** that combines gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
 
-Version **0.1.7 RC4** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
+Version **0.1.8 RC5** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
 
 | Module | What it is | Replaces (remove these from `BepInEx\plugins`) |
 |---|---|---|
@@ -30,7 +30,7 @@ While any of those standalone plugins is still installed, the module that replac
    BepInEx\plugins\WildWasteland\Patrols\             templates, textures, sounds, layouts, WarRig\ models
    ```
    If an asset is missing, WW falls back to the old plugin folder (`plugins\Apocaplayer\`, `plugins\NPCAI\Models\`, `plugins\Gunplay\Sounds\`, `plugins\GunplayHUD\Sounds\`, `plugins\Apocapatrol\`, `plugins\WarRig\`) or to a copy built into the DLL, and warns in the log. Patrols copies its old data into its new folder on the first run.
-4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.7]` and a summary `Wild Wasteland 0.1.7 modules:` with every module `on`.
+4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.8]` and a summary `Wild Wasteland 0.1.8 modules:` with every module `on`.
 
 ## Settings: F6 and F7
 
@@ -64,6 +64,8 @@ Nothing about saves changed: per-gun magazines stay under `Apocaunloader.Magazin
 - Apocasaver no longer recognises the patrol system (it keyed on Apocapatrol's GUID): patrol saves work exactly as without Apocasaver; Apocasaver's clean-save step no longer removes abandoned raider cars.
 - Performance has not been measured yet (`docs/perf-log.md` has the procedure); the budget is 0.5 ms average / 2 ms worst per frame for the whole mod.
 - Simple-bandit crews are not handed back to the NPC module when Patrols is switched off at runtime (they stay seated and inert until reload).
+
+RC5 fixes the Quests follower hook that prevented hiring, adds distinct cave/wreck/camp icons and separate compass/map/marker/route controls, and uses compact gold dialogue choices plus CleanHUD quest notifications. Map icons have no name labels. See [RC5 changes](notes/release-0.1.8-RC5.md) and [in-game test steps](notes/patch-map-hiring-dialogue.md).
 
 ## Build
 

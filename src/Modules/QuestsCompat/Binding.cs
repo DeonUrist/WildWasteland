@@ -9,7 +9,7 @@ namespace WildWasteland.Modules.QuestsCompat
     {
         internal static Func<object, T> Get<T>(Type t, string name)
         {
-            var p = Expression.Parameter(typeof(object), "p"); var f = AccessTools.Field(t, name);
+            var p = Expression.Parameter(typeof(object), "p"); var f = t.GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
             Expression value = f != null ? (Expression)Expression.Field(f.IsStatic ? null : Expression.Convert(p, t), f)
                 : Expression.Property(AccessTools.Property(t, name).GetGetMethod(true).IsStatic ? null : Expression.Convert(p, t), AccessTools.Property(t, name));
             return Expression.Lambda<Func<object, T>>(Expression.Convert(value, typeof(T)), p).Compile();

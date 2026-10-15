@@ -77,6 +77,7 @@ namespace WildWasteland.Modules.CleanHUD
         private Text _grenNum;
         // message log (top left) + event texts it takes over
         private MessageLog _log;
+        private QuestTracker _quests;
         private string _lastUiText = "";
         private string _lastUiSource;
         private bool _codexWas, _savingWas;
@@ -128,6 +129,7 @@ namespace WildWasteland.Modules.CleanHUD
             {
                 foreach (var id in Layout.Ids) Group(id);
                 BuildVitals(); BuildWeapon(); BuildSlots(); BuildCompass();
+                _quests = new QuestTracker(_root.transform, _font, Gold, HudWhite);
                 Canvas.willRenderCanvases += BeforeRender;
             }
             catch { UnityEngine.Object.Destroy(_root); throw; }
@@ -474,6 +476,7 @@ namespace WildWasteland.Modules.CleanHUD
                 ApplyLayout(l);
             }
             try { TickVitals(); } catch (Exception e) { CleanHudModule.Throttled("vitals", e); }
+            _quests.Tick(_groups["insanity"]);
             TickVehicleStatus();
             _src.Pocket.Read();
             int sel = _src.Selected;
@@ -658,6 +661,9 @@ namespace WildWasteland.Modules.CleanHUD
         private readonly List<Shown> _shown = new List<Shown>();
         private void TickCompass(Layout l)
         {
+            bool show = CleanHudModule.ShowCompass.Value;
+            if (_cmp.gameObject.activeSelf != show) _cmp.gameObject.SetActive(show);
+            if (!show) return;
             var cam = WildWasteland.Core.GameRefs.MainCamera;
             Transform eye = cam != null ? cam.transform : _src.PlayerCamera;
             if (eye == null) return;
@@ -762,7 +768,7 @@ namespace WildWasteland.Modules.CleanHUD
             Texture2D t;
             if (ApiCompass.CustomIcons.TryGetValue(key, out t) && t != null) return t;
             Texture icon;
-            if (!MarkerIcons.TryGetValue(key, out icon)) { icon = Assets.Tex("g_" + key.ToLowerInvariant()) ?? Assets.Tex("g_diamond"); MarkerIcons[key] = icon; }
+            if (!MarkerIcons.TryGetValue(key, out icon)) { icon = MapIcons.Get(key) ?? Assets.Tex("g_" + key.ToLowerInvariant()) ?? Assets.Tex("g_diamond"); MarkerIcons[key] = icon; }
             return icon;
         }
 
@@ -797,6 +803,7 @@ namespace WildWasteland.Modules.CleanHUD
         {
             if (_disposed) return; _disposed = true;
             MessageHook.Active = false;
+            if (_quests != null) _quests.Dispose();
             Canvas.willRenderCanvases -= BeforeRender;
             _src.Restore();
             MarkerIcons.Clear();

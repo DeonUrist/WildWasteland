@@ -58,7 +58,7 @@ namespace WildWasteland.Modules.QuestsCompat
             Patch(owner, t, "PlayShotAnim", transpiler: "AnimationCalls");
             Patch(owner, t, "WatchShots", transpiler: "AnimationCalls");
             // Keep Quests' seating, snapshots, gun setup and restoration, with a provider-owned legacy type map.
-            foreach (var name in new[] { "Mount", "AttachGuard", "LendArmPose", "TeachAll", "PatrolShootDistance" }) Patch(owner, t, name, transpiler: "LegacyTypes");
+            foreach (var name in new[] { "TryMount", "AttachGuard", "LendArmPose", "TeachAll", "PatrolShootDistance" }) Patch(owner, t, name, transpiler: "LegacyTypes");
             var plugin = assembly.GetType("ApocalypterQuests.Plugin", true);
             _plugin = instance;
             _questBook = Binding.Get<object>(plugin, "book");

@@ -213,6 +213,7 @@ namespace WildWasteland.Modules.CleanHUD
 
         internal static void Dispose()
         {
+            MapIcons.Dispose();
             SceneLoaded();
             foreach (var t in Rendered.Values) if (t != null) UnityEngine.Object.Destroy(t);
             Rendered.Clear(); RenderFailed.Clear();
@@ -229,6 +230,7 @@ namespace WildWasteland.Modules.CleanHUD
         }
         internal static void Preload()
         {
+            MapIcons.Preload();
             const string prefix = "CleanHUD.";
             foreach (string name in Assembly.GetExecutingAssembly().GetManifestResourceNames())
                 if (name.StartsWith(prefix, StringComparison.Ordinal) && name.EndsWith(".png", StringComparison.Ordinal))
