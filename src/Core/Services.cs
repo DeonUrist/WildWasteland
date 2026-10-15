@@ -23,6 +23,7 @@ namespace WildWasteland.Core
         public static ICompassMarkers Compass;
         public static IMapMarkers Map;
         public static IFollowerVehicles FollowerVehicles;
+        public static ICampStatus Camps;
         private static IPoiApi _poi;
         public static event Action<IPoiApi> PoiChanged;
         public static IPoiApi Poi
@@ -152,6 +153,13 @@ namespace WildWasteland.Core
         void Strike();
         void Strike(float seconds);
         void Dispose();
+    }
+
+    public enum CampState { Unknown, Unloaded, Spawning, Ready, Cleared }
+    public interface ICampStatus
+    {
+        // Stable MapMagic-relative position; Unknown/Unloaded never mean empty.
+        CampState At(Vector3 world, float radius);
     }
 
     // ------------------------------------------------------------------ NPC

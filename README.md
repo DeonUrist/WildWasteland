@@ -2,7 +2,7 @@
 
 A BepInEx 5 mod for **Apocalypter** that combines gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
 
-Version **0.1.9 RC6** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
+Version **0.1.10 RC7** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
 
 | Module | What it is | Replaces (remove these from `BepInEx\plugins`) |
 |---|---|---|
@@ -68,6 +68,8 @@ Nothing about saves changed: per-gun magazines stay under `Apocaunloader.Magazin
 RC5 fixes the Quests follower hook that prevented hiring, adds distinct cave/wreck/camp icons and separate compass/map/marker/route controls, and uses compact gold dialogue choices plus CleanHUD quest notifications. Map icons have no name labels. See [RC5 changes](notes/release-0.1.8-RC5.md) and [in-game test steps](notes/patch-map-hiring-dialogue.md).
 
 RC6 filters new delivery destinations to camps with a living, loaded NPC accepted by Talk and non-hostile to the player. Empty camps with a faction-named spawner no longer qualify. Existing accepted quests keep their saved destinations. See [RC6 changes and test steps](notes/release-0.1.9-RC6.md).
+
+RC7 replaces RC6's restriction with delivery recovery: distant camps qualify again; reaching an empty camp changes the objective to return the goods and explain that nobody was there. A destination already known to be cleared, or an empty return point, fails the quest. Native spawners must finish and a fresh NPC scan plus 15 seconds of active play near the empty point must pass. Return progress uses the existing quest save fields. See [RC7 behavior and test steps](notes/release-0.1.10-RC7.md).
 
 ## Build
 

@@ -19,6 +19,22 @@ namespace WildWasteland.Modules.Patrols
     }
     internal static class TrafficCamps
     {
+        internal sealed class Status : Core.ICampStatus
+        {
+            public Core.CampState At(Vector3 world,float radius)
+            {
+                TrafficBase nearest=null;float distance=radius;
+                foreach(var camp in TrafficLocations.Known.Values)
+                {
+                    float next=TrafficLocations.FlatDistance(camp.center,world);
+                    if(next>distance)continue;nearest=camp;distance=next;
+                }
+                if(nearest==null)return Core.CampState.Unknown;
+                if(nearest.cleared)return Core.CampState.Cleared;
+                if(!Loaded(nearest.id))return Core.CampState.Unloaded;
+                return Ready(nearest.id)?Core.CampState.Ready:Core.CampState.Spawning;
+            }
+        }
         private sealed class Site
         {
             internal Transform Root;
