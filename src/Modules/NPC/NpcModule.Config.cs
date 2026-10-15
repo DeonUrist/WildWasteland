@@ -86,6 +86,7 @@ namespace WildWasteland.Modules.NPC
         public override void BindConfig(ModuleConfig cfg)
         {
             _cfg = cfg;
+            BindWomen(cfg);
             // ---------------- F6: one toggle per feature, in feature order (section "NPC", after Core's Enabled) ----------------
             SensesEnabled = V(null, "EnableNpcDetection", true,
                 "NPCs see (field of view, light, flashlight), hear gunshots, shouts, engines and explosions, remember where you were and search. Off = the game's own sensors.", "General", "EnableNpcDetection");

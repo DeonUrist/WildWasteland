@@ -1495,6 +1495,7 @@ namespace WildWasteland.Modules.NPC
             a = Make(owner);
             if (a == null) { _ignored.Add(id); return null; }
             _agents[id] = a;
+            Gungirl.Registered(owner);
             Handover(a);
             return a;
         }

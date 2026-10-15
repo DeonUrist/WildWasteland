@@ -50,6 +50,10 @@ namespace WildWasteland.Modules.NPC
         internal static IEnumerable<ToolPage> Build(NpcModule m)
         {
             var pages = new List<ToolPage>();
+            pages.Add(new ConfigPage(m, ToolGroups.Npc, "NPC population", m.Config.Main, Sec("Women of Wasteland"))
+            { Intro = "Female Flexa/Sprokka population and crew conversion. Existing females retain their identity when new conversion is off. Disable standalone Women of Wasteland and restart to use these built-in controls." });
+            pages.Add(new ConfigPage(m, ToolGroups.Npc, "Female appearance & voices", m.Config.Main, Sec("Gungirl"), Sec("Shoota"))
+            { Intro = "Women of Wasteland models, textures, accessories and voice settings. Paths are relative to plugins/WildWasteland/NPC. Model, texture and voice changes require a restart." });
 
             pages.Add(new LivePage(m, "AI overview", null, l =>
             {

@@ -2,12 +2,12 @@
 
 A BepInEx 5 mod for **Apocalypter** that combines gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
 
-Version **0.1.10 RC7** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
+Version **0.1.11 RC8** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
 
 | Module | What it is | Replaces (remove these from `BepInEx\plugins`) |
 |---|---|---|
 | Player body & animation (`PlayerBody`) | Your character's body, third-person camera, animations, climbing, equipment on the body, vehicle HUD and hotkeys | Apocaplayer 2.3.9, Apocaclimber |
-| NPC AI & navigation (`NPC`) | NPCs that see, hear, search, take cover and pace their bursts; camp maps; idle life; burrowing / ambushing / pouncing creatures, dogs, spider nests, storms | NPC Overhaul (NPCAI) 1.9.15 |
+| NPC AI & navigation (`NPC`) | NPCs that see, hear, search, take cover and pace their bursts; camp maps; idle life; burrowing / ambushing / pouncing creatures, dogs, spider nests, storms; female raiders and crew | NPC Overhaul (NPCAI) 1.9.15, WomenOfWasteland 1.0.0 |
 | Guns, ammo & tracers (`Guns`) | Real bullets with tracers and range falloff, vehicle part damage, NPC aim and lead, melee on wheels and corpses, boss health, per-gun magazines, hold-to-unload, backpack / armor overflow | Gunplay 1.3.0, Apocaunloader |
 | Combat HUD (`HUD`) | Crosshair styles, selection dot, hit marker, damage numbers, headshot sound | Gunplay HUD 1.2.2 |
 | Clean HUD & menus (`CleanHUD`) | Vitals, weapon silhouettes and ammo, quick slots, strip compass, message log, title/pause menus and controls catalog | CleanHUD 1.5.1 |
@@ -30,7 +30,7 @@ While any of those standalone plugins is still installed, the module that replac
    BepInEx\plugins\WildWasteland\Patrols\             templates, textures, sounds, layouts, WarRig\ models
    ```
    If an asset is missing, WW falls back to the old plugin folder (`plugins\Apocaplayer\`, `plugins\NPCAI\Models\`, `plugins\Gunplay\Sounds\`, `plugins\GunplayHUD\Sounds\`, `plugins\Apocapatrol\`, `plugins\WarRig\`) or to a copy built into the DLL, and warns in the log. Patrols copies its old data into its new folder on the first run.
-4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.8]` and a summary `Wild Wasteland 0.1.8 modules:` with every module `on`.
+4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.11]` and a summary `Wild Wasteland 0.1.11 modules:` with every module `on`.
 
 ## Settings: F6 and F7
 
@@ -40,13 +40,15 @@ While any of those standalone plugins is still installed, the module that replac
 
 Module data and sidecars: `BepInEx\config\WildWasteland\<Module>\`.
 
-CleanHUD loading screens use `BepInEx\plugins\WildWasteland\LoadingScreens\Screen1.png`, `Screen2.png`, etc. The `screens.json` in the same folder maps each image filename to its tip text, with defaults for Screens 1–5. Available numbered images cycle once per new game/save load or Apocasaver autosave. JSON edits and added/replaced images apply on the next load; unchanged textures remain cached. The persistent screen keeps the CleanHUD font through scene changes, with LOADING (AUTOSAVING during Apocasaver saves) bottom left and a smaller wrapped tip near top left. Clean menus must be enabled. Missing numbered images are skipped.
+CleanHUD loading screens use `BepInEx\plugins\WildWasteland\LoadingScreens\Screen1.png`, `Screen2.png`, etc. The `screens.json` in the same folder maps each image filename to its tip text, with defaults for Screens 1–5. Available numbered images are chosen randomly for each new game/save load or Apocasaver autosave; repeats are allowed. JSON edits and added/replaced images apply on the next load; unchanged textures remain cached. The persistent screen keeps the CleanHUD font through scene changes, with LOADING (AUTOSAVING during Apocasaver saves) bottom left and a smaller wrapped tip near top left. Clean menus must be enabled. Missing numbered images are skipped.
 
 CleanHUD controls are in **F7 → Game → HUD** (Clean HUD, Clean menus, Needs, HP and armor numbers, Insanity, Scale). Its module switch and job timings are in **F7 → Modules**; EnableCheats is in Debug. Settings live in `config\WildWasteland\settings.cfg`, under `CleanHUD / HUD` and `CleanHUD / Menu`. Missing settings import the standalone choices even on an existing WW install. Layout and the game key cache copy once into `config\WildWasteland\CleanHUD\`; edits to the new layout reload within two seconds. All CleanHUD textures/font assets are embedded, so no asset-folder copy is needed. Disable standalone CleanHUD through Apocasetter and restart to use the built-in module.
 
 RC3 adds optional CleanHUD compatibility with **Apocapocket 2.0.10**, which stays a separate plugin and is not included in this archive. CleanHUD shows its three to six logical slots, highlights extra-slot weapons correctly, displays ordinary item icons, and updates key badges after rebinding. Backpack capacity controls the number of shown slots. The row retains its existing placement and scale; switching CleanHUD off restores the native pocket UI. No new config entries or save data. Verification remains Testing; see [test steps](notes/compat-Apocapocket-CleanHUD.md).
 
 RC4 adds optional compatibility with **Apocatalker 2.0.0** and **Apocalypter Quests 1.8.0**. Keep those two mods installed, including their dialogue, quest, faction, theme and voice files; they are not bundled or replaced. WW schedules their callbacks and slices world discovery, renders CleanHUD dialogue with the original window as its fallback, adds native map/compass quest markers and connects hired followers to WW animations, reload holds and passenger combat. Immersive Map remains supported when installed. `[QuestsCompat] Enabled` defaults true in settings.cfg. Original ES3 key `ApocalypterQuests` and Talk's shared/manual story profiles are preserved. Features remain Testing; see [compatibility and test steps](notes/compat-Talk-Quests.md). If native plugin components were destroyed during a scene change, restart the game to compare fully standalone behaviour after disabling the bridge.
+
+Women of Wasteland is now part of **NPC**. Its population controls live in **WW Settings > Debug > NPC AI & navigation > NPC population**, not Apocasetter/F6. The default female population is 33%. Eligible Flexa/Sprokka drivers, passengers and gunners use the configured female percentage; editors also offer Gungirl/Shoota explicitly. Default models/textures/voices are included in the DLL and installed only where missing under `WildWasteland/NPC`. Existing WoW settings and custom assets migrate without overwriting WW choices. If standalone WoW is loaded, the integrated female feature stays off while NPC AI continues; disable standalone WoW and restart. In-game verification remains Testing; see [port and test steps](notes/port-NPC-Women.md).
 
 ## First run: migration
 
@@ -70,6 +72,8 @@ RC5 fixes the Quests follower hook that prevented hiring, adds distinct cave/wre
 RC6 filters new delivery destinations to camps with a living, loaded NPC accepted by Talk and non-hostile to the player. Empty camps with a faction-named spawner no longer qualify. Existing accepted quests keep their saved destinations. See [RC6 changes and test steps](notes/release-0.1.9-RC6.md).
 
 RC7 replaces RC6's restriction with delivery recovery: distant camps qualify again; reaching an empty camp changes the objective to return the goods and explain that nobody was there. A destination already known to be cleared, or an empty return point, fails the quest. Native spawners must finish and a fresh NPC scan plus 15 seconds of active play near the empty point must pass. Return progress uses the existing quest save fields. See [RC7 behavior and test steps](notes/release-0.1.10-RC7.md).
+
+RC8 uses flags for every quest phase, with each flag matching its quest tracker bar color. The tracker clears the compass even when Insanity is hidden. Clean menus also styles Apocasaver's save-name prompt. The full package includes Women of Wasteland assets with a 33% default population. Existing configured population values remain preserved. See [RC8 changes and test steps](notes/release-0.1.11-RC8.md).
 
 ## Build
 

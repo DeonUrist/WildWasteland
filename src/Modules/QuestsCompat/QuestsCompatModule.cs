@@ -204,13 +204,19 @@ namespace WildWasteland.Modules.QuestsCompat
                 if (!Markers.TryGetValue(kv.Key, out m))
                 {
                     bool turnIn = kv.Key.StartsWith("T:", StringComparison.Ordinal);
-                    m = new Marker { Label = (turnIn ? "Report in: " : "Quest: ") + kv.Key.Substring(2), Icon = turnIn ? "diamond" : "flag", Color = turnIn ? new Color(.4f, 1f, .5f) : new Color(.886f, .749f, .424f) };
+                    m = new Marker { Label = (turnIn ? "Report in: " : "Quest: ") + kv.Key.Substring(2), Icon = "flag", Color = QuestColor(kv.Key.Substring(2)) };
                     Markers.Add(kv.Key, m);
                 }
                 m.Position = Origin.World(kv.Value);
                 QuestFollower.DescribeMarker(kv.Key, ref m.Label, out m.Target);
             }
             ReconcileMarkers();
+        }
+        private static Color QuestColor(string id)
+        {
+            uint hash = 2166136261u;
+            for (int i = 0; i < id.Length; i++) hash = unchecked((hash ^ id[i]) * 16777619u);
+            return Color.HSVToRGB((hash % 360u) / 360f, .6f, 1f);
         }
         private static void ReconcileMarkers()
         {

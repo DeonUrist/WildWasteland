@@ -15,6 +15,7 @@ namespace WildWasteland.Core
         public static IAnimationApi Animation;
         /// <summary>NPC AI (NPC module, ex NPCAI.Api + Nav structures). Null when NPC is off.</summary>
         public static INpcApi Npc;
+        public static INpcAppearance NpcAppearance;
         /// <summary>Guns (Guns module, ex Gunplay.Api). Null when Guns is off.</summary>
         public static IGunsApi Guns;
         /// <summary>Hit feedback (HUD module, ex GunplayHUD.Api). Null when HUD is off.</summary>
@@ -57,6 +58,11 @@ namespace WildWasteland.Core
         {
             CrewBailedOut = null; VehicleExploded = null;
         }
+    }
+
+    public interface INpcAppearance
+    {
+        void Dress(GameObject root, string identity, bool randomize);
     }
 
     public sealed class PoiDefinition

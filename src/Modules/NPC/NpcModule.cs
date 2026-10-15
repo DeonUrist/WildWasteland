@@ -77,6 +77,7 @@ namespace WildWasteland.Modules.NPC
             InstallPatches();
             DogAnimations.Initialize(this);                // bundle + its own hooks / patch (only when the bundle loads)
             DogCompanionCompat.Initialize(this);              // only when Dog Companion is installed; [NPC] DogCompanionCompat switches it live
+            WomenFeature.Initialize(this);
 
             // the old NPCAI.Runner, in its order (load-bearing: Brain/Idle body hand-over, DogAnimations restore in Update / sample in LateUpdate)
             Scheduler.EveryFrame(this, "Senses", Senses.Tick);
@@ -120,6 +121,7 @@ namespace WildWasteland.Modules.NPC
                 _subscribed = false;
             }
             if (Services.Npc is NpcApi) Services.Npc = null;
+            Step("Women of Wasteland", WomenFeature.Shutdown);
             // hand every NPC back to the game, in reverse dependency order
             Step("Pounce", Pounce.Shutdown);
             Step("Burrow", Burrow.Shutdown);
@@ -149,7 +151,8 @@ namespace WildWasteland.Modules.NPC
             Passthrough.OnSceneLoaded(); Burrow.OnSceneLoaded(); Pounce.OnSceneLoaded(); Webs.OnSceneLoaded(); Nests.OnSceneLoaded(); Ambush.OnSceneLoaded(); DogBite.OnSceneLoaded();
         }
 
-        public override void OnSceneLoaded(Scene scene, LoadSceneMode mode) { ResetAll(); }
+        public override void OnSceneLoaded(Scene scene, LoadSceneMode mode) { ResetAll(); Gungirl.OnSceneLoaded(); }
+        public override void OnWorldReady() { Gungirl.BeginScan(); }
 
         // ------------------------------------------------------------------ floating origin
         // The game's FloatingOrigin moves the root objects of every loaded scene by delta (not DontDestroyOnLoad). NPCAI kept scene-space

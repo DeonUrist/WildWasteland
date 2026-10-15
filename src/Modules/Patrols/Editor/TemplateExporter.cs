@@ -111,7 +111,7 @@ namespace WildWasteland.Modules.Patrols
             _templateName = GUI.TextField(new Rect(input, y0, w, 34), _templateName, Ledger.Input);
             if (_templateName.Length == 0 && GUI.GetNameOfFocusedControl() == "") Ledger.Label(new Rect(input + 10, y0, w - 20, 34), "Automatic name", null, Ledger.Muted);
             DraftLedgerDropdown(new Rect(input,y0+Row,w,34),"Faction",_faction,new[]{"Scrapyard","Coyotes"}.Select(n=>new KeyValuePair<string,string>(n,n)).ToList(),value=>{_faction=value;if(!CrewFactions.Allowed(_driverName,value))_driverName="None";if(!CrewFactions.Allowed(_passengerName,value))_passengerName="None";for(int i=0;i<3;i++)if(!CrewFactions.Allowed(_turrets[i],value))_turrets[i]="None";for(int i=0;i<4;i++)if(!CrewFactions.Allowed(_trailerTurrets[i],value))_trailerTurrets[i]="None";},box.yMax-84);
-            var people = new[] { "None", "Scraffa", "Spanna", "Sprokka", "Boltjaw", "Flexa", "Lugnut", "Scrud" }.Concat(CrewFactions.Coyotes).Where(n=>CrewFactions.Allowed(n,_faction)).Select(n => new KeyValuePair<string, string>(n, n)).ToList();
+            var people = new[] { "None", "Scraffa", "Spanna", "Sprokka", "Boltjaw", "Flexa", "Gungirl", "Shoota", "Lugnut", "Scrud" }.Concat(CrewFactions.Coyotes).Where(n=>CrewFactions.Allowed(n,_faction)).Select(n => new KeyValuePair<string, string>(n, n)).ToList();
             DraftLedgerDropdown(new Rect(input, y0 + Row * 2, w, 34), "Driver", _driverName, people, value => _driverName = value, box.yMax - 84);
             DraftLedgerDropdown(new Rect(input, y0 + Row * 3, w, 34), "Passenger", _passengerName, people, value => _passengerName = value, box.yMax - 84);
             var profiles = _truck ? EditorStore.Data.TruckLoot : EditorStore.Data.CarLoot;

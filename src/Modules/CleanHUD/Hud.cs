@@ -476,7 +476,7 @@ namespace WildWasteland.Modules.CleanHUD
                 ApplyLayout(l);
             }
             try { TickVitals(); } catch (Exception e) { CleanHudModule.Throttled("vitals", e); }
-            _quests.Tick(_groups["insanity"]);
+            _quests.Tick(_groups["insanity"], _cmp);
             TickVehicleStatus();
             _src.Pocket.Read();
             int sel = _src.Selected;

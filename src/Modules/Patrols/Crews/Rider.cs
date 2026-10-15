@@ -22,8 +22,8 @@ namespace WildWasteland.Modules.Patrols
         internal const string Warboy = "Warboy", WarboyPrefab = "Scraffa";
         internal const float BikeArc = 55f;   // 2.2.1: on a motorcycle a turret sits straight and turns only its upper body this far left / right
         // what the editors offer: a Warboy (blast lances, "Witness me!") or a ranged crew human (a gunner); "None" first, the rest A-Z
-        internal static readonly string[] TurretChoices = { "None", "Boltjaw", "Flexa", "Lugnut", "Scrud", "Sprokka", Warboy, "Bodyguard", "Bolter", "Gunnar", "Lugger", "Mechanic", "Merchant", "Organic_Mechanic", "Pistoleer", "Pup" };
-        internal static bool IsGunner(string who) { return !string.IsNullOrEmpty(who) && Array.Exists(PassengerGuard.RangedHumans, n => string.Equals(n, who.Trim(), StringComparison.OrdinalIgnoreCase)); }
+        internal static readonly string[] TurretChoices = { "None", "Boltjaw", "Flexa", "Gungirl", "Lugnut", "Scrud", "Shoota", "Sprokka", Warboy, "Bodyguard", "Bolter", "Gunnar", "Lugger", "Mechanic", "Merchant", "Organic_Mechanic", "Pistoleer", "Pup" };
+        internal static bool IsGunner(string who) { return !string.IsNullOrEmpty(who) && Array.Exists(PassengerGuard.RangedHumans, n => string.Equals(n, CrewAppearance.BasePrefab(who.Trim()), StringComparison.OrdinalIgnoreCase)); }
         // a stored value as the editors show it: "" = None, a ranged human as is, anything else (Warboy, the 2.1.x "Scraffa") = Warboy
         internal static bool IsWarboy(string who)=>string.Equals(who,Warboy,StringComparison.OrdinalIgnoreCase)||string.Equals(who,"Scraffa",StringComparison.OrdinalIgnoreCase);
         internal static string Display(string stored) { return string.IsNullOrEmpty(stored) ? "None" : IsWarboy(stored)?Warboy:stored.Trim(); }
@@ -36,7 +36,7 @@ namespace WildWasteland.Modules.Patrols
             return motorcycleKind || IsBikeBody(body) ? 1 : 3;
         }
 
-        internal static GameObject Seat(GameObject car, PatrolMarker marker, int slot, string who, float[] localPos, GameObject platform = null,bool standing=false)
+        internal static GameObject Seat(GameObject car, PatrolMarker marker, int slot, string who, float[] localPos, GameObject platform = null,bool standing=false,bool randomize=true)
         {
             if (marker == null || slot < 0 || slot >= marker.Riders.Length) return null;
             if (platform != null) car = platform;
@@ -59,6 +59,7 @@ namespace WildWasteland.Modules.Patrols
             else Crew.MuteAi(go);                  // no mover / detection / attack FSMs: the guard does the throwing
             PassengerGuard.NeutralizeContact(go);  // melee / fire-contact damage FSMs and hitbox off (a passive body that can be shot)
             go.name = prefab.name + "(Rider)";
+            CrewAppearance.Dress(go, prefabName, randomize);
             var carCols = car.GetComponentsInChildren<Collider>(true);
             foreach (var a in go.GetComponentsInChildren<Collider>(true))
                 foreach (var b in carCols)
@@ -774,6 +775,7 @@ namespace WildWasteland.Modules.Patrols
                 if (dead != null)
                 {
                     var body = UnityEngine.Object.Instantiate(dead, transform.position, transform.rotation);
+                    CrewAppearance.Transfer(gameObject, body);
                     body.SetActive(true);
                     foreach (var r in body.GetComponentsInChildren<Rigidbody>(true)) r.velocity = _vel * 0.3f + Vector3.up * 4f + UnityEngine.Random.insideUnitSphere * 3f;
                     UnityEngine.Object.Destroy(body, 120f);
@@ -810,7 +812,7 @@ namespace WildWasteland.Modules.Patrols
                 SimpleBanditBridge.Fight(mob);
                 TrafficFactions.Dismount(mob,_car);
                 mob.SetActive(true);
-                Register.Name(mob, prefab.name); Register.Add(mob, false);
+                Register.Name(mob, prefab.name); CrewAppearance.Transfer(gameObject, mob); Register.Add(mob, false);
                 if (health > 0f) { Patrol.SetHealth(mob, health); mob.AddComponent<Patrol.LateHealth>().Value = health; }
                 if (_car != null)   // it leaves the vehicle: never caught on it
                 {
@@ -856,7 +858,7 @@ namespace WildWasteland.Modules.Patrols
                 mob.SetActive(true);
                 var col = mob.GetComponent<Collider>();
                 if (col != null) mob.transform.position += Vector3.up * (at.y + 0.15f - col.bounds.min.y);
-                Register.Name(mob, prefab.name); Register.Add(mob, false);
+                Register.Name(mob, prefab.name); CrewAppearance.Transfer(gameObject, mob); Register.Add(mob, false);
                 if (health > 0f) { Patrol.SetHealth(mob, health); mob.AddComponent<Patrol.LateHealth>().Value = health; }
                 PatrolsModule.Verbose("Rider: " + mob.name + " landed and fights on foot");
             }

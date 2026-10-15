@@ -93,8 +93,8 @@ namespace WildWasteland.Modules.Patrols
             if (car.GetComponent<Ram.Sensor>() == null) car.AddComponent<Ram.Sensor>();
             marker._rams = rams;
             marker._bodyPrefab = bodyPrefab ?? "";
-            marker._driverPrefab = driverPrefab ?? "";
-            marker._passengerPrefab = passengerPrefab ?? "";
+            marker._driverPrefab = CrewAppearance.Identity(driver, driverPrefab) ?? "";
+            marker._passengerPrefab = CrewAppearance.Identity(passenger, passengerPrefab) ?? "";
             marker._driver = driver;
             marker._passenger = passenger;
             return marker;
@@ -163,12 +163,12 @@ namespace WildWasteland.Modules.Patrols
                 setupOnly=SetupOnly,
                 ramTargets = _rams.ToString(),
                 positionX = p.x, positionY = p.y, positionZ = p.z,
-                driverPrefab = _driverPrefab,
+                driverPrefab = CrewAppearance.Identity(_driver, _driverPrefab),
                 driverPresent = driverPresent,
                 driverHealth = driverHealth,
                 driverPhase = phase.ToString(),
                 seatedSeconds = crew != null ? crew.SeatedSeconds : 0f,
-                passengerPrefab = _passengerPrefab,
+                passengerPrefab = CrewAppearance.Identity(_passenger, _passengerPrefab),
                 passengerPresent = passengerPresent,
                 passengerHealth = passengerHealth,
                 playerEntered = PlayerEntered,
@@ -395,15 +395,15 @@ namespace WildWasteland.Modules.Patrols
             if (data.driverPresent && !string.IsNullOrEmpty(data.driverPrefab))
             {
                 if (data.driverPrefab.EndsWith("_Dead", StringComparison.OrdinalIgnoreCase))
-                    driver = Patrol.SeatDriver(car, data.driverPrefab);
+                    driver = Patrol.SeatDriver(car, data.driverPrefab, false);
                 else
-                    driver = Patrol.SeatLiveDriver(car, data.driverPrefab, data.driverHealth, phase, data.seatedSeconds);
+                    driver = Patrol.SeatLiveDriver(car, data.driverPrefab, data.driverHealth, phase, data.seatedSeconds, randomize: false);
             }
             else if (!string.IsNullOrEmpty(data.driverPrefab) && phase != CrewPhase.Waiting)
                 Crew.Restore(car, null, phase, data.seatedSeconds);
 
             if (data.passengerPresent && !string.IsNullOrEmpty(data.passengerPrefab))
-                passenger = Patrol.SeatPassenger(car, data.passengerPrefab, data.passengerHealth);
+                passenger = Patrol.SeatPassenger(car, data.passengerPrefab, data.passengerHealth, false);
 
             var mk = PatrolMarker.Attach(car, data.bodyPrefab, data.driverPrefab, driver, data.passengerPrefab, passenger, CarTemplate.ParseRams(data.ramTargets));
             mk.TemplateName = data.templateName ?? "";

@@ -12,7 +12,7 @@ namespace WildWasteland.Modules.Patrols
         private readonly LedgerDropdown _dropdown = new LedgerDropdown();
         private Vector2 _allowedScroll, _cargoLibraryScroll;
         private string _cargoChoice = "";
-        private static readonly string[] People = { "None", "Boltjaw", "Flexa", "Lugnut", "Scraffa", "Scrud", "Spanna", "Sprokka", "Bodyguard", "Bolter", "Gunnar", "Lugger", "Mechanic", "Merchant", "Organic_Mechanic", "Pistoleer", "Pup" };
+        private static readonly string[] People = { "None", "Boltjaw", "Flexa", "Gungirl", "Shoota", "Lugnut", "Scraffa", "Scrud", "Spanna", "Sprokka", "Bodyguard", "Bolter", "Gunnar", "Lugger", "Mechanic", "Merchant", "Organic_Mechanic", "Pistoleer", "Pup" };
         private string _editDriver = "", _editPassenger = "", _editLoot = "";
         private readonly string[] _editTurrets = { "None", "None", "None" };
         private readonly string[] _editTrailerTurrets = { "None", "None", "None", "None" };

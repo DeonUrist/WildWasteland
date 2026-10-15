@@ -428,6 +428,7 @@ namespace WildWasteland.Modules.Patrols
             t.SpawnLoot = new Dictionary<string, int>();
             for (int i = 0; i < record.lootNames.Length && i < record.lootCounts.Length; i++) t.SpawnLoot[record.lootNames[i]] = record.lootCounts[i];
             t.SpawnCargoKey = record.cargoKey;
+            t.RestoreCrewAppearance = record.crew != null;
             if (record.crew != null) { t.Driver = record.crew.driverPresent ? record.crew.driverPrefab : ""; t.Passenger = record.crew.passengerPresent ? record.crew.passengerPrefab : ""; }
             if (record.turrets != null)
                 for (int i = 0; i < record.turrets.Length; i++)

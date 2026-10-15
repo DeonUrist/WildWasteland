@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
@@ -18,11 +19,16 @@ namespace WildWasteland.Modules.CleanHUD
         private static Func<object, ConfigEntry<bool>> _enabled;
         private static Func<object, bool> _ready, _log;
         private static Func<object, GUIStyle> _style;
+        private static Func<object, object> _book;
+        private static Func<object, IList> _active;
+        private static Func<object, string> _id;
+        private static readonly List<Color> Colors = new List<Color>();
         private static bool _owned;
         private readonly RectTransform _root;
         private readonly Font _font;
         private readonly Color _gold, _white;
         private readonly List<Text> _rows = new List<Text>();
+        private readonly List<Image> _bars = new List<Image>();
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal static void Install(CleanHudModule owner)
@@ -32,7 +38,10 @@ namespace WildWasteland.Modules.CleanHUD
             var type = info.Instance.GetType();
             _lines = Get<List<string>>(type, "trackerLines"); _enabled = Get<ConfigEntry<bool>>(type, "showTracker");
             _ready = Get<bool>(type, "ready"); _log = Get<bool>(type, "showLog"); _style = Get<GUIStyle>(type, "trackStyle");
-            if (Core.Patches.Patch(owner, AccessTools.Method(type, "Shadowed"), prefix: AccessTools.Method(typeof(QuestTracker), "BeforeShadowed"))) _plugin = info.Instance;
+            _book = Get<object>(type, "book"); _active = Get<IList>(type.Assembly.GetType("ApocalypterQuests.QuestBook", true), "Active");
+            _id = Get<string>(type.Assembly.GetType("ApocalypterQuests.Quest", true), "Id");
+            if (Core.Patches.Patch(owner, AccessTools.Method(type, "Shadowed"), prefix: AccessTools.Method(typeof(QuestTracker), "BeforeShadowed"))
+                && Core.Patches.Patch(owner, AccessTools.Method(type, "RefreshLines"), postfix: AccessTools.Method(typeof(QuestTracker), "LinesChanged"))) _plugin = info.Instance;
         }
         private static Func<object, T> Get<T>(Type type, string name)
         {
@@ -41,14 +50,25 @@ namespace WildWasteland.Modules.CleanHUD
         }
         private static bool BeforeShadowed(GUIStyle __2)
         { return !_owned || !CleanHudModule.Running || !CleanHudModule.Enabled.Value || _plugin == null || !ReferenceEquals(__2, _style(_plugin)); }
-        internal static void Clear() { _owned = false; _plugin = null; _lines = null; _enabled = null; _ready = _log = null; _style = null; }
+        internal static void Clear() { _owned = false; _plugin = null; _lines = null; _enabled = null; _ready = _log = null; _style = null; _book = null; _active = null; _id = null; Colors.Clear(); }
+        private static void LinesChanged()
+        {
+            Colors.Clear(); if (_plugin == null) return;
+            foreach (var q in _active(_book(_plugin))) Colors.Add(QuestColor(_id(q)));
+        }
+        private static Color QuestColor(string id)
+        {
+            uint hash = 2166136261u;
+            for (int i = 0; i < id.Length; i++) hash = unchecked((hash ^ id[i]) * 16777619u);
+            return Color.HSVToRGB((hash % 360u) / 360f, .6f, 1f);
+        }
 
         internal QuestTracker(Transform parent, Font font, Color gold, Color white)
         {
             _root = DialogueWidgets.Rect(parent, "quest tracker", 0, 0, 640, 0);
             _root.pivot = new Vector2(1, 1); _font = font; _gold = gold; _white = white; _owned = true;
         }
-        internal void Tick(RectTransform insanity)
+        internal void Tick(RectTransform insanity, RectTransform compass)
         {
             bool visible = _plugin != null && _ready(_plugin) && _enabled(_plugin).Value && !_log(_plugin)
                 && Core.GameRefs.InGame && !(Cursor.visible && Cursor.lockState != CursorLockMode.Locked);
@@ -57,6 +77,10 @@ namespace WildWasteland.Modules.CleanHUD
             _root.anchorMin = insanity.anchorMin; _root.anchorMax = insanity.anchorMax; _root.localScale = insanity.localScale;
             _root.anchoredPosition = insanity.anchoredPosition + new Vector2((1 - insanity.pivot.x) * insanity.rect.width * insanity.localScale.x,
                 ((1 - insanity.pivot.y) * insanity.rect.height - (insanity.gameObject.activeSelf ? insanity.rect.height + 12 : 0)) * insanity.localScale.y);
+            var compassBottom = compass.TransformPoint(new Vector3(0, -compass.pivot.y * compass.rect.height, 0));
+            var position = _root.position;
+            position.y = Mathf.Min(position.y, compassBottom.y - 24f * _root.lossyScale.y);
+            _root.position = position;
             var lines = _lines(_plugin); float y = 0;
             for (int i = 0; i < lines.Count; i++)
             {
@@ -67,9 +91,10 @@ namespace WildWasteland.Modules.CleanHUD
                     text.supportRichText = false; text.raycastTarget = false; text.horizontalOverflow = HorizontalWrapMode.Wrap; text.verticalOverflow = VerticalWrapMode.Overflow;
                     var shadow = text.gameObject.AddComponent<Shadow>(); shadow.effectColor = new Color(0, 0, 0, .95f); shadow.effectDistance = new Vector2(0, -1.5f);
                     var bar = DialogueWidgets.Rect(text.transform, "bar", 634, 4, 6, 20).gameObject.AddComponent<Image>(); bar.color = _gold; bar.raycastTarget = false;
-                    _rows.Add(text);
+                    _rows.Add(text); _bars.Add(bar);
                 }
                 var row = _rows[i]; if (!row.gameObject.activeSelf) row.gameObject.SetActive(true);
+                _bars[i].color = i < Colors.Count ? Colors[i] : _gold;
                 if (row.text != lines[i]) { row.text = lines[i]; row.rectTransform.sizeDelta = new Vector2(620, Mathf.Max(32, row.preferredHeight)); }
                 row.rectTransform.anchoredPosition = new Vector2(0, -y); y += row.rectTransform.sizeDelta.y + 8;
             }

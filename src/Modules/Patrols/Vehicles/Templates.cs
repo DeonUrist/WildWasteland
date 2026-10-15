@@ -23,6 +23,7 @@ namespace WildWasteland.Modules.Patrols
         internal string MerchantGroup="";
         internal bool MerchantTravelling;internal string MerchantSaveJson;
         internal bool SetupOnly;
+        internal bool RestoreCrewAppearance;
         internal string Faction="Scrapyard";
         internal float ExplodeChance=50f;
         internal RamTargets Rams = RamTargets.Pedestrians;

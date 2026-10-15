@@ -11,7 +11,7 @@ Init order = config display order = the order below (providers before consumers)
 | Module (Id) | DisplayName | Status | Source mod, version, commit | Folder / namespace | ConflictsWith (standalone GUIDs) |
 |---|---|---|---|---|---|
 | `PlayerBody` | Player body & animation | `in` | Apocaplayer 2.3.9 `ba17d32` (+ Apocaclimber 1.0.2, already absorbed by Apocaplayer, no git) | `src/Modules/PlayerBody/` = `WildWasteland.Modules.PlayerBody` (subfolders Animation, Body, Camera, Climbing, Vehicles) | `com.denis.apocalypter.apocaplayer`, `com.denis.apocalypter.apocaclimber` |
-| `NPC` | NPC AI & navigation | `in` | NPC Overhaul (npcai) 1.9.15 = `5d3871e` (1.9.12) + uncommitted working tree | `src/Modules/NPC/` = `WildWasteland.Modules.NPC` (Detection, Navigation, Brain, Animals, Hazards, Debug) | `com.denis.apocalypter.npcai` |
+| `NPC` | NPC AI & navigation | `in` | NPC Overhaul (npcai) 1.9.15 = `5d3871e` (1.9.12) + uncommitted working tree; WomenOfWasteland 1.0.0 `21d05c6` | `src/Modules/NPC/` = `WildWasteland.Modules.NPC` (Detection, Navigation, Brain, Animals, Hazards, Women, Debug) | `com.denis.apocalypter.npcai` |
 | `Guns` | Guns, ammo & tracers | `in` | Gunplay 1.3.0 `006d690` (contains Apocaraider 1.7.0 projectiles + Apocaunloader 1.3.0 ammo) | `src/Modules/Guns/` = `WildWasteland.Modules.Guns` (Tracers, Ammo, Bosses) | `com.denis.apocalypter.gunplay`, `com.denis.apocalypter.apocaunloader` |
 | `HUD` | Combat HUD | `in` | Gunplay HUD 1.2.2 `a8f94cf` | `src/Modules/HUD/` = `WildWasteland.Modules.HUD` (Crosshair, HitFeedback, Embedded) | `com.denis.apocalypter.gunplayhud` |
 | `CleanHUD` | Clean HUD & menus | `in` (Testing) | CleanHUD 1.5.1 `119a2f8` | `src/Modules/CleanHUD/` = `WildWasteland.Modules.CleanHUD` (+ `.Api` for the public compass types); 46 embedded assets | `com.denis.apocalypter.cleanhud` |
@@ -132,7 +132,7 @@ Rules shared by all modules (details per module in the wiki pages and port repor
 
 | Mod (repo folder) | Plugin GUID | Version / HEAD | Status | Notes |
 |---|---|---|---|---|
-| womenofwasteland | com.denis.apocalypter.womenofwasteland | 1.0.0 / 21d05c6 | candidate | Split out of Apocaraider 1.7.0. |
+| womenofwasteland | com.denis.apocalypter.womenofwasteland | 1.0.0 / 21d05c6 | in NPC (Testing) | Female bodies/voices and population; Patrols crew via Services.NpcAppearance. |
 | Apocaraider | com.denis.apocalypter.apocaraider | 1.7.0 / 7c1e3e9 | dropped | Superseded: monolith that gunplay/NPCAI/WoW were split from; soft-dep only so its cfg can be migrated. Running it beside WW doubles features (not in ConflictsWith: remove it by hand). |
 | Apocapocket | com.denis.apocalypter.apocapocket | 2.0.10 / 41a5032 | candidate | Extra slots; owns save data (`apocasaver.pose.*` via Apocasaver HandPose). PlayerBody reads it by reflection today. |
 | Apocaunloader | com.denis.apocalypter.apocaunloader | 1.3.0 / 7a215cb | candidate | Leftover: its mechanics are in Guns (via Gunplay 1.3.0); the standalone plugin is in Guns' ConflictsWith. Nothing left to port unless a newer standalone commit differs. |
@@ -158,3 +158,13 @@ CleanHUD exposes its marker API to Patrols through `Services.Compass` / `ICompas
 CleanHUD collects native location roots from `mapIcon` children in its existing 500 microsecond scene-discovery slice. Native MapMagic `TerrainTile.OnTileApplied` only queues the newly applied tile into that same slice; unsubscribe on Shutdown. No second whole-scene scan or new per-frame poll is introduced. A 0.5 s interval registers only location targets within 1 km; Marker.MaxDistance enforces the exact cutoff during normal compass drawing. Native map text height is avoided by targeting the location root, not the mapIcon child. Targets follow floating origin and are removed when destroyed.
 
 Two player settings in settings.cfg, `CleanHUD / HUD` ShowConvoys and ShowLocations, default true. Both are exposed separately in SETTINGS → Game → HUD. ShowConvoys covers all four vehicle categories; neither depends on the debug-map setting. Public F6 settings and save formats are unchanged. Runtime/performance verification remains with Denis.
+
+## Women of Wasteland in NPC (2026-10-15, Testing)
+
+WomenOfWasteland 1.0.0 `21d05c6` is ported into `src/Modules/NPC/Women/`, retaining its class names and native skeletons, equipment, voices, corpse identity and old save markers. It is a feature of NPC, with no separate module or runner. `Services.NpcAppearance` (`INpcAppearance`) is provided by NPC and consumed by Patrols for drivers, passengers, turret gunners, dismount replacements and battle carcasses. Gungirl/Shoota template aliases resolve to native Flexa/Sprokka; original prefab IDs and Patrols save schema/keys remain unchanged. Gender is stored in the existing crew name strings, with no reroll on save restoration or traffic rematerialization. Turrets retain their existing persistence limitations (standalone saved cars do not reconstruct turret occupants; traffic records do).
+
+Population settings (`EnableFemaleNpc=true`, `FemalePopulation=50`, `FemaleCrew=true`) are in **WW Settings > Debug > NPC AI & navigation > NPC population**, exclusively in `settings.cfg`, not Apocasetter/F6. Model/texture/accessory/voice controls are on the adjacent Female appearance & voices page. Missing individual entries import from the standalone cfg, then Apocaraider as fallback, including on existing WW installs.
+
+The 17 original default model/texture/WAV resources are embedded under `NPC.WomenOfWasteland.*` and installed when missing into `plugins/WildWasteland/NPC/{Models,Sounds}`. Existing NPC assets are preserved; legacy Models/Sounds, including custom OGG files, copy only where missing. Custom relative paths also fall back to the legacy plugin folder. The local source's uncommitted voice edit is excluded; embedded bytes come from source HEAD.
+
+The standalone WoW GUID is a soft dependency. While loaded, only the female subfeature stands down (AI remains active); this feature-level conflict differs from a whole-module replacement. Disable standalone WoW and restart to enable the integration. NPC shutdown restores original meshes, materials, accessories, voice references, shout waits and corpse labels, cancels loading, and releases generated assets. Female names remain as persistent identity so re-enabling NPC restores them.

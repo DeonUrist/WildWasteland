@@ -16,6 +16,7 @@ namespace WildWasteland.Modules.CleanHUD
         private readonly string _dir = Path.Combine(Core.Assets.Root, "LoadingScreens");
         private readonly Dictionary<string, ScreenImage> _images = new Dictionary<string, ScreenImage>(StringComparer.OrdinalIgnoreCase);
         private readonly List<ScreenImage> _screens = new List<ScreenImage>();
+        private readonly System.Random _random = new System.Random();
         private Dictionary<string, string> _tips = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private readonly GlyphText[] _tipLines = new GlyphText[8];
         private static readonly string[] Labels = { "LOADING.", "LOADING..", "LOADING..." };
@@ -26,7 +27,7 @@ namespace WildWasteland.Modules.CleanHUD
         private Transform _nativeGame, _nativeTitle, _nativeSlots;
         private ScreenImage _current;
         private string _currentTip = "";
-        private int _nextScreen, _width, _height;
+        private int _width, _height;
         private float _nextFind;
         private bool _completed;
         private bool _saving;
@@ -141,7 +142,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (Active || !CleanHudModule.Running || !CleanHudModule.MenuEnabled.Value) return;
             Reload();
             _saving = saving;
-            _current = _screens.Count > 0 ? _screens[_nextScreen++ % _screens.Count] : null;
+            _current = _screens.Count > 0 ? _screens[_random.Next(_screens.Count)] : null;
             _currentTip = "";
             if (_current != null) _tips.TryGetValue(_current.Name, out _currentTip);
             if (_root == null) Build();

@@ -288,12 +288,12 @@ namespace WildWasteland.Modules.Patrols
                 GameObject driver = null, passenger = null;
                 if (!string.IsNullOrEmpty(tpl.Driver))
                 {
-                    if (tpl.Driver.Trim().EndsWith("_Dead", StringComparison.OrdinalIgnoreCase)) driver = SeatDriver(car, tpl.Driver);
-                    else driver = SeatLiveDriver(car, tpl.Driver, -1f, CrewPhase.Waiting, 0f, hold);
+                    if (tpl.Driver.Trim().EndsWith("_Dead", StringComparison.OrdinalIgnoreCase)) driver = SeatDriver(car, tpl.Driver, !tpl.RestoreCrewAppearance);
+                    else driver = SeatLiveDriver(car, tpl.Driver, -1f, CrewPhase.Waiting, 0f, hold, !tpl.RestoreCrewAppearance);
                 }
                 yield return null;
                 if (car == null) yield break;
-                if (!string.IsNullOrEmpty(tpl.Passenger)) passenger = SeatPassenger(car, tpl.Passenger);
+                if (!string.IsNullOrEmpty(tpl.Passenger)) passenger = SeatPassenger(car, tpl.Passenger, -1f, !tpl.RestoreCrewAppearance);
                 var marker = PatrolMarker.Attach(car, body.name, tpl.Driver, driver, tpl.Passenger, passenger, tpl.Rams);
                 marker.CargoKey = lootKey ?? "";
                 marker.TemplateName = tpl.Name;
@@ -310,7 +310,7 @@ namespace WildWasteland.Modules.Patrols
                     if (string.IsNullOrEmpty(tpl.Turrets[ti])) continue;
                     yield return null;
                     if (car == null) yield break;
-                    Rider.Seat(car, marker, ti, tpl.Turrets[ti], tpl.TurretPos[ti],standing:tpl.TurretStanding[ti]);
+                    Rider.Seat(car, marker, ti, tpl.Turrets[ti], tpl.TurretPos[ti],standing:tpl.TurretStanding[ti],randomize:!tpl.RestoreCrewAppearance);
                 }
                 if (trailer != null)
                     for (int ti = 0; ti < PatrolMarker.TrailerTurretSlots; ti++)
@@ -318,7 +318,7 @@ namespace WildWasteland.Modules.Patrols
                         if (string.IsNullOrEmpty(tpl.Trailer.Turrets[ti])) continue;
                         yield return null;
                         if (car == null || trailer == null) yield break;
-                        Rider.Seat(car, marker, PatrolMarker.VehicleTurretSlots + ti, tpl.Trailer.Turrets[ti], tpl.Trailer.TurretPos[ti], trailer,tpl.Trailer.TurretStanding[ti]);
+                        Rider.Seat(car, marker, PatrolMarker.VehicleTurretSlots + ti, tpl.Trailer.Turrets[ti], tpl.Trailer.TurretPos[ti], trailer,tpl.Trailer.TurretStanding[ti],!tpl.RestoreCrewAppearance);
                     }
                 Paint.ApplyCargo(car, lootKey);   // the container's texture by load (Textures/cargo_*.png)
 
@@ -713,7 +713,7 @@ namespace WildWasteland.Modules.Patrols
         // A ragdoll on the driver seat: the *_Dead prefab's root Rigidbody is made kinematic and parented to the car's sitPos
         // (where the player sits), so it rides along exactly; the bones hang off it through their CharacterJoints and keep
         // flopping. Collisions between the ragdoll and the car are ignored so it never gets thrown out by the car's colliders.
-        internal static GameObject SeatDriver(GameObject car, string prefabName)
+        internal static GameObject SeatDriver(GameObject car, string prefabName, bool randomize = true)
         {
             var prefab = Prefabs.FindAny(prefabName);
             if (prefab == null) { Core.Log.Warn("[Patrols] " + "Driver prefab not found: " + prefabName); return null; }
@@ -726,6 +726,7 @@ namespace WildWasteland.Modules.Patrols
             var drv = UnityEngine.Object.Instantiate(prefab, pos, rot);
             drv.SetActive(true);
             drv.name = prefab.name + "(Driver)";
+            CrewAppearance.Dress(drv, prefabName, randomize);
 
             var carCols = car.GetComponentsInChildren<Collider>(true);
             var drvCols = drv.GetComponentsInChildren<Collider>(true);
@@ -748,11 +749,11 @@ namespace WildWasteland.Modules.Patrols
         // A live enemy at the wheel with its AI off: instantiated at sitPos, the mover/AI FSMs disabled before they Start,
         // root Rigidbody kinematic and parented to the seat, collisions with the car ignored. Health/Damage/Bodypart stay
         // vanilla so it can be shot; the Crew component drives the car and reacts to its death.
-        internal static GameObject SeatLiveDriver(GameObject car, string prefabName, float health = -1f, CrewPhase phase = CrewPhase.Waiting, float seated = 0f, bool hold = false)
+        internal static GameObject SeatLiveDriver(GameObject car, string prefabName, float health = -1f, CrewPhase phase = CrewPhase.Waiting, float seated = 0f, bool hold = false, bool randomize = true)
         {
             var sit = FindChild(car.transform, "sitPos") ?? FindChild(car.transform, "hinge_seat_driver");
             if (sit == null) { Core.Log.Warn("[Patrols] " + "No sitPos on " + car.name); return null; }
-            var drv = SeatOccupant(car, prefabName, sit, "Driver", false, health);
+            var drv = SeatOccupant(car, prefabName, sit, "Driver", false, health, randomize);
             if (drv == null) return null;
             SimpleBanditBridge.Mark(drv);
             if (PatrolsModule.RangedCombat.Value && PassengerGuard.IsRangedHuman(drv)) PassengerGuard.AttachDriver(drv, car, sit);
@@ -764,7 +765,7 @@ namespace WildWasteland.Modules.Patrols
 
         // The passenger sits where the driver would if the driver seat hinge were the passenger seat hinge: sitPos shifted
         // by the offset between the two seat hinges (the game has no passenger sit point of its own).
-        internal static GameObject SeatPassenger(GameObject car, string prefabName, float health = -1f)
+        internal static GameObject SeatPassenger(GameObject car, string prefabName, float health = -1f, bool randomize = true)
         {
             var sit = FindChild(car.transform, "sitPos");
             var hd = FindChild(car.transform, "hinge_seat_driver");
@@ -785,7 +786,7 @@ namespace WildWasteland.Modules.Patrols
                 anchor.rotation = car.transform.rotation * Quaternion.Euler(0f, -90f, 0f);
                 PatrolsModule.Verbose("Passenger on the bus chair at local " + car.transform.InverseTransformPoint(anchor.position).ToString("F2"));
             }
-            var pax = SeatOccupant(car, prefabName, anchor, "Passenger", true, health);
+            var pax = SeatOccupant(car, prefabName, anchor, "Passenger", true, health, randomize);
             if (pax == null) { UnityEngine.Object.Destroy(anchor.gameObject); return null; }
             if(chair!=null||string.Equals(TemplateExporter.PrefabName(car.name),"Rustliner",System.StringComparison.OrdinalIgnoreCase))
                 pax.GetComponent<Pose>()?.ConfigureBusPassenger();
@@ -796,7 +797,7 @@ namespace WildWasteland.Modules.Patrols
         // A live enemy in a seat with its AI off: instantiated at the anchor, the mover/AI FSMs disabled by the Crew before
         // they Start, root Rigidbody kinematic and parented to the anchor, collisions with the car ignored, seated pose.
         // Health/Damage/Bodypart stay vanilla so it can be shot.
-        private static GameObject SeatOccupant(GameObject car, string prefabName, Transform anchor, string role, bool passenger, float health = -1f)
+        private static GameObject SeatOccupant(GameObject car, string prefabName, Transform anchor, string role, bool passenger, float health = -1f, bool randomize = true)
         {
             var prefab = Prefabs.FindAny(prefabName);
             if (prefab == null) { Core.Log.Warn("[Patrols] " + role + " prefab not found: " + prefabName); return null; }
@@ -812,6 +813,7 @@ namespace WildWasteland.Modules.Patrols
             else if (PatrolsModule.RangedCombat.Value) PassengerGuard.Prepare(go, true);   // ranged-only rewiring + mute, before the FSMs' Start
             else Crew.MuteAi(go);
             go.name = prefab.name + "(" + role + ")";
+            CrewAppearance.Dress(go, prefabName, randomize);
 
             var carCols = car.GetComponentsInChildren<Collider>(true);   // once, not once per occupant collider
             foreach (var a in go.GetComponentsInChildren<Collider>(true))
@@ -1048,7 +1050,7 @@ namespace WildWasteland.Modules.Patrols
                 mob.transform.position += Vector3.up * (groundY + 0.15f - bottom);
             }
             pos = mob.transform.position;
-            Register.Name(mob, prefab.name); Register.Add(mob, false);
+            Register.Name(mob, prefab.name); CrewAppearance.Transfer(pax, mob); Register.Add(mob, false);
             if (health > 0f) { SetHealth(mob, health); mob.AddComponent<LateHealth>().Value = health; }
             UnityEngine.Object.Destroy(pax);
             if (anchor != null && anchor.name == "Apocapatrol.PassengerPos") UnityEngine.Object.Destroy(anchor.gameObject);
@@ -1256,7 +1258,7 @@ namespace WildWasteland.Modules.Patrols
             if (string.IsNullOrEmpty(query)) return null;
             if (MotorcycleIntegration.IsBody(query)) return MotorcycleIntegration.Template();
             { var mod = ModVehicles.Template(query); if (mod != null) return mod; }
-            string q = query.Trim();
+            string q = CrewAppearance.BasePrefab(query.Trim());
             if (_all == null) Scan();
             var hit = Lookup(q);
             if (hit == null && Time.unscaledTime >= _nextRescan) { _nextRescan = Time.unscaledTime + 30f; Scan(); hit = Lookup(q); }
