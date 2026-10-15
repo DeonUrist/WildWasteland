@@ -82,9 +82,10 @@ namespace WildWasteland.Modules.CleanHUD
         {
             var root = icon != null ? icon.parent : null;
             if (root == null || Locations.ContainsKey(root)) return;
-            string label = root.name.Split('(')[0].Trim(), glyph = "diamond"; Color color = Color.white;
+            string label = root.name.Split('(')[0].Trim(), glyph = "other"; Color color = Color.white;
             if (label.StartsWith("Cave_", System.StringComparison.OrdinalIgnoreCase)) glyph = "cave";
             else if (label.StartsWith("Wreck_", System.StringComparison.OrdinalIgnoreCase)) glyph = "wreck";
+            else if (label.StartsWith("Building_", System.StringComparison.OrdinalIgnoreCase)) glyph = "building";
             else if (label.StartsWith("Camp_", System.StringComparison.OrdinalIgnoreCase))
             {
                 glyph = "camp"; int number;

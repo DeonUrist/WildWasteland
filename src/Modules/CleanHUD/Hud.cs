@@ -857,7 +857,7 @@ namespace WildWasteland.Modules.CleanHUD
             Texture2D t;
             if (ApiCompass.CustomIcons.TryGetValue(key, out t) && t != null) return t;
             Texture icon;
-            if (!MarkerIcons.TryGetValue(key, out icon)) { icon = MapIcons.Get(key) ?? Assets.Tex("g_" + key.ToLowerInvariant()) ?? Assets.Tex("g_diamond"); MarkerIcons[key] = icon; }
+            if (!MarkerIcons.TryGetValue(key, out icon)) { icon = MapIcons.Get(key) ?? Assets.Tex("g_" + key.ToLowerInvariant()) ?? MapIcons.Get("diamond"); MarkerIcons[key] = icon; }
             return icon;
         }
 
