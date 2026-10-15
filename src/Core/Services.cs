@@ -207,6 +207,16 @@ namespace WildWasteland.Core
         void SetFollowerDriven(GameObject npc, bool enabled, float reloadUntil = 0f);
         /// <summary>Fills <paramref name="into"/> (cleared first) with the current nav structures.</summary>
         void Structures(List<NavStructure> into);
+        /// <summary>Walks an NPC to a scene point with baked-map pathfinding and feelers (an Idle travel leg); null cancels.
+        /// Combat takes over while the NPC has a target; the walk resumes once it is idle again. Works for simple convoy bandits too.</summary>
+        void Travel(GameObject npc, Vector3? scenePoint, float arriveRadius);
+        /// <summary>0 = no travel order, 1 = walking (or paused by combat), 2 = arrived, 3 = failed (gets nowhere / no NPC module brain).</summary>
+        int TravelState(GameObject npc);
+        /// <summary>True while the NPC has no target, ghost or search (simple convoy bandits: no target).</summary>
+        bool IsIdle(GameObject npc);
+        /// <summary>Awareness memory: the NPC knows where <paramref name="target"/> is for <paramref name="seconds"/> (it fought it),
+        /// so losing sight does not make it forget. Refreshed by the NPC module itself while they keep fighting.</summary>
+        void Remember(GameObject npc, GameObject target, float seconds);
     }
 
     // ------------------------------------------------------------------ Guns
@@ -239,6 +249,10 @@ namespace WildWasteland.Core
         void RemoveAll(string owner);
         /// <summary>True while the map's fog of war covers this scene position (always false with the fog off).</summary>
         bool Hidden(Vector3 scene);
+        /// <summary>True while the native map is shown (other mouse-wheel users stand down).</summary>
+        bool Open { get; }
+        /// <summary>Map camera zoom factor: 1 = native view, smaller = zoomed in (min about 0.667).</summary>
+        float Zoom { get; }
     }
 
     public interface IFollowerVehicles

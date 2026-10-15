@@ -159,8 +159,13 @@ namespace WildWasteland.Core.UI
             return Ledger.Toggle(r, value, label);
         }
 
+        // labels pages give their entry toggles (Debug "Switches" block reuses them); a lookup + reference compare per call, no allocation
+        static readonly Dictionary<ConfigEntryBase, string> _labels = new Dictionary<ConfigEntryBase, string>();
+        internal string PageLabel(ConfigEntryBase e) { string s; return e != null && _labels.TryGetValue(e, out s) ? s : null; }
+
         public void Toggle(ConfigEntry<bool> e, string label = null)
         {
+            if (label != null && e != null) { string old; if (!_labels.TryGetValue(e, out old) || !ReferenceEquals(old, label)) _labels[e] = label; }
             if (!BeginEntry(e)) return;
             bool v = Toggle(label ?? e.Definition.Key, e.Value);
             if (v != e.Value) e.Value = v;

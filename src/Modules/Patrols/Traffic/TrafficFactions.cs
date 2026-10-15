@@ -34,7 +34,7 @@ namespace WildWasteland.Modules.Patrols
             if(Time.time<_next)return;_next=Time.time+0.6f;Relations();if(transform.parent!=null)return;
             if(Health==null){Fs.Clear();GetComponents(Fs);foreach(var f in Fs)if(f.FsmName=="Health")Health=f.FsmVariables.GetFsmFloat("Health");Fs.Clear();}
             if(Health!=null&&Health.Value<=0f)return;
-            SimpleBanditBridge.Target(gameObject,TrafficFactions.Target(Faction,transform.position));
+            SimpleBanditBridge.Target(gameObject,TrafficFactions.FootTarget(Faction,transform.position));
         }
     }
     internal static class TrafficFactions
@@ -58,7 +58,7 @@ namespace WildWasteland.Modules.Patrols
         {
             if(npc==null)return;faction=Normalize(faction);npc.tag=faction;
             var actor=npc.GetComponent<TrafficActor>()??npc.AddComponent<TrafficActor>();actor.Faction=faction;
-            if(npc.transform.parent==null)SimpleBanditBridge.Target(npc,Target(faction,npc.transform.position));
+            if(npc.transform.parent==null)SimpleBanditBridge.Target(npc,FootTarget(faction,npc.transform.position));
         }
         internal static void Crew(GameObject car,PatrolMarker marker)
         {
@@ -72,17 +72,35 @@ namespace WildWasteland.Modules.Patrols
             var battle=car!=null?car.GetComponent<BattleCar>():null;var actor=npc!=null?npc.GetComponent<TrafficActor>():null;
             if(battle!=null&&actor!=null){actor.Battle=battle.Battle;actor.Side=battle.Side;}
         }
+        // Cars (ForCar/DriveTarget): the nearest opposed actor within 350 m, else the player whenever hostile (vehicle pursuit has its own
+        // detection in TrafficAgent.Goal / the pilot's give-up distance).
         internal static GameObject Target(string faction,Vector3 position)
         {
+            var best=NearestOpposed(faction,position);
+            if(best!=null)return best;
+            return PlayerHostile(faction)&&!PlayerRef.GodMode&&PlayerRef.Player!=null?PlayerRef.Player.gameObject:null;
+        }
+        // On-foot crew / foot patrols (simple bandits): faction targets as above, but the player is only offered as a goal while hostile and
+        // within FootTargetRange; the NPC module then decides whether the bandit actually knows about him (senses or fought-memory).
+        internal static GameObject FootTarget(string faction,Vector3 position)
+        {
+            var best=NearestOpposed(faction,position);
+            if(best!=null)return best;
+            var player=PlayerRef.Player;if(player==null||PlayerRef.GodMode||!PlayerHostile(faction))return null;
+            float range=PatrolsModule.FootTargetRange!=null?PatrolsModule.FootTargetRange.Value:350f;
+            return (player.position-position).sqrMagnitude<=range*range?player.gameObject:null;
+        }
+        private static GameObject NearestOpposed(string faction,Vector3 position)
+        {
             GameObject best=null;float distance=350f*350f;
-            foreach(var actor in Actors)
+            for(int i=0;i<Actors.Count;i++)
             {
+                var actor=Actors[i];
                 if(actor==null||!Opposed(faction,actor.Faction)||(actor.Health!=null&&actor.Health.Value<=0f))continue;
                 float d=(actor.transform.position-position).sqrMagnitude;if(d>=distance)continue;
                 distance=d;best=actor.gameObject;
             }
-            if(best!=null)return best;
-            return PlayerHostile(faction)&&!PlayerRef.GodMode&&PlayerRef.Player!=null?PlayerRef.Player.gameObject:null;
+            return best;
         }
         internal static bool DriveTarget(GameObject car,out Vector3 pos,out Vector3 vel,out GameObject targetCar)
         {return DriveTarget(car,car!=null?car.GetComponent<PatrolMarker>():null,out pos,out vel,out targetCar);}

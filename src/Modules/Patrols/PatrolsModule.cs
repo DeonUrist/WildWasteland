@@ -106,6 +106,7 @@ namespace WildWasteland.Modules.Patrols
             if (Services.FollowerVehicles is QuestFollowers) Services.FollowerVehicles = null;
             if (Services.Camps is TrafficCamps.Status) Services.Camps = null;
             TrafficCompass.Clear();
+            Try("foot patrols", WorldTraffic.ReleaseFootAll);
             if (_onSaveState != null) { SaveBus.StateChanged -= _onSaveState; _onSaveState = null; }
             Try("persistence flush", PatrolPersistence.Uninstall);
             Try("road cache flush", () => { TrafficRoads.Flush(); TrafficRoads.Uninstall(); });

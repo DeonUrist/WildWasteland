@@ -830,9 +830,21 @@ namespace WildWasteland.Modules.Patrols
                 }
                 mob.AddComponent<JumpClip>().Velocity = vel;
                 PatrolsModule.Verbose("Rider: " + mob.name + " jumped off and fights on foot");
+                Dismounted(mob);
             }
             if (_marker != null) _marker.DropRider(gameObject);
             Destroy(gameObject);
+        }
+
+        // awareness handover + return-to-car membership: the turret spot (anchor local position, standing pose) is kept for re-seating
+        private void Dismounted(GameObject mob)
+        {
+            var owner = _marker != null ? _marker.gameObject : _car;
+            string identity = CrewAppearance.Identity(mob, CrewAppearance.Identity(gameObject, _prefab));
+            string who = _gunner || !_warboyPrefab ? identity : Rider.Warboy;
+            float[] local = null;
+            if (_anchor != null) { var lp = _anchor.localPosition; local = new[] { lp.x, lp.y, lp.z }; }
+            CrewReturn.Dismounted(owner, mob, CrewReturn.RoleTurret, _slot, identity, who, local, _standing);
         }
 
         private void Hop()
@@ -871,6 +883,7 @@ namespace WildWasteland.Modules.Patrols
                 if (health > 0f) { Patrol.SetHealth(mob, health); mob.AddComponent<Patrol.LateHealth>().Value = health; }
                 PatrolsModule.Verbose("Rider: " + mob.name + " landed and fights on foot");
                 Core.Services.RaiseCrewBailedOut(_car, gameObject, mob);
+                Dismounted(mob);
             }
             if (_marker != null) _marker.DropRider(gameObject);
             Destroy(gameObject);

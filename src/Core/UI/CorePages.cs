@@ -73,6 +73,7 @@ namespace WildWasteland.Core.UI
                 Patrols.WorldTrafficEnabled.Value = next != 0;
             }
             l.Text("Loner: no automatic patrols. New arrival: groups unlock with distance and boss kills. Fury road: all patrol types are available from the start.");
+            Switch(l, "Foot patrols", Patrols.FootPatrols);
             if (_poi != null) Switch(l, "New POI", _poi);
 
             l.Heading("HUD");
@@ -81,6 +82,9 @@ namespace WildWasteland.Core.UI
             Switch(l, "Needs", CleanHudSettings.ShowNeeds);
             Switch(l, "HP and armor numbers", CleanHudSettings.ShowHealthNumbers);
             Switch(l, "Insanity", CleanHudSettings.ShowInsanity);
+            Switch(l, "Vehicle Hints", Player.VehicleHotkeyHint);
+            if (WildWasteland.Modules.CleanHUD.ChaseCameraHud.HudEnabled != null) Switch(l, "Gear/RPM/Speed Hud", WildWasteland.Modules.CleanHUD.ChaseCameraHud.HudEnabled);
+            Switch(l, "Vehicle Icons", Player.VehicleStatusHint);
             Switch(l, "Compass", CleanHudSettings.ShowCompass);
             CompassDetail(l, "Patrols on compass", CleanHudSettings.ShowConvoys, CleanHudSettings.AmbiguousPatrols);
             CompassDetail(l, "Locations on compass (1 km)", CleanHudSettings.ShowLocations, CleanHudSettings.AmbiguousLocations);
@@ -99,7 +103,6 @@ namespace WildWasteland.Core.UI
             Switch(l, "Toggle Ironsights", WildWasteland.Modules.Guns.GunsModule.ToggleIronsights);
             l.KeyPair("Shout", WildWasteland.Modules.NPC.NpcModule.ShoutKey, "Shout modifier", WildWasteland.Modules.NPC.NpcModule.ShoutModifier);
             if (!ModuleHost.IsRunning(HudSettings.Instance)) l.Text("Enable Combat HUD in Modules to use these HUD settings.");
-            if (WildWasteland.Modules.CleanHUD.ChaseCameraHud.HudEnabled != null) Switch(l, "ChaseCam HUD", WildWasteland.Modules.CleanHUD.ChaseCameraHud.HudEnabled);
         }
 
         static void CompassDetail(ToolLayout l, string label, ConfigEntry<bool> show, ConfigEntry<bool> ambiguous)
@@ -176,9 +179,10 @@ namespace WildWasteland.Core.UI
                 || ReferenceEquals(e, CleanHudSettings.MapMarkers) || ReferenceEquals(e, CleanHudSettings.MapRoutes)
                 || ReferenceEquals(e, CleanHudSettings.FogOfWar)) return false;
             if (ReferenceEquals(e, Player.Character) || ReferenceEquals(e, Player.BodyFirstPerson) || ReferenceEquals(e, Player.FullBodyOnlyOnFoot)
+                || ReferenceEquals(e, Player.VehicleHotkeyHint) || ReferenceEquals(e, Player.VehicleStatusHint)
                 || ReferenceEquals(e, Player.EmptyHandArms) || ReferenceEquals(e, Player.FirstPersonArmsOnlyOnFoot) || ReferenceEquals(e, Player.OcclusionPrototype)
                 || ReferenceEquals(e, Player.ThirdPersonOnFoot) || ReferenceEquals(e, Player.ClimbingOn) || ReferenceEquals(e, Patrols.FuryRoad)
-                || ReferenceEquals(e, Patrols.ConvoyEnabled) || ReferenceEquals(e, Patrols.WorldTrafficEnabled) || ReferenceEquals(e, HudSettings.SelectionDot)
+                || ReferenceEquals(e, Patrols.ConvoyEnabled) || ReferenceEquals(e, Patrols.WorldTrafficEnabled) || ReferenceEquals(e, Patrols.FootPatrols) || ReferenceEquals(e, HudSettings.SelectionDot)
                 || ReferenceEquals(e, HudSettings.Crosshair) || ReferenceEquals(e, HudSettings.HitMarker) || ReferenceEquals(e, HudSettings.HeadshotSound)
                 || ReferenceEquals(e, HudSettings.DamageNumbers) || ReferenceEquals(e, WildWasteland.Modules.Guns.GunsModule.ToggleIronsights)
                 || ReferenceEquals(e, WildWasteland.Modules.NPC.NpcModule.ShoutKey) || ReferenceEquals(e, WildWasteland.Modules.NPC.NpcModule.ShoutModifier)) return false;
@@ -222,6 +226,7 @@ namespace WildWasteland.Core.UI
             Logging(l, Plugin.Settings); Logging(l, Plugin.Tools);
             l.Text("Editors, debug switches, gameplay values and diagnostics. Changes are saved immediately unless an editor has its own Save button. Fine tuning (offsets, poses, AI constants) is kept in config/WildWasteland/tools.cfg.");
             l.EntryFilter = DebugSetting; l.DeduplicateEntries = true;
+            Switches(l);
             l.Heading("Tools");
             foreach (var p in _debugPages) if (p.IsTool && IsPatrolsTool(p)) DrawDebugPage(l, p);   // patrol / convoy / merchant editors first
             foreach (var p in _debugPages) if (p.IsTool && !IsPatrolsTool(p)) DrawDebugPage(l, p);
@@ -231,6 +236,88 @@ namespace WildWasteland.Core.UI
             _settings.Draw(l);
             l.Heading("Harmony patches"); Harmony(l);
             if (l.Button("Write startup summary to the log", true, false, 360)) Log.Always(ModuleHost.Summary());
+        }
+
+        // Switches block (RC12): every bool the Debug page shows further down, grouped by module, drawn once here (deduplication hides
+        // the lower copies). The sorted list is rebuilt only when either file's entry count changes, not per OnGUI event.
+        sealed class SwitchItem { internal ConfigEntry<bool> Entry; internal string Label, Section; internal int Order, Index; internal IModule Module; internal string Heading, HeadingOff; }
+        sealed class SwitchOrder : IComparer<SwitchItem>
+        {
+            public int Compare(SwitchItem a, SwitchItem b)
+            {
+                int c = a.Order.CompareTo(b.Order); if (c != 0) return c;
+                c = string.CompareOrdinal(a.Section, b.Section); if (c != 0) return c;
+                c = string.Compare(a.Label, b.Label, System.StringComparison.OrdinalIgnoreCase); if (c != 0) return c;
+                return a.Index.CompareTo(b.Index);
+            }
+        }
+        static readonly List<SwitchItem> _switches = new List<SwitchItem>();
+        static readonly SwitchOrder _switchOrder = new SwitchOrder();
+        static int _switchCount = -1;
+
+        static void BuildSwitches()
+        {
+            _switches.Clear();
+            int index = 0;
+            AddSwitches(Plugin.Settings, ref index); AddSwitches(Plugin.Tools, ref index);
+            _switches.Sort(_switchOrder);
+            for (int i = 0; i < _switches.Count; i++)   // same label twice in one module: name the sub-section
+                for (int j = i + 1; j < _switches.Count && _switches[j].Order == _switches[i].Order; j++)
+                    if (string.Equals(_switches[i].Label, _switches[j].Label, System.StringComparison.OrdinalIgnoreCase) && _switches[i].Section != _switches[j].Section)
+                    { _switches[i].Label += " (" + _switches[i].Section + ")"; _switches[j].Label += " (" + _switches[j].Section + ")"; }
+        }
+
+        static void AddSwitches(ConfigFile file, ref int index)
+        {
+            if (file == null) return;
+            foreach (var key in file.Keys)
+            {
+                var e = file[key] as ConfigEntry<bool>;
+                index++;
+                if (e == null || !DebugSetting(e)) continue;
+                string sec = key.Section; int cut = sec.IndexOf(" / ", System.StringComparison.Ordinal);
+                string prefix = cut >= 0 ? sec.Substring(0, cut) : sec;
+                var item = new SwitchItem { Entry = e, Label = Readable(key.Key), Section = sec, Order = -1, Index = index, Heading = "Core", HeadingOff = "Core" };
+                for (int m = 0; m < ModuleHost.Entries.Count; m++)
+                {
+                    var me = ModuleHost.Entries[m];
+                    if (me.Module.Id != prefix) continue;
+                    item.Order = m; item.Module = me.Module; item.Heading = me.Module.DisplayName; item.HeadingOff = me.Module.DisplayName + " (module off)";
+                    break;
+                }
+                _switches.Add(item);
+            }
+        }
+
+        /// <summary>"TurretSpotEditor" -> "Turret spot editor"; keys with spaces are kept as they are.</summary>
+        static string Readable(string key)
+        {
+            if (string.IsNullOrEmpty(key) || key.IndexOf(' ') >= 0) return key;
+            var sb = new System.Text.StringBuilder(key.Length + 8);
+            for (int i = 0; i < key.Length; i++)
+            {
+                char c = key[i];
+                bool split = i > 0 && char.IsUpper(c) && (char.IsLower(key[i - 1]) || (i + 1 < key.Length && char.IsLower(key[i + 1]) && char.IsUpper(key[i - 1])));
+                if (split) sb.Append(' ');
+                sb.Append(split && i + 1 < key.Length && char.IsLower(key[i + 1]) ? char.ToLowerInvariant(c) : c);
+            }
+            return sb.ToString();
+        }
+
+        static void Switches(ToolLayout l)
+        {
+            int count = (Plugin.Settings != null ? Plugin.Settings.Count : 0) + (Plugin.Tools != null ? Plugin.Tools.Count : 0);
+            if (count != _switchCount) { _switchCount = count; BuildSwitches(); }
+            if (_switches.Count == 0) return;
+            l.Heading("Switches");
+            int group = int.MinValue;
+            for (int i = 0; i < _switches.Count; i++)
+            {
+                var s = _switches[i];
+                if (!l.CanShowEntry(s.Entry)) continue;
+                if (s.Order != group) { group = s.Order; l.Text(s.Module != null && !ModuleHost.IsRunning(s.Module) ? s.HeadingOff : s.Heading, Ledger.Accent); }
+                l.Toggle(s.Entry, l.PageLabel(s.Entry) ?? s.Label);   // editable even while the module is off
+            }
         }
 
         static bool IsPatrolsTool(ToolPage p) { return p.Owner != null && p.Owner.Id == "Patrols"; }

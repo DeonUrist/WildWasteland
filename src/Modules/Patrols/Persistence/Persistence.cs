@@ -74,6 +74,10 @@ namespace WildWasteland.Modules.Patrols
         internal float ExplodeChance=50f;
         internal bool DriverDied,DriverBailed,ExplodeRolled,ExplodeSelected;
         internal float FactionCheck;internal GameObject FactionTarget;
+        // Not saved. Last time the crew shot at / detected / was hurt by the player (Time.time; awareness handover at dismount, CrewReturn),
+        // and how often the crew bailed because the car was stuck for good (one return to the car is allowed after that).
+        internal float PlayerContactAt = -1e6f;
+        internal int StuckBails;
         internal int TrafficSlot = -1;
         // human turrets (2.2.0; slot 0 = the 2.1.0 rider): the body on each spot (null once it jumped, leapt or died) and the spot itself.
         // Not saved: a restored car has none.
@@ -134,6 +138,10 @@ namespace WildWasteland.Modules.Patrols
         // the passenger left the car (it lives on as an ordinary registered mob, saved by the game itself)
         internal void PassengerLeft() { _passenger = null; _passengerHealth = null; _passengerHealthOf = null; PassengerHealthVar = null; }
         internal string DriverPrefab { get { return _driverPrefab; } }
+        // CrewReturn: a member walked back and was seated again (fresh instance, same identity)
+        internal void SetDriver(GameObject driver, string prefab) { _driver = driver; _driverPrefab = prefab ?? ""; }
+        internal void SetPassenger(GameObject passenger, string prefab)
+        { _passenger = passenger; _passengerPrefab = prefab ?? ""; _passengerHealth = null; _passengerHealthOf = null; PassengerHealthVar = null; }
         internal string BodyPrefab { get { return _bodyPrefab; } }
         internal void DriverLeft() { _driver = null; }
 

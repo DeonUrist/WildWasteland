@@ -41,6 +41,10 @@ namespace WildWasteland.Modules.Patrols
         public string[] partPaths;
     }
 
+    // A foot patrol member (foot journeys only): the crew identity (native prefab or Gungirl/Shoota alias), captured health, dead.
+    [Serializable] public sealed class TrafficWalker
+    { public string identity=""; public float health=-1f; public bool dead; }
+
     [Serializable] public sealed class TrafficJourney
     {
         public string faction="Scrapyard",battle="";
@@ -55,6 +59,9 @@ namespace WildWasteland.Modules.Patrols
         public int leg = 1;
         public float speed, destinationSeconds, unseenSeconds;
         public TrafficVehicle[] vehicles = new TrafficVehicle[0];
+        // Foot patrols (2-5 walkers between camps; vehicles stays empty). Older saves lack both fields: foot=false, no walkers.
+        public bool foot;
+        public TrafficWalker[] walkers = new TrafficWalker[0];
 
         internal Vector3 Heading
         {

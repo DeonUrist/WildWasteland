@@ -1157,7 +1157,7 @@ namespace WildWasteland.Modules.NPC
             if (m != Mode.Chase && m != Mode.Advance) n.StrafeDev = 0f;
             if (m == Mode.Chase || m == Mode.Advance) { n.HasHeading = false; if (was != Mode.Chase && was != Mode.Advance && was != Mode.BackUp) { n.BestDist = float.MaxValue; n.NoProgressSince = Time.time; n.Flipped = false; n.Side = 0; n.HasWaypoint = false; } }
             bool wasStill = was == Mode.Hold || was == Mode.Rest || was == Mode.Search || was == Mode.Walk, still = m == Mode.Hold || m == Mode.Rest || m == Mode.Search || m == Mode.Walk;
-            if (m == Mode.Off) { if (wasStill) Move(n, n.Target != null && n.Target.Value != null); }   // (1.4.9) back to the game's run only with a target left - no target: idle, not a run on the spot
+            if (m == Mode.Off) { if (wasStill) Move(n, n.Target != null && n.Target.Value != null); else if (n.Target == null || n.Target.Value == null) Move(n, false); }   // (1.4.9) back to the game's run only with a target left - no target: idle, not a run on the spot; (crew AI) also when released from a chase with no target left (nothing drives that run any more)
             else if (still && !wasStill) Move(n, false);
             else if (!still && wasStill) Move(n, true);
             if (still) n.OnNav = false;
@@ -1506,12 +1506,7 @@ namespace WildWasteland.Modules.NPC
 
         private static void OnStuck(Npc n)
         {
-            if(SimpleBandits.Has(n.Owner))
-            {
-                if(n.Mode==Mode.Chase){n.ModeUntil=Time.time+0.5f;SetMode(n,Mode.BackUp,"simple bandit backs up");}
-                return;
-            }
-            float now = Time.time;
+            float now = Time.time;      // (crew AI) convoy crews on foot walk with MoveToward now: the full stuck handling (SimpleThink keeps BackUp / Rest)
             if (n.Mode == Mode.Hold || n.Mode == Mode.Rest || n.Mode == Mode.Search || n.Mode == Mode.Walk || n.Mode == Mode.BackUp || n.Mode == Mode.Off) return;   // standing still (or Idle's walk): the Unstuck FSM's "not moving" is no stuck
             if (n.Travel || n.Halted || Senses.Blown(n.Owner)) return;          // pushed by a tornado / under the ground: not stuck
             if (now - n.FriendBumpsSince > 6f) { n.FriendBumpsSince = now; n.FriendBumps = 0; }

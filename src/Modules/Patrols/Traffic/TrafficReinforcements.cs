@@ -26,7 +26,7 @@ namespace WildWasteland.Modules.Patrols
             if(_calls.ContainsKey(camp.id)||_journeys.Any(j=>j.reinforcement&&j.destination==camp.id)
                 ||(camp.patrolCallAt>=0f&&hour-camp.patrolCallAt<24f))
             {PatrolsModule.Verbose("Patrol call suppressed: "+camp.id+" (pending, active or 24 game-hour cooldown)");return;}
-            var redirect=_journeys.Where(j=>!j.convoy&&!j.merchant&&!j.reinforcement&&string.IsNullOrEmpty(j.battle)&&j.faction==camp.faction
+            var redirect=_journeys.Where(j=>!j.convoy&&!j.merchant&&!j.foot&&!j.reinforcement&&string.IsNullOrEmpty(j.battle)&&j.faction==camp.faction
                 &&!_calls.Values.Any(c=>c.Redirect==j)&&(!_live.TryGetValue(j.id,out var live)||!live.Building)
                 &&TrafficLocations.FlatDistance(j.position,camp.apron)<=PatrolsModule.CampTrafficRange.Value)
                 .OrderBy(j=>TrafficLocations.FlatDistance(j.position,camp.apron)).FirstOrDefault();

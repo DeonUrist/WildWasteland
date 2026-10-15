@@ -36,6 +36,7 @@ namespace WildWasteland.Modules.Patrols
             if (PatrolsModule.WorldTrafficEnabled.Value && journeys != null)
                 foreach (var journey in journeys)
                 {
+                    if (journey.foot) continue;   // foot patrols: never on the compass (map dot only, with Map Routes On)
                     bool alive = false;
                     foreach (var vehicle in journey.vehicles) if (!vehicle.retired) { alive = true; break; }
                     if (!alive) continue;
@@ -82,6 +83,7 @@ namespace WildWasteland.Modules.Patrols
         internal static Transform CompassTarget(TrafficJourney journey)
         {
             Live live;
+            if (_instance != null && journey.foot) return _instance.FootLeader(journey);   // leader walker, else the virtual position
             if (_instance == null || !_instance._live.TryGetValue(journey.id, out live)) return null;
             Transform target = null; int slot = int.MaxValue; bool truck = false;
             foreach (var pair in live.Cars)

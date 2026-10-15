@@ -24,12 +24,37 @@ namespace WildWasteland.Modules.CleanHUD
         private Camera _owned;
         private float _nextLookup;
         private readonly List<RawImage> _consumers = new List<RawImage>();
+        private Renderer _nativePlayer; private GameObject _playerFor; private bool _nativePlayerOff, _playerShown;
+        private readonly Vector3[] _playerCorners = new Vector3[4];
+        internal bool PlayerShown() { return _playerShown; }
+        internal void DrawPlayer()
+        {
+            if (Event.current.type != EventType.Repaint || !_playerShown || _map == null || _camera == null || GameRefs.Player == null) return;
+            var player = GameRefs.Player.transform; var p = _camera.WorldToViewportPoint(player.position);
+            if (p.z <= 0 || p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1) return;
+            var ahead = _camera.WorldToViewportPoint(player.position + player.forward * 10f) - p;
+            _map.GetWorldCorners(_playerCorners);
+            var rect = new Rect(_playerCorners[0].x, Screen.height - _playerCorners[1].y, _playerCorners[2].x - _playerCorners[0].x, _playerCorners[1].y - _playerCorners[0].y);
+            var center = new Vector2(p.x * rect.width, (1f - p.y) * rect.height);
+            var matrix = GUI.matrix; var color = GUI.color; int depth = GUI.depth;
+            GUI.depth = -1; GUI.BeginGroup(rect);
+            try
+            {
+                GUIUtility.RotateAroundPivot(Mathf.Atan2(ahead.x, ahead.y) * Mathf.Rad2Deg, center);
+                var icon = MapIcons.Get("player");
+                GUI.color = new Color(.02f, .08f, .02f, 1f); GUI.DrawTexture(new Rect(center.x - 11, center.y - 12.5f, 22, 25), icon);
+                GUI.color = new Color(.2f, 1f, .25f, 1f); GUI.DrawTexture(new Rect(center.x - 9, center.y - 10.5f, 18, 21), icon);
+            }
+            finally { GUI.matrix = matrix; GUI.EndGroup(); GUI.color = color; GUI.depth = depth; }
+        }
         public MapDetail Markers { get { return CleanHudModule.MapMarkers.Value; } }
         public MapDetail Routes { get { return CleanHudModule.MapRoutes.Value; } }
         public int Add(string owner, Func<Vector3> position, string icon, Color color, string label)
         { var e = new Entry { Id = ++_next, Owner = owner, Position = position, Icon = icon, Color = color }; _entries.Add(e); _ids.Add(e.Id); return e.Id; }
         public bool Exists(int id) { return _ids.Contains(id); }
         public bool Hidden(Vector3 scene) { return MapFog.Hides(scene); }
+        public bool Open { get { return _open; } }
+        public float Zoom { get { return _zoom; } }
         public void Remove(int id)
         { for (int i = _entries.Count - 1; i >= 0; i--) if (_entries[i].Id == id) { Destroy(_entries[i]); _ids.Remove(id); _entries.RemoveAt(i); } }
         public void RemoveAll(string owner)
@@ -92,8 +117,44 @@ namespace WildWasteland.Modules.CleanHUD
                 if (image.texture == target && image.name != "RawImage_Map") _consumers.Add(image);
             if (_consumers.Count > 0) CleanHudModule.Log("Map camera target is also shown by " + _consumers.Count + " other image(s); the camera renders while any is visible");
         }
+        // Mouse wheel zooms the native map in (z 1 = native view .. MinZoom), never out. The native size/FOV is captured per camera
+        // instance; a value the game writes itself becomes the new native. Markers, fog and Patrols' ink project through the camera.
+        private const float MinZoom = .667f, ZoomStep = .05f;
+        private bool _open, _zoomOrtho;
+        private float _zoom = 1f, _zoomTarget = 1f, _zoomNative, _zoomWritten;
+        private Camera _zoomCam;
+        private void DriveZoom(bool active, bool play)
+        {
+            if (!ReferenceEquals(_camera, _zoomCam) || (active && _zoomCam != null && _zoomCam.orthographic != _zoomOrtho)) RestoreZoom();
+            if (!active || _camera == null) { if (_zoom != 1f || _zoomTarget != 1f) RestoreZoom(); return; }
+            if (_zoomCam == null)
+            {
+                _zoomCam = _camera; _zoomOrtho = _camera.orthographic;
+                _zoomNative = _zoomWritten = _zoomOrtho ? _camera.orthographicSize : _camera.fieldOfView;
+            }
+            float current = _zoomOrtho ? _zoomCam.orthographicSize : _zoomCam.fieldOfView;
+            if (Mathf.Abs(current - _zoomWritten) > 1e-4f) _zoomNative = current;
+            float wheel = 0f;
+            if (play && !ApocasetterBridge.InputBlocked && !Core.UI.ToolWindow.IsOpen && Application.isFocused) try { wheel = Input.mouseScrollDelta.y; } catch (Exception) { }
+            if (wheel != 0f) _zoomTarget = Mathf.Clamp(_zoomTarget - wheel * ZoomStep, MinZoom, 1f);
+            _zoom = Mathf.Lerp(_zoom, _zoomTarget, 1f - Mathf.Exp(-Time.unscaledDeltaTime * 14f));
+            if (Mathf.Abs(_zoom - _zoomTarget) < .0005f) _zoom = _zoomTarget;
+            float value = _zoomOrtho ? _zoomNative * _zoom : 2f * Mathf.Atan(Mathf.Tan(_zoomNative * .5f * Mathf.Deg2Rad) * _zoom) * Mathf.Rad2Deg;
+            if (value != current) { if (_zoomOrtho) _zoomCam.orthographicSize = value; else _zoomCam.fieldOfView = value; }
+            _zoomWritten = value;
+        }
+        private void RestoreZoom()
+        {
+            if (_zoomCam != null && _zoom != 1f)
+            {
+                float current = _zoomOrtho ? _zoomCam.orthographicSize : _zoomCam.fieldOfView;
+                if (Mathf.Abs(current - _zoomWritten) <= 1e-4f) { if (_zoomOrtho) _zoomCam.orthographicSize = _zoomNative; else _zoomCam.fieldOfView = _zoomNative; }
+            }
+            _zoomCam = null; _zoom = _zoomTarget = 1f;
+        }
         private void RestoreCamera()
         {
+            RestoreZoom(); _open = false;
             if (_owned != null && _owned.enabled != _cameraNative) _owned.enabled = _cameraNative;
             _owned = null; _consumers.Clear();
         }
@@ -105,6 +166,17 @@ namespace WildWasteland.Modules.CleanHUD
             bool mapShown = fsmOn && (_map == null || _map.gameObject.activeInHierarchy);
             DriveCamera(mapShown);
             bool play = GameRefs.Menu != null && GameRefs.Menu.ActiveStateName == "play";
+            _open = mapShown;
+            DriveZoom(mapShown, play);   // the zoom survives a pause; it resets when the map closes
+            _playerShown = CleanHudModule.Enabled.Value && CleanHudModule.MapEnabled.Value && play && mapShown && _map != null && _camera != null && !Core.UI.ToolWindow.IsOpen;
+            if (_playerFor != GameRefs.Player)
+            {
+                if (_nativePlayer != null) _nativePlayer.forceRenderingOff = _nativePlayerOff;
+                _playerFor = GameRefs.Player; var icon = _playerFor != null ? _playerFor.transform.Find("mapPlayerIcon") : null;
+                _nativePlayer = icon != null ? icon.GetComponent<Renderer>() : null;
+                _nativePlayerOff = _nativePlayer != null && _nativePlayer.forceRenderingOff;
+            }
+            if (_nativePlayer != null) _nativePlayer.forceRenderingOff = _nativePlayerOff || _playerShown;
             MapFog.Tick(_map, _camera, CleanHudModule.MapEnabled.Value && play && mapShown && _map != null);
             if (_root == null) return;
             bool open = CleanHudModule.Enabled.Value && CleanHudModule.MapEnabled.Value && Markers != MapDetail.Off && play
@@ -137,6 +209,8 @@ namespace WildWasteland.Modules.CleanHUD
         }
         internal void SceneLoaded()
         {
+            if (_nativePlayer != null) _nativePlayer.forceRenderingOff = _nativePlayerOff;
+            _nativePlayer = null; _playerFor = null; _playerShown = false;
             RestoreNative(); RestoreCamera(); _fsmOn = false; _nextLookup = 0; MapFrame.Restore(); MapFog.SceneLoaded();
             if (_root != null) UnityEngine.Object.Destroy(_root.gameObject);
             foreach (var e in _entries) e.Root = null;

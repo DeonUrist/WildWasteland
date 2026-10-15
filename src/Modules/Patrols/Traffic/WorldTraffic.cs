@@ -41,7 +41,12 @@ namespace WildWasteland.Modules.Patrols
                     saw = delta.magnitude <= sight && Vector3.Angle(transform.forward, delta) <= 100f
                         && Sight(player, car);
                     heard = DayLight.Dark && delta.magnitude <= TrafficLocations.EngineRange(car);
-                    if (saw || heard) { LastKnown = TrafficSpace.World(player); SeenUntil = Time.time + PatrolsModule.PatrolMemorySeconds.Value; }
+                    if (saw || heard)
+                    {
+                        LastKnown = TrafficSpace.World(player); SeenUntil = Time.time + PatrolsModule.PatrolMemorySeconds.Value;
+                        if (_pm == null) _pm = GetComponent<PatrolMarker>();
+                        if (_pm != null) _pm.PlayerContactAt = Time.time;   // awareness handover at dismount (CrewReturn)
+                    }
                 }
                 Detection = saw ? "sight" : heard ? "engine" : Time.time < SeenUntil ? "last known" : "travelling";
                 _detected = saw || heard;
@@ -72,6 +77,7 @@ namespace WildWasteland.Modules.Patrols
             return true;
         }
         private bool _detected;
+        private PatrolMarker _pm;
         private Rigidbody _rb; private bool _rbKnown;   // the car's root Rigidbody (fixed for the car's life)
 
         internal static int FormationRank(TrafficJourney journey, int slot)
@@ -146,6 +152,7 @@ namespace WildWasteland.Modules.Patrols
         private readonly Dictionary<string, int> _routeAttempts = new Dictionary<string, int>();
         private Patrol _patrol;
         private float _elapsed, _nextPopulation;
+        private int _populationWait = -1;
         private int _generation;
         private float _nextRoadRefresh;
         private void Awake() { _instance = this; _generation = Patrol.SceneGen; }
@@ -171,6 +178,7 @@ namespace WildWasteland.Modules.Patrols
             RoadPlanner.Reset();
             TrafficRoads.Reset();
             TrafficSpace.Reset();
+            CrewReturn.Reset();
             if (_instance == null) return;
             _instance.StopAllCoroutines(); _instance._journeys.Clear(); _instance._live.Clear();
             _instance._departures.Clear(); _instance._routeJobs.Clear(); _instance._routeAttempts.Clear();
@@ -182,6 +190,7 @@ namespace WildWasteland.Modules.Patrols
             _instance._gameInkAt = 0f;
             _instance._gameMap=null;_instance._gameMapImage=null;_instance._mapCheat=null;_instance._nextMapScan=0f;_instance._mapWasOpen=false;
             _instance._nextRoadRefresh = 0f;
+            _instance.ResetFoot();
         }
 
         private int RealCars
@@ -199,6 +208,7 @@ namespace WildWasteland.Modules.Patrols
                 foreach (var live in _live.Values) foreach (var car in live.Cars.Values)
                     if (car != null) Detach(car);
                 foreach(var battle in _battleLive.Values){foreach(var car in battle.Cars.Values)if(car!=null){Destroy(car.GetComponent<BattleCar>());Detach(car);}foreach(var corpse in battle.Corpses)if(corpse!=null)Destroy(corpse);}
+                ReleaseFoot("world traffic off");
                 StopAllCoroutines(); _live.Clear(); _journeys.Clear();_battleLive.Clear();_battles.Clear(); return;
             }
             TrafficLocations.Tick();
@@ -231,6 +241,7 @@ namespace WildWasteland.Modules.Patrols
                 var journey = _tickJourneys[jn];
                 if(journey.merchant&&journey.waitSeconds>0f)journey.waitSeconds=Mathf.Max(TrafficLocations.FlatDistance(journey.position,TrafficSpace.World(player.position))<=100f?1f:0f,journey.waitSeconds-seconds);
                 if(!string.IsNullOrEmpty(journey.battle))continue;
+                if(journey.foot){FootStep(journey,seconds,player);continue;}
                 _live.TryGetValue(journey.id, out var live);
                 if (live != null && !live.Building)
                 {
@@ -243,6 +254,7 @@ namespace WildWasteland.Modules.Patrols
                         if (marker == null || marker.PlayerEntered || PlayerRef.PlayerCar == car || marker.Exploded
                             || crew == null || !crew.CrewAlive || crew.Phase == CrewPhase.Released)
                         {
+                            if (crew != null && crew.Regroup != null) continue;   // its crew may still walk back (CrewReturn); retired once that ends
                             journey.vehicles[pair.Key].retired = true;
                             if (car != null) Detach(car);
                             live.Cars.Remove(pair.Key); // captured cars, wrecks and dismounts remain in the real world
@@ -288,8 +300,18 @@ namespace WildWasteland.Modules.Patrols
             }
             _tickJourneys.Clear();
             PumpNearbyRoutes();PopulateMerchants();
-            if (!TrafficLocations.DiscoveryReady || !PatrolsModule.ConvoyEnabled.Value || Time.time < _nextPopulation) return;
+            if (Time.time >= _nextFootSecond) { _nextFootSecond = Time.time + 1f; StrandedTick(1f); }
+            if (!TrafficLocations.DiscoveryReady || !PatrolsModule.ConvoyEnabled.Value)
+            {
+                int why = !PatrolsModule.ConvoyEnabled.Value ? 1 : 2;
+                if (why != _populationWait && Core.Log.Verbose) PatrolsModule.Verbose(why == 1 ? "Traffic: no new groups (Automatic spawns off)" : "Traffic: no new groups until camp discovery finishes (" + TrafficLocations.DiscoveryLeft + " transforms queued)");
+                _populationWait = why; return;
+            }
+            if (_populationWait != 0 && Core.Log.Verbose) PatrolsModule.Verbose("Traffic: camp discovery done (" + TrafficLocations.Known.Count + " camps known), new groups may leave");
+            _populationWait = 0;
+            if (Time.time < _nextPopulation) return;
             _nextPopulation = Time.time + 1f;
+            PopulateFoot(TrafficSpace.World(player.position));
             PopulateRoaming(TrafficSpace.World(player.position));
             Populate(false, Mathf.Min(Mathf.Max(0,PatrolsModule.MaxPatrols.Value-RoamingCap),nearby)); Populate(true, Mathf.Min(PatrolsModule.MaxConvoys.Value,nearby));
         }
@@ -299,7 +321,7 @@ namespace WildWasteland.Modules.Patrols
         {
             foreach(var journey in _journeys.ToArray())
             {
-                if(!string.IsNullOrEmpty(journey.battle))continue;
+                if(!string.IsNullOrEmpty(journey.battle)||journey.foot)continue;   // foot patrols retarget in FootStep
                 if(!Cleared(journey.source)&&!Cleared(journey.destination))continue;
                 if(journey.roaming||journey.merchant||journey.freeRoute)continue;
                 if(!_live.ContainsKey(journey.id)){Remove(journey);continue;}
@@ -326,12 +348,12 @@ namespace WildWasteland.Modules.Patrols
             {
                 bool convoy=role==1,roaming=role==2;int camps=TrafficLocations.NearbyCount(TrafficSpace.World(player.position),PatrolsModule.CampTrafficRange.Value);
                 int cap=roaming?RoamingCap:convoy?Mathf.Min(PatrolsModule.MaxConvoys.Value,camps):Mathf.Min(Mathf.Max(0,PatrolsModule.MaxPatrols.Value-RoamingCap),camps);
-                int count=_journeys.Count(j=>!j.merchant&&j.convoy==convoy&&j.roaming==roaming);
+                int count=_journeys.Count(j=>!j.merchant&&!j.foot&&j.convoy==convoy&&j.roaming==roaming);
                 if(count<=cap)continue;
                 foreach(var journey in _journeys.ToArray())
                 {
                     if(count<=cap)break;
-                    if(journey.merchant||journey.freeRoute||journey.convoy!=convoy||journey.roaming!=roaming||!string.IsNullOrEmpty(journey.battle)||_live.ContainsKey(journey.id)||(cap>0&&TrafficLocations.FlatDistance(journey.position,TrafficSpace.World(player.position))<=PatrolsModule.TrafficLoadRange.Value))continue;
+                    if(journey.merchant||journey.foot||journey.freeRoute||journey.convoy!=convoy||journey.roaming!=roaming||!string.IsNullOrEmpty(journey.battle)||_live.ContainsKey(journey.id)||(cap>0&&TrafficLocations.FlatDistance(journey.position,TrafficSpace.World(player.position))<=PatrolsModule.TrafficLoadRange.Value))continue;
                     Remove(journey);count--;
                 }
             }
@@ -341,7 +363,7 @@ namespace WildWasteland.Modules.Patrols
         {
             var bases = TrafficLocations.Known.Values.Where(b=>!b.cleared&&b.faction!="Coyotes").ToArray();
             if(bases.Length<(convoy?2:1)){_departures.Remove(convoy);return;}
-            int existing = _journeys.Count(j => !j.merchant&&j.convoy == convoy&&!j.roaming)+_nearDepartures.Count(d=>d.Role==(convoy?1:0))+(convoy?0:CallReservations);
+            int existing = _journeys.Count(j => !j.merchant&&!j.foot&&j.convoy == convoy&&!j.roaming)+_nearDepartures.Count(d=>d.Role==(convoy?1:0))+(convoy?0:CallReservations);
             if(existing>=desired||_journeys.Count>=PatrolsModule.TrafficMaxGroups.Value){_departures.Remove(convoy);return;}
             if(_departures.TryGetValue(convoy,out var pending))
             {
@@ -395,7 +417,7 @@ namespace WildWasteland.Modules.Patrols
             _nextRoadRefresh=Time.time+0.5f;
             foreach (var journey in _journeys)
             {
-                if (journey.roaming || journey.merchant || journey.freeRoute || journey.arrived || (journey.TerrainRoute&&journey.route.Length<=32&&journey.roadLegs.Any(b => b)) || _routeJobs.ContainsKey(journey.id)
+                if (journey.roaming || journey.merchant || journey.foot || journey.freeRoute || journey.arrived || (journey.TerrainRoute&&journey.route.Length<=32&&journey.roadLegs.Any(b => b)) || _routeJobs.ContainsKey(journey.id)
                     || (_routeAttempts.TryGetValue(journey.id,out int attempted)&&attempted==TrafficRoads.Revision)
                     || !TrafficLocations.Known.TryGetValue(journey.destination, out var destination)) continue;
                 if(_live.TryGetValue(journey.id,out var live)&&!journey.convoy&&live.Cars.Values.Any(c=>c!=null&&c.GetComponent<TrafficAgent>()?.SeenUntil>Time.time))continue;
@@ -568,6 +590,17 @@ namespace WildWasteland.Modules.Patrols
             }
         }
 
+        // CrewReturn: the crew is back aboard; the car rejoins its journey when that is still physically represented
+        internal static void Reattach(GameObject car, string id, int slot)
+        {
+            if (_instance == null || car == null || car.GetComponent<TrafficAgent>() != null || !PatrolsModule.WorldTrafficEnabled.Value) return;
+            var journey = Find(id);
+            if (journey == null || journey.foot || slot < 0 || slot >= journey.vehicles.Length || !_instance._live.TryGetValue(id, out var live) || live.Building) return;
+            if (live.Cars.TryGetValue(slot, out var other) && other != null && other != car) return;
+            journey.vehicles[slot].retired = false; live.Cars[slot] = car; Attach(car, journey, slot);
+            PatrolsModule.Verbose("Return to car: " + car.name + " rejoined traffic group " + journey.name);
+        }
+
         internal static void MissingRestored(PatrolCarData car)
         {
             var journey = Find(car.trafficId);
@@ -581,6 +614,11 @@ namespace WildWasteland.Modules.Patrols
             foreach (var pair in live.Cars)
             {
                 if (pair.Value == null) continue;
+                var held = pair.Value.GetComponent<Crew>();
+                if (held != null && held.Regroup != null && !held.DriverSeatedAlive)
+                {   // an empty car waiting for its crew is never virtualized (it would come back driverless): it stays a real car
+                    journey.vehicles[pair.Key].retired = true; Detach(pair.Value); continue;
+                }
                 CaptureState(pair.Value, journey.vehicles[pair.Key]);
                 if (!CanVirtualize(pair.Value, journey.vehicles[pair.Key]))
                 {
@@ -596,6 +634,7 @@ namespace WildWasteland.Modules.Patrols
 
         private void Remove(TrafficJourney journey)
         {
+            if (journey.foot) { RemoveFoot(journey); return; }
             if (_live.TryGetValue(journey.id, out var live))
             {
                 if (live.Building) return;
@@ -612,6 +651,7 @@ namespace WildWasteland.Modules.Patrols
             foreach (var journey in _instance._journeys)
                 if (_instance._live.TryGetValue(journey.id, out var live))
                     foreach (var pair in live.Cars) if (pair.Value != null) CaptureState(pair.Value, journey.vehicles[pair.Key]);
+            _instance.CaptureFoot();
             foreach(var battle in _instance._battles)if(_instance._battleLive.TryGetValue(battle.id,out var live)&&!battle.resolved)
                 foreach(var car in live.Cars.Values)if(car!=null){var tag=car.GetComponent<BattleCar>();if(tag!=null)CaptureState(car,(tag.Side==0?battle.sideA:battle.sideB)[tag.Slot]);}
             return TrafficCodec.Write(new TrafficSave { bases = TrafficLocations.Known.Values.ToArray(),pois=TrafficLocations.Points.Values.ToArray(), journeys = _instance._journeys.ToArray(),battles=_instance._battles.ToArray() });
@@ -626,16 +666,19 @@ namespace WildWasteland.Modules.Patrols
             if (saved.version == 1) MigrateSceneCoordinates(saved);
             foreach (var b in saved.bases) if (b != null && !string.IsNullOrEmpty(b.id)) TrafficLocations.Known[b.id] = b;
             foreach(var p in (saved.pois??new TrafficPoi[0]).Take(1024))if(p!=null&&!string.IsNullOrEmpty(p.id))TrafficLocations.Points[p.id]=p;
-            _instance._journeys.Clear(); _instance._live.Clear();
+            _instance._journeys.Clear(); _instance._live.Clear(); _instance.ResetFoot();
             _instance._battles.Clear();_instance._battleLive.Clear();
             if(saved.battles!=null)foreach(var battle in saved.battles.Take(64))if(TrafficBattleValid(battle))_instance._battles.Add(battle);
             foreach (var j in saved.journeys)
                 if (j != null && !string.IsNullOrEmpty(j.id) && j.route != null && j.route.Length >= 2 && j.route.Length <= 20000
                     && j.vehicles != null && j.vehicles.Length <= 100 && j.leg >= 1 && j.leg < j.route.Length
-                    && j.speed > 0f && j.speed <= 50f && j.vehicles.All(v => v != null))
+                    && j.speed > 0f && j.speed <= 50f && j.vehicles.All(v => v != null)
+                    && (!j.foot || FootValid(j)))
                 {
                     if (j.roadLegs == null || j.roadLegs.Length != j.route.Length) j.roadLegs = new bool[j.route.Length];
                     j.faction=TrafficFactions.Normalize(j.faction);if(!_instance._battles.Any(b=>b.id==j.battle))j.battle="";
+                    if (j.walkers == null || !j.foot) j.walkers = new TrafficWalker[0];
+                    if (j.foot) { j.battle=""; _instance._journeys.Add(j); continue; }   // walkers: no vehicle templates to thaw
                     foreach(var record in j.vehicles){record.faction=j.faction;var template=Thaw(record);if(template!=null)record.strength=TrafficBattles.Strength(template);}
                     _instance._journeys.Add(j);
                 }

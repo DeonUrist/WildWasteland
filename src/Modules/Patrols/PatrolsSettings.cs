@@ -70,7 +70,11 @@ namespace WildWasteland.Modules.Patrols
         internal static ConfigEntry<int> TrafficMaxGroups, TrafficMaxRealCars;
         internal static ConfigEntry<bool> TrafficRoadRouting;
         internal static ConfigEntry<float> TrafficRoadConnector;
-        internal static ConfigEntry<bool> CarSpawnLimit, SimpleConvoyBanditsAI;
+        internal static ConfigEntry<bool> CarSpawnLimit, SimpleConvoyBanditsAI, FootPatrols, ReturnToCar;
+        // foot patrols / return to car / awareness handover tuning (tools.cfg, Traffic tuning)
+        internal static ConfigEntry<int> FootMaxActive;
+        internal static ConfigEntry<float> FootSpawnChance, FootCheckSeconds, FootSpeed, FootLoadRange, FootUnloadRange, FootMinSourceDistance, FootMinPoiMetres,
+            StrandedIdleSeconds, ReturnTimeoutSeconds, ReturnMaxDistance, DismountMemorySeconds, FootTargetRange;
         internal static ConfigEntry<int> MaxCarsInEvent, MaxCarsInDoubleEvent, MaxPatrols, MaxConvoys;
         internal static ConfigEntry<int> MaxMerchants; internal static ConfigEntry<float> MerchantSpawnChance, MerchantCheckMinutes;
         internal static ConfigEntry<float> CampTrafficRange;
@@ -167,8 +171,12 @@ namespace WildWasteland.Modules.Patrols
                 "Off = groups unlock with distance and bosses as set in the editor");
             Migrate(cfg, FuryRoad, "General", "Fury Road");
             SimpleConvoyBanditsAI = cfg.Player(null, "Simple convoy bandits AI", true,
-                "NPC module: no crew AI while seated; dismounted bandits persistently fight the player using baked-map navigation, without ghosts, forgetting or idle behaviour");
+                "NPC module: no crew AI while seated; dismounted bandits fight using baked-map navigation; they hunt you only once they have seen or fought you, and keep track of you for a while after a fight");
             Migrate(cfg, SimpleConvoyBanditsAI, "Experimental", "simple convoy bandits AI");
+            FootPatrols = cfg.Player(null, "Foot patrols", true,
+                "World traffic: groups of 2-5 raiders walk between camps over open land (simulated while you are far away). Crew left without a usable car also walk to a nearby camp. Off = no new foot patrols");
+            ReturnToCar = cfg.Player(null, "Return to car", true,
+                "Debug: dismounted crew whose fight is over walk back to their car and take their seats again (a passenger or gunner takes the wheel if the driver is dead); the car leaves once every living member is aboard");
             TacticalDriving = cfg.Player(null, "Tactical driving", true, "World traffic: varied attack runs and vehicle-checked camp approaches");
             Migrate(cfg, TacticalDriving, "World traffic prototype", "TacticalDriving");
             WarRig.S.SpawnEnabled = cfg.Player(null, "War Rig spawns", true,
@@ -296,6 +304,19 @@ namespace WildWasteland.Modules.Patrols
             Migrate(cfg, ConvoyGuardRange, "World traffic prototype", "ConvoyGuardRange");
             PatrolMemorySeconds = cfg.Tool(TTraffic, "PatrolMemorySeconds", 20f, "Search last known player position this long after losing sight/sound, then resume the route", new AcceptableValueRange<float>(0f, 120f));
             Migrate(cfg, PatrolMemorySeconds, "World traffic prototype", "PatrolMemorySeconds");
+            FootMaxActive = cfg.Tool(TTraffic, "FootPatrolMaxActive", 2, "Most generated foot patrols at once (crew left without a usable car may add a few more)", new AcceptableValueRange<int>(0, 8));
+            FootSpawnChance = cfg.Tool(TTraffic, "FootPatrolSpawnChance", 35f, "Chance (%) per check that a foot patrol leaves a nearby camp", new AcceptableValueRange<float>(0f, 100f));
+            FootCheckSeconds = cfg.Tool(TTraffic, "FootPatrolCheckSeconds", 60f, "Seconds between foot patrol spawn checks", new AcceptableValueRange<float>(5f, 1800f));
+            FootSpeed = cfg.Tool(TTraffic, "FootPatrolSpeed", 1.3f, "Simulated walking speed of a foot patrol, m/s", new AcceptableValueRange<float>(0.5f, 4f));
+            FootLoadRange = cfg.Tool(TTraffic, "FootPatrolLoadRange", 280f, "Foot patrols become real NPCs within this distance of the player, m", new AcceptableValueRange<float>(80f, 600f));
+            FootUnloadRange = cfg.Tool(TTraffic, "FootPatrolUnloadRange", 400f, "Real foot patrols become simulated again once every walker is this far away; at least load range + 80 m", new AcceptableValueRange<float>(150f, 1200f));
+            FootMinPoiMetres = cfg.Tool(TTraffic, "FootPatrolMinPoiMetres", 1000f, "A generated foot patrol walks out to a point of interest at least this far from its camp (anywhere within one map chunk) and back, m", new AcceptableValueRange<float>(300f, 8000f));
+            FootMinSourceDistance = cfg.Tool(TTraffic, "FootPatrolMinSourceDistance", 500f, "A generated foot patrol leaves only from a camp at least this far from you (out of sight; it walks simulated until it comes within FootPatrolLoadRange), m", new AcceptableValueRange<float>(300f, 5000f));
+            StrandedIdleSeconds = cfg.Tool(TTraffic, "StrandedIdleSeconds", 30f, "Crew left without a usable car wait this long out of combat before walking to the nearest camp of their faction, s", new AcceptableValueRange<float>(5f, 600f));
+            ReturnTimeoutSeconds = cfg.Tool(TTraffic, "ReturnToCarTimeoutSeconds", 120f, "Crew walking back to their car: the car leaves with whoever is aboard after this long (the rest become a foot patrol), s", new AcceptableValueRange<float>(20f, 900f));
+            ReturnMaxDistance = cfg.Tool(TTraffic, "ReturnToCarMaxDistance", 300f, "Crew farther than this from their car when the fight is over do not walk back, m", new AcceptableValueRange<float>(30f, 1500f));
+            DismountMemorySeconds = cfg.Tool(TTraffic, "DismountMemorySeconds", 90f, "Crew that fought or detected the player from the car still know where he is this long after getting out, s", new AcceptableValueRange<float>(0f, 600f));
+            FootTargetRange = cfg.Tool(TTraffic, "FootTargetRange", 350f, "On-foot crew and foot patrols are offered the player as a target only within this distance (they still need to see, hear or remember him), m", new AcceptableValueRange<float>(50f, 1000f));
 
             // audio (startup)
             AudioVoices = cfg.Tool(TAudio, "AudioVoices", 64,

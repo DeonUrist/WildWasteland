@@ -40,7 +40,7 @@ namespace WildWasteland.Modules.Patrols
             if (car == null || marker == null || marker.Exploded || marker.PlayerEntered) yield break;
             if (!Eligible(marker)) yield break;
             while(car!=null&&marker!=null&&LivingOccupants(marker))yield return new WaitForSeconds(0.25f);
-            if(car==null||marker==null||marker.PlayerEntered||!Eligible(marker))yield break;
+            if(car==null||marker==null||marker.Exploded||marker.PlayerEntered||!Eligible(marker))yield break;   // Exploded: a second routine (CrewReturn re-schedule) never blasts twice
             if(!marker.ExplodeRolled){marker.ExplodeRolled=true;marker.ExplodeSelected=Roll(marker.ExplodeChance,PatrolsModule.SelfDestruct.Value,UnityEngine.Random.value);}
             if(!marker.ExplodeSelected&&!PatrolsModule.SelfDestruct.Value)yield break;
             if (PlayerRef.PlayerCar == car) yield break;
@@ -119,7 +119,7 @@ namespace WildWasteland.Modules.Patrols
         }
         internal static float DefaultChance(string name)=>string.Equals(name,"War_rig",StringComparison.OrdinalIgnoreCase)||string.Equals(name,"Truck_War_Rig",StringComparison.OrdinalIgnoreCase)?0f:50f;
         internal static bool Roll(float chance,bool always,float roll)=>always||roll*100f<Mathf.Clamp(chance,0f,100f);
-        internal static bool Eligible(PatrolMarker marker)=>marker!=null&&marker.DriverDied&&!marker.DriverBailed&&!marker.PlayerEntered;
+        internal static bool Eligible(PatrolMarker marker)=>marker!=null&&marker.DriverDied&&!marker.DriverBailed&&!marker.PlayerEntered&&!CrewReturn.Holds(marker.gameObject);   // never while its crew may still walk back
         internal static void BattleWreck(GameObject car)
         {
             var marker=car.GetComponent<PatrolMarker>();if(marker==null||marker.PlayerEntered)return;

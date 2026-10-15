@@ -52,6 +52,7 @@ namespace WildWasteland.Modules.Patrols
                 if (WarRig.PoiEncounter.Protected(m.gameObject)) continue;
                 if (WorldTraffic.Owns(m)) continue; // traffic unloads its own representations while retaining world records
                 if(WorldTraffic.IsBattleCar(m.gameObject))continue;
+                if (CrewReturn.Holds(m.gameObject)) { m.FarSeconds = 0f; continue; }   // its crew may still walk back to it
                 // a self-destructed chassis goes as soon as the player is far enough away to not see it (regardless of the timer and the cap)
                 if (m.Exploded)
                 {

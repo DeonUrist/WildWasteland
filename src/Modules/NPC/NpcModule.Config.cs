@@ -31,6 +31,7 @@ namespace WildWasteland.Modules.NPC
         internal static ConfigEntry<float> MoveFullSpeedAngle, MoveSlowestAngle, MoveSlowestSpeed, BlockedRatio, BlockedSeconds, BlockedMemory;
         internal static ConfigEntry<float> IdleReturnDelay, IdleRetrySeconds, IdleWalkRadius;
         internal static ConfigEntry<int> IdleReturnTries;
+        internal static ConfigEntry<float> FoughtMemorySeconds, TravelRunBeyond;      // (crew AI) the fought-player memory; Travel orders run beyond this distance
                 internal static ConfigEntry<float> NavBakeRange, NavCellSize, NavMargin, NavMaxStep, NavBakeBudgetMs, NavFieldSeconds;
         // (1.3.0) vision arcs by species group, small-scorpion burrowing
         internal static ConfigEntry<float> SightConeInsects, SightConeBeasts, SightConeBrutes, SightConeBosses, SightConeBurrowers;
@@ -267,6 +268,7 @@ namespace WildWasteland.Modules.NPC
             NoticeSeconds = H("Senses", "NoticeSeconds", 0.2f, new ConfigDescription("How long a target has to be in view before the NPC reacts, s (up close, within 15 m).", new AcceptableValueRange<float>(0f, 5f)));
             NoticeFar = H("Senses", "NoticeFar", 2f, new ConfigDescription("... and at the edge of its sight, s (in between it scales with the distance; up to twice as long in the dark).", new AcceptableValueRange<float>(0f, 10f)));
             LoseSeconds = H("Senses", "LoseSeconds", 5f, new ConfigDescription("How long a target can be out of view before the NPC counts it as lost and goes to where it last saw it, s (at least 5).", new AcceptableValueRange<float>(5f, 10f)));
+            FoughtMemorySeconds = H("Senses", "FoughtMemorySeconds", 90f, new ConfigDescription("A convoy crew member that fought the player (engaged him, was hit by him, heard his shots, or its car's crew fought him) knows where he is for this long after the last contact, s: losing sight does not drop him meanwhile (it follows his real position, out of caves too). Camp NPCs lose and search for him as usual. Convoy crews on foot target the player only after noticing him (sight, his shots, his hits) or while they remember him.", new AcceptableValueRange<float>(10f, 600f)));
             Guesses = H("Senses", "Guesses", 3, new ConfigDescription("How many times an NPC that lost you from sight goes to a new spot (a guess for humans, your real position for trackers) before it gives up and searches where it stands.", new AcceptableValueRange<int>(0, 10)));
             GuessRadius = H("Senses", "GuessRadius", 8f, new ConfigDescription("A human that reaches the spot it last saw you and finds nothing guesses where you went: this far off (m) the first time, twice that the second, three times the third (PursuitMin..Max guesses). Trackers follow your real position instead.", new AcceptableValueRange<float>(0f, 50f)));
             Trackers = H("Senses", "Trackers", "Hound,Grimhound,Pup,Nightwalker,Spider,Arachnid,Scorpion", "NPC types (name parts) that track you by smell: they go to where you really are when they lose sight, and know exactly where a hit came from.");
@@ -324,6 +326,7 @@ namespace WildWasteland.Modules.NPC
             BlockedRatio = H("Movement", "BlockedRatio", 0.33f, new ConfigDescription("A chasing NPC that covers less than this share of the distance it is driven (running in place, grinding along a wall) is blocked: it hops or steps back and picks another way.", new AcceptableValueRange<float>(0.05f, 0.9f)));
             BlockedSeconds = H("Movement", "BlockedSeconds", 0.5f, new ConfigDescription("Over how many seconds that share is measured.", new AcceptableValueRange<float>(0.2f, 3f)));
             BlockedMemory = H("Movement", "BlockedMemory", 1.5f, new ConfigDescription("For how many seconds the direction it was blocked in is not taken again (on a map route).", new AcceptableValueRange<float>(0f, 10f)));
+            TravelRunBeyond = H("Idle", "TravelRunBeyond", 25f, new ConfigDescription("NPCs sent somewhere by another module (convoy crews back to their car, foot patrols) run while farther than this from the goal and walk the rest, m. 0 = always run.", new AcceptableValueRange<float>(0f, 5000f)));
             IdleWalkRadius = H("Idle", "WalkRadius", 200f, new ConfigDescription("Camp walks only for NPCs within this distance of the camera, m.", new AcceptableValueRange<float>(20f, 1000f)));
             NavEnabled = BrainEnabled;
             NavLog = SensesLog = BrainLog = VerboseLog;

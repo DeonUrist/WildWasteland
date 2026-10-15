@@ -81,6 +81,7 @@ namespace WildWasteland.Modules.NPC
             public GameObject FlankObj; public Vector3 FlankPos; public bool Flanking;   // (1.1.0) a human goes to a ghost via a point to one side of it first
             public readonly Dictionary<int, float> Done = new Dictionary<int, float>();   // ghosts it reached (id -> the ghost's Moved then): never given again unless the ghost has newer news
             public readonly HashSet<int> Heard = new HashSet<int>();   // ghosts it already got from a friend's shout, and enemy shouters (instance ids, negated) it already went to: a shout never re-sends them
+            public GameObject Fought; public float FoughtUntil; public bool MemTrack, Crew;   // (crew AI) whom it fought (the player), until when it knows where he is, sight lost but kept by that memory
         }
 
         private static readonly Dictionary<int, Agent> _agents = new Dictionary<int, Agent>();
@@ -113,7 +114,7 @@ namespace WildWasteland.Modules.NPC
             SimpleBandits.Clear();
             foreach (var g in _ghosts) if (g.Obj != null) UnityEngine.Object.Destroy(g.Obj);
             foreach (var kv in _agents) if (kv.Value.FlankObj != null) UnityEngine.Object.Destroy(kv.Value.FlankObj);
-            _ghosts.Clear(); _agents.Clear(); _ignored.Clear(); _hpOf.Clear(); _prefabOf.Clear(); _presentTags.Clear(); _presentNext.Clear(); _maintKeys.Clear(); _maintPos = 0; _engineAbout.Clear(); _engineRbCar = null; _engineRb = null; _flashMissUntil = 0f; Nwh.Clear();
+            _ghosts.Clear(); _agents.Clear(); _ignored.Clear(); _remember.Clear(); _hpOf.Clear(); _prefabOf.Clear(); _presentTags.Clear(); _presentNext.Clear(); _maintKeys.Clear(); _maintPos = 0; _engineAbout.Clear(); _engineRbCar = null; _engineRb = null; _flashMissUntil = 0f; Nwh.Clear();
             _player = null; _playerHead = null; _playerCar = null; _flashlight = null; _inCarFsm = null; _grabFsm = null; _thrown = null;
             Storm.Reset();
             ResetSpiderLights();
@@ -138,6 +139,7 @@ namespace WildWasteland.Modules.NPC
                 _maintPos = 0; _maintPer = Mathf.Max(1, (_maintKeys.Count + 7) / 8); _presentNext.Clear();
                 if (now >= _nextIgnoredClear) { _nextIgnoredClear = now + 120f; _ignored.Clear(); }   // ids of parented / unfinished NPCs: re-evaluated, never kept for the whole session
                 if (_handover.Count > 0) { _dead.Clear(); foreach (var kv in _handover) if (now - kv.Value.Value > 30f) _dead.Add(kv.Key); foreach (var k in _dead) _handover.Remove(k); }
+                if (_remember.Count > 0) { _dead.Clear(); foreach (var kv in _remember) if (now >= kv.Value.Value || kv.Value.Key == null) _dead.Add(kv.Key); foreach (var k in _dead) _remember.Remove(k); }
                 for (int i = _ghosts.Count - 1; i >= 0; i--)
                 {
                     var g = _ghosts[i];
@@ -269,9 +271,7 @@ namespace WildWasteland.Modules.NPC
                 {
                     // noticing takes longer at a distance and in the dark: NoticeSeconds up close (<= 15 m), NoticeFar at the edge of sight,
                     // and up to twice that in full darkness
-                    float d = Mathf.Sqrt(bestD), range = Mathf.Max(16f, NpcModule.SightRange.Value);
-                    float need = Mathf.Lerp(Mathf.Max(0f, NpcModule.NoticeSeconds.Value), Mathf.Max(NpcModule.NoticeSeconds.Value, NpcModule.NoticeFar.Value), Mathf.Clamp01((d - 15f) / (range - 15f)));
-                    need *= 2f - LightLevel();
+                    float need = NoticeNeed(Mathf.Sqrt(bestD));
                     // (1.3.2) an ambusher lying in wait (a burrowed scorpion) watches you come and only engages inside its ambush distance
                     bool holding = false;
                     if (a.AmbushDist > 0f && (!a.Spider || SpiderDark(a))) { Vector3 fl = best.transform.position - a.T.position; fl.y = 0f; holding = fl.sqrMagnitude > a.AmbushDist * a.AmbushDist; }
@@ -286,10 +286,30 @@ namespace WildWasteland.Modules.NPC
             if ((a.State == State.Combat || a.State == State.Hide) && a.Target != null)
             {
                 bool seen = best == a.Target || Visible(a, eye, a.Target, a.Target == _player, InStormOf(a.Target));
-                if (seen) { a.UnseenSince = -1f; a.UnseenFor = 0f; a.LastSeen = a.Target.transform.position; a.LastSeenVel = VelocityOf(a.Target); }
+                if (seen) { a.UnseenSince = -1f; a.UnseenFor = 0f; a.LastSeen = a.Target.transform.position; a.LastSeenVel = VelocityOf(a.Target); if (a.Target == _player) { FoughtFor(a, _player, now, "fights him"); a.MemTrack = false; } }
                 else { if (a.UnseenSince < 0f) a.UnseenSince = now; a.UnseenFor = now - a.UnseenSince; }
-                if (!seen && a.UnseenFor >= Mathf.Max(0f, NpcModule.LoseSeconds.Value)) LoseTarget(a, now);
+                if (!seen && a.UnseenFor >= Mathf.Max(0f, NpcModule.LoseSeconds.Value))
+                {
+                    // (crew AI) it fought the player: out of sight he is not dropped while it remembers - it follows his real position (as a
+                    // tracker does), out of a cave too; the memory over, the usual loss (ghost where it last had him, guesses). Not a cave-web spider
+                    // (it keeps to its web's 3 m rule).
+                    if (a.Target == _player && !a.CaveWeb && (a.Crew || SimpleBandits.Has(a.Owner)) && a.Hostile.Contains("Player") && Remembers(a, _player, now))   // patrol crew only: camp NPCs keep their ghost/search on sight loss
+                    {
+                        a.LastSeen = _player.transform.position;
+                        if (!a.MemTrack) { a.MemTrack = true; if (NpcModule.SensesLog.Value) Log(a, SightLossText(a, _player) + " - kept: remembers fighting the player (" + (a.FoughtUntil - now).ToString("0") + " s more), follows his real position"); }
+                    }
+                    else { if (a.MemTrack && NpcModule.SensesLog.Value) Log(a, "its memory of fighting the player is over"); a.MemTrack = false; LoseTarget(a, now); }
+                }
             }
+        }
+
+        // noticing takes longer at a distance and in the dark: NoticeSeconds up close (<= 15 m), NoticeFar at the edge of sight, and up to
+        // twice that in full darkness
+        private static float NoticeNeed(float d)
+        {
+            float range = Mathf.Max(16f, NpcModule.SightRange.Value);
+            float need = Mathf.Lerp(Mathf.Max(0f, NpcModule.NoticeSeconds.Value), Mathf.Max(NpcModule.NoticeSeconds.Value, NpcModule.NoticeFar.Value), Mathf.Clamp01((d - 15f) / (range - 15f)));
+            return need * (2f - LightLevel());
         }
 
         private static bool InStormOf(GameObject go)
@@ -560,6 +580,7 @@ namespace WildWasteland.Modules.NPC
         private static void Engage(Agent a, GameObject target)
         {
             if (a.Spider) a.AmbushDist = 0f;
+            if (target != null && target == _player) FoughtFor(a, target, Time.time, "engages him");
             if ((a.State == State.Combat || a.State == State.Hide) && a.Target == target) return;
             if (a.State == State.Hide) { a.Target = target; a.UnseenFor = 0f; a.UnseenSince = -1f; return; }   // in cover: it knows its target, stays put
             Release(a);
@@ -582,11 +603,7 @@ namespace WildWasteland.Modules.NPC
         private static void LoseTarget(Agent a, float now)
         {
             var target = a.Target;
-            if (NpcModule.SensesLog.Value && target != null)
-            {
-                Vector3 flat = target.transform.position - a.T.position; flat.y = 0f;
-                if (NpcModule.SensesLog.Value) Log(a, "sight loss: " + a.SightMiss + ", target " + Name(target) + ", unseen " + a.UnseenFor.ToString("0.0", CultureInfo.InvariantCulture) + " s, distance " + flat.magnitude.ToString("0.0", CultureInfo.InvariantCulture) + " m, angle " + Vector3.Angle(a.T.forward, flat).ToString("0.0", CultureInfo.InvariantCulture) + " deg, half-cone " + (Mathf.Clamp(ConeOf(a), 10f, 360f) * 0.5f).ToString("0.0", CultureInfo.InvariantCulture) + " deg");
-            }
+            if (NpcModule.SensesLog.Value && target != null) Log(a, SightLossText(a, target));
             a.Target = null;
             var g = GetOrMake(Src.Vision, a.LastSeen, target, "last seen " + Name(target), 4f, 3f, now);
             g.Subject = target;
@@ -595,6 +612,88 @@ namespace WildWasteland.Modules.NPC
             a.Pursue = target;
             a.Pursuits = a.PursuitsTotal = Mathf.Max(0, NpcModule.Guesses.Value);
             if (NpcModule.SensesLog.Value) Log(a, "lost sight of " + Name(target) + ", goes where it was (ghost #" + g.Id + ", will " + (a.Tracker ? "track it" : "guess") + " " + a.Pursuits + " more time(s))");
+        }
+
+        private static string SightLossText(Agent a, GameObject target)
+        {
+            Vector3 flat = target.transform.position - a.T.position; flat.y = 0f;
+            return "sight loss: " + a.SightMiss + ", target " + Name(target) + ", unseen " + a.UnseenFor.ToString("0.0", CultureInfo.InvariantCulture) + " s, distance " + flat.magnitude.ToString("0.0", CultureInfo.InvariantCulture) + " m, angle " + Vector3.Angle(a.T.forward, flat).ToString("0.0", CultureInfo.InvariantCulture) + " deg, half-cone " + (Mathf.Clamp(ConeOf(a), 10f, 360f) * 0.5f).ToString("0.0", CultureInfo.InvariantCulture) + " deg";
+        }
+
+        // ---------- (crew AI) the fought-player memory ----------
+        // Set when an NPC engages the player, is hit by him, hears his shots while fighting him (convoy crews on foot: also when they hear
+        // them at all), or is told by Patrols (Services.Npc.Remember: its car's crew fought him); refreshed by every sight of him while
+        // fighting him. While it lasts ([Senses] FoughtMemorySeconds after the last contact) losing sight does not drop him.
+        internal static float FoughtSeconds { get { return Mathf.Clamp(NpcModule.FoughtMemorySeconds.Value, 10f, 600f); } }
+        private static void FoughtFor(Agent a, GameObject target, float now, string why) { FoughtUntil(a, target, now + FoughtSeconds, why); }
+        private static void FoughtUntil(Agent a, GameObject target, float until, string why)
+        {
+            if (target == null) return;
+            float now = Time.time;
+            bool fresh = !ReferenceEquals(a.Fought, target) || now >= a.FoughtUntil;
+            a.Fought = target;
+            if (fresh || until > a.FoughtUntil) a.FoughtUntil = until;
+            if (fresh && NpcModule.SensesLog.Value) Log(a, "remembers " + Name(target) + " for " + (a.FoughtUntil - now).ToString("0") + " s (" + why + ")");
+        }
+        private static bool Remembers(Agent a, GameObject target, float now)
+        {
+            return target != null && ReferenceEquals(a.Fought, target) && now < a.FoughtUntil && !(target == _player && target.layer == 5);   // God Mode: never "known"
+        }
+
+        // the player's shot within earshot: an NPC fighting him renews its memory; a convoy crew member on foot whose faction hunts him
+        // (Patrols' goal) now knows him (it looks at once and fights)
+        private static void HeardPlayerShot(Vector3 pos, float radius, float now)
+        {
+            if (_player == null || radius <= 0f) return;
+            float r2 = radius * radius;
+            foreach (var kv in _agents)
+            {
+                var a = kv.Value;
+                if (a.Owner == null || a.T.parent != null || a.Blown || (a.T.position - pos).sqrMagnitude > r2) continue;
+                if ((a.State == State.Combat || a.State == State.Hide) && a.Target == _player) { FoughtFor(a, _player, now, "hears his shots while fighting him"); continue; }
+                if (SimpleBandits.Fighting(a.Owner) && IsPlayer(SimpleBandits.Goal(a.Owner))) { FoughtFor(a, _player, now, "hears his shot"); a.NextLook = now; }
+            }
+        }
+
+        // Services.Npc.Remember: the NPC (registered now if it can be, else the moment it registers) remembers target until now + seconds
+        private static readonly Dictionary<int, KeyValuePair<GameObject, float>> _remember = new Dictionary<int, KeyValuePair<GameObject, float>>();
+        internal static void Remember(GameObject npc, GameObject target, float seconds)
+        {
+            if (npc == null || target == null) return;
+            FindPlayer();
+            if (IsPlayer(target) || (_playerCar != null && target.transform.root == _playerCar.transform.root)) target = _player;
+            else target = target.transform.root.gameObject;
+            if (target == null) return;
+            float until = Time.time + (seconds > 0f ? seconds : FoughtSeconds);
+            var a = Get(npc) ?? TryRegister(npc);
+            if (a == null) { _remember[npc.GetInstanceID()] = new KeyValuePair<GameObject, float>(target, until); return; }
+            a.Crew = true; FoughtUntil(a, target, until, "told by its crew");
+            if (SimpleBandits.Has(npc)) a.NextLook = Time.time;
+        }
+        private static void Recall(Agent a)
+        {
+            if (_remember.Count == 0) return;
+            int id = a.Owner.GetInstanceID();
+            KeyValuePair<GameObject, float> r;
+            if (!_remember.TryGetValue(id, out r)) return;
+            _remember.Remove(id);
+            if (r.Key != null && Time.time < r.Value) { a.Crew = true; FoughtUntil(a, r.Key, r.Value, "told by its crew"); if (SimpleBandits.Has(a.Owner)) a.NextLook = Time.time; }   // as Remember: it looks at once
+        }
+
+        // for Services.Npc.IsIdle: no target, no ghost to check, no search (an NPC the senses do not know is idle)
+        internal static bool IsIdle(GameObject npc)
+        {
+            if (npc == null) return false;
+            var a = Get(npc);
+            float now = Time.time;
+            if (a == null)      // not registered yet: idle unless it was told it fought the player (it takes him at its first look)
+            {
+                KeyValuePair<GameObject, float> r;
+                return !(_remember.Count > 0 && _remember.TryGetValue(npc.GetInstanceID(), out r) && r.Key != null && now < r.Value);
+            }
+            if (a.State != State.Idle || a.Target != null || a.Ghost != null) return false;
+            // a convoy crew member on foot that remembers fighting the player goes for him at its next look (SimpleLook): not idle in between
+            return !(_player != null && SimpleBandits.Fighting(npc) && Remembers(a, _player, now) && IsPlayer(SimpleBandits.Goal(npc)));
         }
 
         private static void Arrived(Agent a, float now)
@@ -923,6 +1022,7 @@ namespace WildWasteland.Modules.NPC
             if (player) LastPlayerShotAt = Time.time;
             if (!On) return;
             float radius = player ? PlayerShotRange(kind) : NpcShotRange(shooter, kind);
+            if (player) HeardPlayerShot(pos, radius, Time.time);
             string about = NpcModule.SensesLog.Value || NpcModule.ShowGhosts.Value ? (player ? "player" : Name(shooter)) + " " + kind.ToString().ToLowerInvariant() : "gunshot";
             // a shot is heard, not seen: the spot is 2-4 m off (merged per shooter within 1 s, so a burst makes one ghost)
             Vector2 off = UnityEngine.Random.insideUnitCircle.normalized * UnityEngine.Random.Range(2f, 4f);
@@ -1224,7 +1324,8 @@ namespace WildWasteland.Modules.NPC
             if(hit!=null&&IsPlayer(attacker)){var relation=CoyoteRelation();if(relation!=null&&relation.Fsm.Initialized)relation.SendEvent("FactionCoyotesEnemy");}
             var a = Get(victim.transform.root.gameObject);
             if (a == null) return;
-            if(SimpleBandits.Has(a.Owner))return; // Combat dismounts retain the player; seated crew runs no senses.
+            if (IsPlayer(attacker)) { FoughtFor(a, _player, Time.time, "hit by him"); if (SimpleBandits.Has(a.Owner)) a.NextLook = Time.time; }   // (crew AI)
+            if(SimpleBandits.Has(a.Owner))return; // Combat dismounts take the player through the memory (SimpleLook); seated crew runs no senses.
             a.AmbushDist = 0f;      // (1.3.2) a hit ends the ambush: it comes up and fights
             Brain.Hit(a.Owner);
             if (a.State == State.Combat || a.State == State.Hide || a.Blown) return;
@@ -1558,9 +1659,22 @@ namespace WildWasteland.Modules.NPC
             if (_ignored.Contains(id)) return null;
             a = Make(owner);
             if (a == null) { _ignored.Add(id); return null; }
-            _agents[id] = a;
-            Gungirl.Registered(owner);
+            Register(a);
+            return a;
+        }
+        private static void Register(Agent a)
+        {
+            _agents[a.Owner.GetInstanceID()] = a;
+            Gungirl.Registered(a.Owner);
             Handover(a);
+            Recall(a);
+        }
+        // (crew AI) Remember: registered now if its FSMs are up; never marked ignored (asked again when its Detection FSM first runs)
+        private static Agent TryRegister(GameObject owner)
+        {
+            if (!On || owner.transform.parent != null || _ignored.Contains(owner.GetInstanceID())) return null;
+            var a = Make(owner);
+            if (a != null) Register(a);
             return a;
         }
 
@@ -1765,7 +1879,7 @@ namespace WildWasteland.Modules.NPC
             _ghosts.Clear(); _agents.Clear();
             if (_ghostRoot != null) { UnityEngine.Object.Destroy(_ghostRoot.gameObject); _ghostRoot = null; }
             if (_voiceSrc != null) { UnityEngine.Object.Destroy(_voiceSrc.gameObject); _voiceSrc = null; }
-            _handover.Clear(); _thrown = null; _grabFsm = null; _grabState = null;
+            _handover.Clear(); _remember.Clear(); _thrown = null; _grabFsm = null; _grabState = null;
         }
 
         // (WW) floating origin: ghost / flank objects live under the DontDestroyOnLoad root the game does not move; positions are scene space

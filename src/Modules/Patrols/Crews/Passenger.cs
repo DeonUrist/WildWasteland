@@ -297,6 +297,8 @@ namespace WildWasteland.Modules.Patrols
             }
             if (_questFollower && Time.time < _questBlockedUntil) _canFire = false;
             bool inArc = _canFire;   // held for the interval (the aim itself still follows the target every frame)
+            // awareness handover at dismount (CrewReturn): this crew is engaging the player
+            if (inArc && _marker != null && !_questFollower && target != null) { var pl = PlayerRef.Player; if (pl != null && ReferenceEquals(target, pl.gameObject)) _marker.PlayerContactAt = Time.time; }
 
             if (_driverMode)
             {

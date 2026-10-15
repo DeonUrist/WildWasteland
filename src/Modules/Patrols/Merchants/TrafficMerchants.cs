@@ -12,7 +12,7 @@ namespace WildWasteland.Modules.Patrols
         {internal int Role;internal string Name,Faction,Type;internal RoadJob Incoming,Outgoing;internal TrafficVehicle[] Vehicles;}
         private readonly List<NearbyDeparture> _nearDepartures=new List<NearbyDeparture>();
         private float _nextMerchant;private PlayMakerFSM _hornFsm;private GameObject _hornCar;private bool _hornOn;
-        private int RoleCount(int role)=>_journeys.Count(j=>(j.merchant?2:j.convoy?1:0)==role)+_nearDepartures.Count(d=>d.Role==role)+(role==0&&_roamingDeparture!=null?1:0)+(role<2&&_departures.ContainsKey(role==1)?1:0);
+        private int RoleCount(int role)=>_journeys.Count(j=>!j.foot&&(j.merchant?2:j.convoy?1:0)==role)+_nearDepartures.Count(d=>d.Role==role)+(role==0&&_roamingDeparture!=null?1:0)+(role<2&&_departures.ContainsKey(role==1)?1:0);
         internal static bool MerchantTypeInUse(string type)
         {return MerchantHost.All.Any(h=>h!=null&&h.Data!=null&&MerchantCatalog.Selected(h.Data.types)==type)||(_instance!=null&&(_instance._journeys.Any(j=>j.merchant&&j.vehicles.Any(v=>MerchantCatalog.Selected(v.merchantTypes)==type))||_instance._nearDepartures.Any(d=>d.Role==2&&d.Type==type)));}
         internal static bool DebugDeparture(SpawnGroup group,int role)

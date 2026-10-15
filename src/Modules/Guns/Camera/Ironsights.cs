@@ -84,7 +84,7 @@ namespace WildWasteland.Modules.Guns
             if (!Aiming || ThirdPerson) { _target = _zoom = 1f; return; }
             else
             {
-                float wheel = Input.mouseScrollDelta.y;
+                float wheel = Services.Map != null && Services.Map.Open ? 0f : Input.mouseScrollDelta.y;   // the map zooms with the wheel
                 if (wheel != 0f)
                 {
                     _target = Mathf.Clamp(_target * Mathf.Pow(.82f, wheel), .25f, 1f);

@@ -27,7 +27,7 @@ namespace WildWasteland.Modules.NPC
     // Gait: humans have only idle / run / attack clips - "walking" is the run clip at half speed (2.5 m/s); full run when far from home.
     internal static class Idle
     {
-        private enum Leg { None, Home, ToPoint, Back, SearchOut, SearchBack, Investigate }
+        private enum Leg { None, Home, ToPoint, Back, SearchOut, SearchBack, Investigate, Travel }
 
         private sealed class Ctl
         {
@@ -48,7 +48,16 @@ namespace WildWasteland.Modules.NPC
             // (WW perf) think scale by camera distance (x1 / x2 / x4, as the brain's TickScale), the thinking state the timer belongs to
             // (0 none, 1 ghost walk, 2 search, 3 idle), the feeler fan's last answer and when to ask again, the next run-clip check
             public float Scale = 1f; public byte ThinkKind; public float NextFan, FanWant, FanOff, NextRunCheck;
+            public bool Follower; public Order Ord;     // (crew AI) driven by a quest follower system (never travels); the travel order of its Travel leg
         }
+
+        // (crew AI) Services.Npc.Travel: another module (Patrols: crews back to their car, foot patrols) sends an NPC to a scene point. Walked
+        // as the way home is (camp / cave map to the exit, then straight with the feeler fan; cars are obstacles), paused while the NPC has a
+        // target / ghost / search (the brain and the senses as usual) and resumed when it is idle again. State: 1 walking (or paused),
+        // 2 within Radius, 3 gave up (got nowhere ReturnTries times in a row) or nobody drives it (no senses agent for 5 s, a quest follower).
+        internal sealed class Order { public GameObject Npc; public Vector3 Point; public float Radius, Touched, Best = float.MaxValue; public int State = 1, Tries; }
+        private static readonly Dictionary<int, Order> _travel = new Dictionary<int, Order>();
+        private static bool _idleWas = true;
 
         private sealed class Spot { public Transform T; public bool Coyotes; }
 
@@ -57,7 +66,32 @@ namespace WildWasteland.Modules.NPC
         {
             Ctl c;
             if (npc != null && _ctl.TryGetValue(npc.GetInstanceID(), out c))
-            { if (enabled && !c.Excluded) Stop(c, true); c.Excluded = enabled; }
+            { if (enabled && !c.Excluded) Stop(c, true); c.Excluded = enabled; c.Follower = enabled; }
+        }
+
+        internal static void Travel(GameObject npc, Vector3? point, float radius)
+        {
+            if (npc == null) return;
+            int id = npc.GetInstanceID();
+            Ctl c;
+            if (!point.HasValue)
+            {
+                if (_travel.Remove(id) && _ctl.TryGetValue(id, out c) && c.Leg == Leg.Travel) Stop(c, true);
+                return;
+            }
+            Order o;
+            if (!_travel.TryGetValue(id, out o) || !ReferenceEquals(o.Npc, npc)) { o = new Order { Npc = npc }; _travel[id] = o; }
+            else if (o.State != 1 || Flat(o.Point - point.Value) > 4f) { o.Tries = 0; o.Best = float.MaxValue; }   // a new goal: tries count again
+            o.Point = point.Value; o.Radius = Mathf.Max(0.3f, radius); o.State = 1; o.Touched = Time.time;
+            if (NpcModule.BrainLog.Value) NpcModule.Log.LogInfo("Idle: " + npc.name + " sent to travel " + Flat(npc.transform.position - o.Point).ToString("0") + " m (arrive within " + o.Radius.ToString("0.0") + " m)");
+        }
+
+        internal static int TravelState(GameObject npc)
+        {
+            Order o;
+            if (npc == null || !_travel.TryGetValue(npc.GetInstanceID(), out o) || !ReferenceEquals(o.Npc, npc)) return 0;
+            if (o.State == 1 && (!Senses.On || Time.time - o.Touched > 5f)) return 3;      // nobody drives it (no senses agent, a quest follower, the senses off)
+            return o.State;
         }
         private static readonly Dictionary<int, Spot> _spawnOf = new Dictionary<int, Spot>();        // NPC instance id -> its spawn point
         private static readonly Dictionary<int, List<Spot>> _spots = new Dictionary<int, List<Spot>>();   // structure root id -> spawn points
@@ -73,13 +107,13 @@ namespace WildWasteland.Modules.NPC
 
         internal static bool On { get { return NpcModule.IdleEnabled != null && NpcModule.IdleEnabled.Value && Senses.On; } }
 
-        public static void OnSceneLoaded() { _ctl.Clear(); _spawnOf.Clear(); _spots.Clear(); _claimed.Clear(); }
+        public static void OnSceneLoaded() { _ctl.Clear(); _spawnOf.Clear(); _spots.Clear(); _claimed.Clear(); _travel.Clear(); }
 
         // (WW) module shutdown: every walk stops (idle clip, velocity zeroed) - the game's own idle again
         internal static void Shutdown()
         {
             foreach (var kv in _ctl) { var c = kv.Value; if (c.A != null && c.A.Owner != null) { try { Stop(c, true); } catch (Exception) { } } }
-            _ctl.Clear(); _claimed.Clear(); _spawnOf.Clear(); _spots.Clear();
+            _ctl.Clear(); _claimed.Clear(); _spawnOf.Clear(); _spots.Clear(); _travel.Clear();
         }
 
         // (WW) floating origin: homes, legs, patrol / search points are scene space
@@ -92,6 +126,7 @@ namespace WildWasteland.Modules.NPC
                 if (c.Points != null) for (int i = 0; i < c.Points.Count; i++) c.Points[i] += d;
                 if (c.SPts != null) for (int i = 0; i < c.SPts.Count; i++) c.SPts[i] += d;
             }
+            foreach (var kv in _travel) kv.Value.Point += d;      // (crew AI) travel goals are scene space too
         }
 
         internal static int Count { get { return _ctl.Count; } }
@@ -181,26 +216,34 @@ namespace WildWasteland.Modules.NPC
         }
 
         // ---------- per frame ----------
+        // (crew AI) the idle behaviour off ([Idle] EnableIdleBehavior): no camp logic, but travel orders and the convoy crews' run check go on
+        // (as long as the senses run)
         public static void Tick()
         {
-            if (!On) { if (_ctl.Count > 0) { foreach (var kv in _ctl) Stop(kv.Value, true); _ctl.Clear(); _claimed.Clear(); } return; }
+            if (!Senses.On) { if (_ctl.Count > 0) { foreach (var kv in _ctl) Stop(kv.Value, true); _ctl.Clear(); _claimed.Clear(); } _idleWas = true; return; }
+            bool idleOn = On;
+            if (!idleOn && _idleWas && _ctl.Count > 0) { foreach (var kv in _ctl) Stop(kv.Value, true); _ctl.Clear(); _claimed.Clear(); }
+            _idleWas = idleOn;
             float now = Time.time, dt = Time.deltaTime;
             if (dt <= 0f) return;
             _thinkCap = Mathf.CeilToInt(_thinkers * dt / ThinkEvery) + 1; _thinkers = 0; _thinksNow = 0;
             foreach (var a in Senses.AllAgents)
             {
                 if (a.Owner == null) continue;
-                if(SimpleBandits.Has(a.Owner))continue;
                 int id = a.Owner.GetInstanceID();
-                Ctl c;
-                if (!_ctl.TryGetValue(id, out c))
+                Order ord = null;
+                if (_travel.Count > 0 && _travel.TryGetValue(id, out ord) && !ReferenceEquals(ord.Npc, a.Owner)) ord = null;
+                bool simple = SimpleBandits.Has(a.Owner);
+                if (ord == null)
                 {
-                    c = new Ctl { A = a, Rb = a.Owner.GetComponent<Rigidbody>(), BusyAt = -1000f, Fresh = true, NextThink = now + (_stagger++ % 10) * 0.02f };   // never busy yet: no return delay after a load
-                    var anim = a.T.Find("Anim");
-                    c.Anim = anim != null ? anim.GetComponent<Animator>() : a.Owner.GetComponentInChildren<Animator>();
-                    _ctl[id] = c;
+                    if (simple) { SimpleIdle(a, id, now); continue; }     // convoy crews: no camp logic, only the run check (Idle walks them only with a travel order)
+                    if (!idleOn) continue;
                 }
-                if (c.Excluded) continue;
+                Ctl c;
+                if (!_ctl.TryGetValue(id, out c)) { c = Make(a, now); if (simple) c.NextAnimCheck = now + 2f; _ctl[id] = c; }
+                if (c.Excluded && (ord == null || c.Follower)) continue;
+                if (ord != null) ord.Touched = now;
+                else if (c.Leg == Leg.Travel) Stop(c, true);          // its order was cancelled
                 if (a.T.parent != null)        // seated in a car (Apocapatrol crews): not ours - no home lookup, no logic, no label
                 {
                     c.ThinkKind = 0;
@@ -215,6 +258,7 @@ namespace WildWasteland.Modules.NPC
                     c.InSearch = false; c.PendingBack = false; c.Inv = false;
                     continue;
                 }
+                if (ord != null && (simple || c.Excluded || !idleOn)) { TravelTick(c, ord, now, dt); continue; }   // only the travel (and the brain for the fight)
                 if (!c.Resolved && now >= c.NextResolve) { try { Resolve(c, now); } catch (Exception e) { NpcModule.Log.LogError("Idle: " + e); c.Excluded = true; continue; } if (c.Excluded) continue; }
                 bool searching = a.State == Senses.State.Search && a.Target == null && a.T.parent == null;
                 // (1.6.0) going to check a ghost: walked like the way home (camp map to its exit, then straight), the brain stands aside
@@ -267,7 +311,11 @@ namespace WildWasteland.Modules.NPC
                     c.ThinkKind = 0;
                     continue;
                 }
-                if (Due(c, now, 3))
+                if (ord != null)
+                {
+                    if (ord.State == 1 && Due(c, now, 4)) { try { TravelThink(c, ord, now); } catch (Exception e) { NpcModule.Log.LogError("Idle travel: " + e); Stop(c); ord.State = 3; } }
+                }
+                else if (Due(c, now, 3))
                 {
                     try { Think(c, now); } catch (Exception e) { NpcModule.Log.LogError("Idle: " + e); Stop(c); c.Excluded = true; }
                 }
@@ -298,6 +346,73 @@ namespace WildWasteland.Modules.NPC
                 }
                 foreach (var k in _dead) { _ctl.Remove(k); _spawnOf.Remove(k); }
             }
+            // (crew AI) orders of dead / removed NPCs go
+            if (_travel.Count > 0 && (Time.frameCount & 63) == 32)
+            {
+                _dead.Clear();
+                foreach (var kv in _travel) if (kv.Value.Npc == null) _dead.Add(kv.Key);
+                foreach (var k in _dead) _travel.Remove(k);
+            }
+        }
+
+        private static Ctl Make(Senses.Agent a, float now)
+        {
+            var c = new Ctl { A = a, Rb = a.Owner.GetComponent<Rigidbody>(), BusyAt = -1000f, Fresh = true, NextThink = now + (_stagger++ % 10) * 0.02f };   // never busy yet: no return delay after a load
+            var anim = a.T.Find("Anim");
+            c.Anim = anim != null ? anim.GetComponent<Animator>() : a.Owner.GetComponentInChildren<Animator>();
+            return c;
+        }
+
+        // (crew AI) a convoy crew member (simple convoy bandit) on foot with nothing to fight: nobody drives its body any more (the brain let
+        // go), so the game's Movement FSM left in Run would run it forward for good - the same check as an idle camp NPC's, twice a second
+        // (the first 2 s after it registers skipped: a jump off the car)
+        private static void SimpleIdle(Senses.Agent a, int id, float now)
+        {
+            if (a.T.parent != null || a.Blown || a.Target != null || a.Ghost != null || (a.DetectedVar != null && a.DetectedVar.Value != null)) return;
+            Ctl c;
+            if (!_ctl.TryGetValue(id, out c)) { c = Make(a, now); c.NextAnimCheck = now + 2f; _ctl[id] = c; }
+            if (c.Excluded) return;
+            if (c.Moving || c.Leg != Leg.None || c.Turning) Stop(c, true);       // a cancelled travel
+            if (now >= c.NextAnimCheck) { c.NextAnimCheck = now + 0.5f; RunInPlace(c); }
+        }
+
+        // (crew AI) an NPC with a travel order that Idle does not run otherwise (a convoy crew member, an NPC without camp behaviour, the idle
+        // behaviour off): it travels while idle; with a target / ghost / search the brain and the senses have it and the walk waits
+        private static void TravelTick(Ctl c, Order ord, float now, float dt)
+        {
+            var a = c.A;
+            bool idle = a.State == Senses.State.Idle && a.Target == null && a.Ghost == null && (a.DetectedVar == null || a.DetectedVar.Value == null);
+            if (!idle)
+            {
+                if (c.Leg != Leg.None || c.Moving || c.Turning) { Stop(c, false); if (NpcModule.BrainLog.Value) Log(c, "travel paused (" + a.State + ")"); }
+                c.ThinkKind = 0; c.WaitUntil = 0f;
+                return;
+            }
+            if (ord.State == 1 && Due(c, now, 4)) { try { TravelThink(c, ord, now); } catch (Exception e) { NpcModule.Log.LogError("Idle travel: " + e); Stop(c); ord.State = 3; } }
+            if (!c.Moving && !c.Turning && now >= c.NextAnimCheck) { c.NextAnimCheck = now + 0.5f; RunInPlace(c); }
+            if (c.Moving) Drive(c, dt, now);
+        }
+
+        private static void TravelThink(Ctl c, Order ord, float now)
+        {
+            Vector3 pos = c.A.T.position;
+            if (c.Leg == Leg.Travel)
+            {
+                if (Flat(ord.Point - c.Goal) > 0.25f)
+                {
+                    if (Flat(ord.Point - c.Goal) > 4f) { c.BestLeft = float.MaxValue; c.ProgressAt = now; }   // the goal moved: progress counts from here
+                    c.Goal = ord.Point;
+                }
+                LegThink(c, now, pos);
+                return;
+            }
+            if (c.Leg != Leg.None || c.Turning) Stop(c, false);     // a camp leg left over
+            if (now < c.WaitUntil) return;
+            float left = Flat(pos - ord.Point);
+            if (left <= ord.Radius) { ord.State = 2; c.Tries = 0; Log(c, "is there (travel, " + left.ToString("0.0") + " m)"); return; }
+            c.Ord = ord;
+            float runBeyond = Mathf.Max(0f, NpcModule.TravelRunBeyond.Value);
+            StartLeg(c, Leg.Travel, ord.Point, now, left > runBeyond ? 5f : 2.5f);
         }
 
         // a think is due for this NPC (and this frame still has room for it); kind = the thinking state it is in
@@ -397,7 +512,7 @@ namespace WildWasteland.Modules.NPC
         internal static bool Busy(GameObject owner)
         {
             Ctl c;
-            return owner != null && _ctl.TryGetValue(owner.GetInstanceID(), out c) && (c.InSearch || c.Leg == Leg.Home || c.Inv);
+            return owner != null && _ctl.TryGetValue(owner.GetInstanceID(), out c) && (c.InSearch || c.Leg == Leg.Home || c.Leg == Leg.Travel || c.Inv);
         }
 
         // (1.6.0) for the brain: Idle has this NPC's walk to a ghost (the brain switches to Mode Walk and stands aside)
@@ -441,6 +556,7 @@ namespace WildWasteland.Modules.NPC
         {
             c.Leg = leg; c.Goal = goal; c.LegStart = now; c.ProgressAt = now; c.BestLeft = float.MaxValue; c.Speed = speed;
             if (leg == Leg.Home) Log(c, "runs home (" + Flat(c.A.T.position - goal).ToString("0") + " m, try " + (c.Tries + 1) + ")");
+            else if (leg == Leg.Travel && NpcModule.BrainLog.Value) Log(c, (speed > 2.5f ? "runs" : "walks") + " to its travel goal (" + Flat(c.A.T.position - goal).ToString("0") + " m" + (c.Ord != null && c.Ord.Tries > 0 ? ", try " + (c.Ord.Tries + 1) : "") + ")");
             LegThink(c, now, c.A.T.position);
             if (c.Leg != Leg.None) Go(c, speed);
         }
@@ -448,9 +564,9 @@ namespace WildWasteland.Modules.NPC
         private static void LegThink(Ctl c, float now, Vector3 pos)
         {
             float left = Flat(pos - c.Goal);
-            bool inv = c.Leg == Leg.Investigate;
-            float arrive = c.Leg == Leg.Home ? 1.5f : c.Leg == Leg.SearchBack ? 1.2f : inv ? Brain.ArriveFor(c.A.Owner) : 0.8f;
-            if (left <= arrive && (inv || Mathf.Abs(pos.y - c.Goal.y) < 2.5f)) { Arrived(c, now); return; }   // a ghost: flat distance, as the brain judged it
+            bool inv = c.Leg == Leg.Investigate, travel = c.Leg == Leg.Travel;
+            float arrive = c.Leg == Leg.Home ? 1.5f : c.Leg == Leg.SearchBack ? 1.2f : inv ? Brain.ArriveFor(c.A.Owner) : travel ? (c.Ord != null ? c.Ord.Radius : 1.5f) : 0.8f;
+            if (left <= arrive && (inv || travel || Mathf.Abs(pos.y - c.Goal.y) < 2.5f)) { Arrived(c, now); return; }   // a ghost: flat distance, as the brain judged it; a travel goal: the caller's radius, flat
             Vector3 next = c.Goal; float pathLeft = left;
             bool onMap = Nav.On && Nav.Next(c.A.Owner, pos, c.Goal, out next, out pathLeft);
             if (onMap)
@@ -460,6 +576,7 @@ namespace WildWasteland.Modules.NPC
             }
             else { c.Steer = c.Goal; }
             if (c.Leg == Leg.Home && left <= 25f && c.Speed > 2.5f) Go(c, 2.5f);      // slows to a walk near home
+            else if (travel && c.Speed > 2.5f && left <= NpcModule.TravelRunBeyond.Value) Go(c, 2.5f);
             if (inv)
             {
                 // map path left and straight distance are two measures: each counts against its own best (switching between them is no
@@ -469,7 +586,7 @@ namespace WildWasteland.Modules.NPC
                 else { if (left > c.LastStraightLeft + 2f) c.BestStraight = left; c.LastStraightLeft = left; if (left < c.BestStraight - 0.5f) { c.BestStraight = left; c.ProgressAt = now; } }
             }
             else if (left < c.BestLeft - 0.5f) { c.BestLeft = left; c.ProgressAt = now; }
-            float patience = (c.Leg == Leg.Home || inv ? 2f : 1f) * c.Scale;      // (WW perf) thinks Scale x rarer far from the camera: as much patience in thinks
+            float patience = (c.Leg == Leg.Home || inv || travel ? 2f : 1f) * c.Scale;      // (WW perf) thinks Scale x rarer far from the camera: as much patience in thinks
             if (now - c.ProgressAt > patience) Failed(c, now);
         }
 
@@ -495,6 +612,7 @@ namespace WildWasteland.Modules.NPC
         {
             var leg = c.Leg;
             Stop(c);
+            if (leg == Leg.Travel) { if (c.Ord != null) { c.Ord.State = 2; c.Ord.Tries = 0; } Log(c, "is there (travel)"); return; }
             if (leg == Leg.Investigate) { c.InvFails = 0; bool flank = Senses.IsFlanking(c.A.Owner); Log(c, flank ? "is at its flank point" : "is at the ghost"); Senses.ArrivedAt(c.A.Owner); c.WaitUntil = flank ? now + 0.3f : c.WaitUntil; return; }   // the senses start the search (or a pursuit); after a flank point: the ghost itself
             if (leg == Leg.SearchOut) { c.SAtOrigin = false; c.WaitUntil = now + UnityEngine.Random.Range(2f, 4f); return; }   // the brain looks around
             if (leg == Leg.SearchBack) { c.SAtOrigin = true; c.WaitUntil = now + UnityEngine.Random.Range(1.5f, 3f); return; }
@@ -507,6 +625,20 @@ namespace WildWasteland.Modules.NPC
         {
             var leg = c.Leg;
             Stop(c);
+            if (leg == Leg.Travel)
+            {
+                var o = c.Ord;
+                if (o == null) return;
+                float left = Flat(c.A.T.position - o.Point);
+                if (left < o.Best - 10f) { o.Best = left; o.Tries = 0; }      // 10 m nearer than ever before: bumps on a long way don't add up
+                o.Tries++;
+                int max = Math.Max(1, NpcModule.IdleReturnTries.Value);
+                if (o.Tries >= max) { o.State = 3; Log(c, "gets nowhere on its travel after " + o.Tries + " tries, gives up (" + left.ToString("0") + " m left)"); return; }
+                Hop(c, now);
+                c.WaitUntil = now + 1f;
+                Log(c, "gets nowhere on its travel (try " + o.Tries + "/" + max + "), again");
+                return;
+            }
             if (leg == Leg.Investigate)
             {
                 c.InvFails++;
@@ -678,6 +810,7 @@ namespace WildWasteland.Modules.NPC
                     else if (!c.LastWasSearch && now - c.BusyAt < NpcModule.IdleReturnDelay.Value && Flat(a.T.position - c.Home) > 2.5f) { s = "IDLE - returns in " + (NpcModule.IdleReturnDelay.Value - (now - c.BusyAt)).ToString("0") + " s"; col = new Color(1f, 0.9f, 0.4f); }
                     else s = "IDLE at home" + (c.PointsState == 1 ? " (" + (c.Points != null ? c.Points.Count : 0) + " patrol pts)" : c.PointsState == -1 ? " (no map yet)" : "");
                 }
+                if (c.Leg == Leg.Travel) { s = "TRAVEL " + Flat(a.T.position - c.Goal).ToString("0") + " m" + (c.Ord != null && c.Ord.Tries > 0 ? " (try " + (c.Ord.Tries + 1) + ")" : ""); col = Color.cyan; }
                 if (s == null) continue;
                 Vector3 top = a.Col != null ? new Vector3(a.Col.bounds.center.x, a.Col.bounds.max.y, a.Col.bounds.center.z) : a.T.position + Vector3.up * 2f;
                 DebugOverlay.Label(top + Vector3.up * (c.InSearch ? 0.65f : 0.35f), s, col);   // the senses' own label (SEARCH ...) sits at +0.35

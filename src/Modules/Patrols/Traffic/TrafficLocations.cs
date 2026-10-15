@@ -26,6 +26,7 @@ namespace WildWasteland.Modules.Patrols
         internal static int Revision { get; private set; }
         private static bool _discoveryReady;
         internal static bool DiscoveryReady=>_discoveryReady;
+        internal static int DiscoveryLeft=>Scan.Count;   // diagnostics: transforms still queued for the deep camp scan
         internal static void Changed(){Revision++;}
         internal static int NearbyCount(Vector3 player,float range)
         {
@@ -129,13 +130,16 @@ namespace WildWasteland.Modules.Patrols
         internal static bool CoyoteCamp(string name)
         {if(!MaybeCoyote(name))return false;var n=TemplateExporter.PrefabName(name);return n=="Camp_10"||n=="Camp_15"||n=="Camp_16";}
         internal static bool PoiName(string name)
-        {return CoyoteCamp(name)||name.StartsWith("Building_",StringComparison.OrdinalIgnoreCase)||name.StartsWith("GasStation",StringComparison.OrdinalIgnoreCase)||name.StartsWith("Shop_",StringComparison.OrdinalIgnoreCase);}
+        // The game's real world locations (its Codex lists Camps / Buildings / Wrecks / Caves): Building_1-7, Wreck_1-8, Cave_1-7,
+        // Starter_Area and the Coyote camps (Camp_10/15/16). Raider camps are TrafficBase camps, not POIs. Every location is a target
+        // for roaming Coyote patrols and foot patrols. (The old Apocapatrol "GasStation"/"Shop_" prefixes matched nothing in this game.)
+        {return name!=null&&(CoyoteCamp(name)||Numbered(name,"Building_")||Numbered(name,"Wreck_")||Numbered(name,"Cave_")||name.StartsWith("Starter_Area",StringComparison.Ordinal));}
+        private static bool Numbered(string name,string prefix)
+        {return name.Length>prefix.Length&&name.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)&&char.IsDigit(name[prefix.Length]);}
         private static void RememberPoi(Transform root,string name)
         {
             if(!PoiName(name))return;string id=Identity(root);if(Points.ContainsKey(id)||!ExaminedPoints.Add(id))return;
             // Inspect a POI only on first discovery, in the existing incremental scene scan.
-            var nodes=root.GetComponentsInChildren<Transform>(true);
-            if(nodes.Any(t=>t.name.StartsWith("EnemySpawn_Scrapyard",StringComparison.OrdinalIgnoreCase)))return;
             Vector3 point=root.position;
             var box=new Bounds(point,Vector3.zero);foreach(var collider in root.GetComponentsInChildren<Collider>(true))if(!collider.isTrigger)box.Encapsulate(collider.bounds);
             point=box.center+root.forward*(Mathf.Max(box.extents.x,box.extents.z)+25f);

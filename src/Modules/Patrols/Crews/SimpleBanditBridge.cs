@@ -24,7 +24,7 @@ namespace WildWasteland.Modules.Patrols
             var npc=Core.Services.Npc;
             if(npc==null||who==null||!PatrolsModule.Running)return;
             try{npc.SetSimpleConvoyBanditState(who,PatrolsModule.SimpleConvoyBanditsAI.Value,who.GetComponent<SimpleBanditTag>()?.Combat==true);
-                var actor=who.GetComponent<TrafficActor>();if(actor!=null)Target(who,TrafficFactions.Target(actor.Faction,who.transform.position));}catch(Exception e){PatrolsModule.Verbose("Simple bandit adapter: "+e.Message);}
+                var actor=who.GetComponent<TrafficActor>();if(actor!=null)Target(who,TrafficFactions.FootTarget(actor.Faction,who.transform.position));}catch(Exception e){PatrolsModule.Verbose("Simple bandit adapter: "+e.Message);}
         }
         internal static void RefreshAll(){foreach(var tag in Tags)if(tag!=null)Apply(tag.gameObject);}
         internal static void Target(GameObject npc,GameObject target)

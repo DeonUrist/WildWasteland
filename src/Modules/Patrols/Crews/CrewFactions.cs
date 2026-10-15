@@ -6,6 +6,10 @@ namespace WildWasteland.Modules.Patrols
     internal static class CrewFactions
     {
         internal static readonly string[] Coyotes={"Bodyguard","Bolter","Gunnar","Lugger","Mechanic","Merchant","Organic_Mechanic","Pistoleer","Pup"};
+        // foot-patrol travelers: every fighting NPC type of the faction as offered by the patrol editor (Coyote shop keepers excluded)
+        internal static readonly string[] ScrapyardTravelers={"Boltjaw","Flexa","Gungirl","Shoota","Lugnut","Scraffa","Scrud","Spanna","Sprokka"};
+        internal static readonly string[] CoyoteTravelers={"Bodyguard","Bolter","Gunnar","Lugger","Pistoleer","Pup"};
+        internal static string[] Travelers(string faction)=>TrafficFactions.Normalize(faction)=="Coyotes"?CoyoteTravelers:ScrapyardTravelers;
         internal static bool Empty(string person)=>string.IsNullOrWhiteSpace(person)||person=="None";
         internal static string Of(string person)=>Coyotes.Contains((person??"").Trim(),StringComparer.OrdinalIgnoreCase)?"Coyotes":"Scrapyard";
         internal static bool Allowed(string person,string faction)=>Empty(person)||Of(person)==TrafficFactions.Normalize(faction);

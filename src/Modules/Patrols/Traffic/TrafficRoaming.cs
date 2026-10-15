@@ -11,7 +11,7 @@ namespace WildWasteland.Modules.Patrols
         private int RoamingCap=>Convoy.HasTrafficFaction("Coyotes")?Mathf.Min(2,Mathf.CeilToInt(PatrolsModule.MaxPatrols.Value/2f)):0;
         private void PopulateRoaming(Vector3 player)
         {
-            if(_journeys.Count(j=>j.roaming)>=RoamingCap||_journeys.Count(j=>!j.merchant&&!j.convoy)+_nearDepartures.Count(d=>d.Role==0)>=PatrolsModule.MaxPatrols.Value||_journeys.Count>=PatrolsModule.TrafficMaxGroups.Value)
+            if(_journeys.Count(j=>j.roaming)>=RoamingCap||_journeys.Count(j=>!j.merchant&&!j.convoy&&!j.foot)+_nearDepartures.Count(d=>d.Role==0)>=PatrolsModule.MaxPatrols.Value||_journeys.Count>=PatrolsModule.TrafficMaxGroups.Value)
             {_roamingDeparture=null;return;}
             if(_roamingDeparture!=null)
             {

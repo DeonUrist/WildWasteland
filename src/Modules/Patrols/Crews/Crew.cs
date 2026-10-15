@@ -55,6 +55,41 @@ namespace WildWasteland.Modules.Patrols
         // the builds do not pile up on one frame); the driver sits with the engine running until then.
         internal bool Hold;
         internal bool MerchantWaiting;
+        // CrewReturn: the dismounted crew's membership record (null = none) and its boarding phase, during which the crew logic is
+        // suspended (a live driver brakes, nobody bails / takes over) until everyone is seated again or the regroup ends.
+        internal CrewReturn.Group Regroup;
+        internal bool Regrouping;
+        private float _nextRegroup = -1f;
+        private float _lastDriverHealth = -1f, _lastPaxHealth = -1f;   // player-hit detection for the awareness handover
+        internal bool OutOfFuel { get { return _outOfFuel; } }
+        internal bool DriverSeatedAlive { get { return !_dead && !_done && DriverAlive(); } }
+        internal bool Driving { get { return _driving && !_dead; } }
+
+        // CrewReturn: a member is about to be seated as the new driver; Crew starts over like a promoted passenger (FinishPromote)
+        internal void PrepareReboard()
+        {
+            if (_pilot != null) { _pilot.Detach(); _pilot = null; }
+            if (_ctl != null && _ctl.Taken) _ctl.Release();
+            _dead = _stuck = _done = _driving = _promoting = _paxDecided = _paxBails = _doorOpened = _vacated = _outOfFuel = false;
+            _rolling = _deadFor = _doorWait = _dryFor = 0f; _eject = null; _revived = false;
+            _delayOverride = PatrolsModule.TakeoverSeconds;
+        }
+        // the new driver could not be seated: an empty car again
+        internal void MarkVacant() { _dead = true; _done = true; _driving = false; _driver = null; _health = null; _healthVar = null; SeatLocked(false); }
+        // every living member is aboard (or the regroup gave up on the rest): the car carries on
+        internal void FinishReboard(bool newDriver)
+        {
+            Regrouping = false; Release();
+            if (newDriver) { _seated = 0f; Revive(); }
+        }
+        private void HitCheck()
+        {
+            var mk = Marker; if (mk == null) return;
+            float d = _healthVar != null ? _healthVar.Value : -1f, p = mk.PassengerHealthVar != null ? mk.PassengerHealthVar.Value : -1f;
+            if (((d >= 0f && _lastDriverHealth >= 0f && d < _lastDriverHealth - 0.01f) || (p >= 0f && _lastPaxHealth >= 0f && p < _lastPaxHealth - 0.01f))
+                && PlayerRef.Player != null && ReferenceEquals(mk.FactionTarget, PlayerRef.Player.gameObject)) mk.PlayerContactAt = Time.time;
+            _lastDriverHealth = d; _lastPaxHealth = p;
+        }
 
         internal void WaitForMerchant(bool waiting)
         {
@@ -277,6 +312,14 @@ namespace WildWasteland.Modules.Patrols
         { if (!PatrolsModule.Running) return;
             if (_car == null) { Destroy(this); return; }
             if (Time.timeScale <= 0f) return;
+            if (Regroup != null && Time.time >= _nextRegroup)
+            {
+                // 2 Hz with a per-car random phase; next += interval (re-phased after a gap)
+                _nextRegroup = _nextRegroup < 0f || Time.time - _nextRegroup > 1f ? Time.time + UnityEngine.Random.Range(0.25f, 0.5f) : _nextRegroup + 0.5f;
+                CrewReturn.Tick(this);
+                if (_car == null) return;
+            }
+            if (Regrouping) { if (Time.time >= _nextGuard) { _nextGuard = Time.time + 0.5f; MuteAi(); } return; }
             if(Marker?.SetupOnly==true){Hold=true;if(!_dead&&!_done&&!DriverAlive())OnDriverDied();if(Time.time>=_nextGuard){_nextGuard=Time.time+0.5f;MuteAi();Crew.MuteAi(Marker.Passenger);}return;}
             if (Time.time >= _nextIgnore)
             {
@@ -298,7 +341,7 @@ namespace WildWasteland.Modules.Patrols
             if (!_dead)
             {
                 if (!DriverAlive()) { OnDriverDied(); return; }
-                if (Time.time >= _nextGuard) { _nextGuard = Time.time + 0.5f; MuteAi(); }
+                if (Time.time >= _nextGuard) { _nextGuard = Time.time + 0.5f; MuteAi(); HitCheck(); }
                 _seated += Time.deltaTime;
                 if (MerchantWaiting) return;
                 float delay = _delayOverride >= 0f ? _delayOverride : 0f;
@@ -364,6 +407,7 @@ namespace WildWasteland.Modules.Patrols
         private void FixedUpdate()
         { if (!PatrolsModule.Running) return;
             if (_car == null || _done || Time.timeScale <= 0f || Marker?.SetupOnly==true) return;
+            if (Regrouping) { if (!_dead && _driving) Nwh.SetInput(_car, 0f, 0f, 1f); return; }   // waiting for the crew to get back in
             if (!_dead)
             {
                 if (MerchantWaiting) { Nwh.SetInput(_car, 0f, 0f, 1f); Nwh.SetHandbrake(_car, 1f); return; }
@@ -461,6 +505,8 @@ namespace WildWasteland.Modules.Patrols
             if (UnityEngine.Random.Range(0f, 100f) >= PatrolsModule.StuckBailChance.Value) return false;
             var marker = Marker;
             PatrolsModule.Verbose("Crew: stuck for good, the crew bails out (" + PatrolsModule.StuckBailChance.Value + " % roll)");
+            if (marker != null) marker.StuckBails++;
+            CrewReturn.Expect(this, _car, marker);   // before the Released phase is visible to world traffic (the bail-out follows the doors)
             if (_pilot != null) { _pilot.Detach(); _pilot = null; }
             Nwh.SetInput(_car, 0f, 0f, 0f);
             if (_ctl != null && _ctl.Taken) _ctl.Release();
@@ -526,6 +572,7 @@ namespace WildWasteland.Modules.Patrols
         private void OnDriverDied()
         {
             var marker=Marker;
+            if(marker!=null&&PlayerRef.Player!=null&&ReferenceEquals(marker.FactionTarget,PlayerRef.Player.gameObject))marker.PlayerContactAt=Time.time;
             if(marker!=null&&!marker.DriverBailed)marker.DriverDied=(_healthVar!=null&&_healthVar.Value<=0f)||(_driver!=null&&Patrol.GetHealth(_driver)==0f);
             _dead = true;
             SeatLocked(false);                 // the player may take the car from now on
@@ -556,6 +603,7 @@ namespace WildWasteland.Modules.Patrols
 
         private void OnDestroy()
         {
+            if (Regroup != null) { var g = Regroup; Regroup = null; CrewReturn.CarLost(g); }
             if (_pilot != null) { _pilot.Detach(); _pilot = null; }
         }
 

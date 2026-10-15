@@ -116,7 +116,7 @@ namespace WildWasteland.Modules.Patrols
             for(int a=0;a<_journeys.Count;a++)for(int b=a+1;b<_journeys.Count;b++)
             {
                 var left=_journeys[a];var right=_journeys[b];
-                if(left.merchant||right.merchant||left.arrived||right.arrived||!string.IsNullOrEmpty(left.battle)||!string.IsNullOrEmpty(right.battle)||!TrafficFactions.Opposed(left.faction,right.faction)
+                if(left.merchant||right.merchant||left.foot||right.foot||left.arrived||right.arrived||!string.IsNullOrEmpty(left.battle)||!string.IsNullOrEmpty(right.battle)||!TrafficFactions.Opposed(left.faction,right.faction)
                     ||TrafficLocations.FlatDistance(left.position,right.position)>120f)continue;
                 if((_live.TryGetValue(left.id,out var ll)&&ll.Building)||(_live.TryGetValue(right.id,out var rl)&&rl.Building))continue;
                 BeginBattle(left,right);return;

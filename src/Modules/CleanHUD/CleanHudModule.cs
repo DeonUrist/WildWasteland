@@ -130,9 +130,11 @@ namespace WildWasteland.Modules.CleanHUD
             Scheduler.Sliced(this, "Scene key discovery", 500, SceneCache.Step);
             Scheduler.Sliced(this, "Weapon icons", 500, Assets.RenderStep);
             Scheduler.Interval(this, "Layout reload", 2f, PollLayout);
+            Scheduler.EveryFrame(this, "Inventory window", InventoryStyle.Tick, Phase.LateUpdateLast);
             Scheduler.Interval(this, "Location markers", .5f, LocationMarkers.Tick);
             Scheduler.Interval(this, "Quest map lookup", 1f, _questMap.FindMap);
             Scheduler.EveryFrame(this, "Quest map markers", _questMap.Tick, Phase.LateUpdateLast);
+            Scheduler.Gui(this, "Player map marker", _questMap.DrawPlayer, _questMap.PlayerShown);
             Scheduler.Interval(this, "Map fog exploration", .2f, MapFog.Paint);
             Scheduler.EveryFrame(this, "Dialogue window", TalkDialogue.Tick, Phase.LateUpdateLast);
             Scheduler.EveryFrame(this, "Quest journal", QuestJournal.Tick, Phase.LateUpdateLast);
@@ -189,18 +191,20 @@ namespace WildWasteland.Modules.CleanHUD
         }
         public override void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
+            InventoryStyle.Restore();
             LocationMarkers.Begin(false);
             if (_questMap != null) _questMap.SceneLoaded(); TalkDialogue.Hide(); QuestJournal.Hide();
             Release(); _menu.Teardown(); SceneCache.Reset(); MessageHook.Clear(); Bindings.Clear(); Assets.SceneLoaded();
             _loadingScreen.SceneLoaded();
             _retry = 0; _attach.RunNow();
         }
-        public override void OnLoadBegin(string slot) { LocationMarkers.Begin(false); MapFog.Reset(); QuestJournal.Hide(); _loadingScreen.Begin(); Release(); Bindings.Clear(); MessageHook.Clear(); Assets.SceneLoaded(); }
+        public override void OnLoadBegin(string slot) { InventoryStyle.Restore(); LocationMarkers.Begin(false); MapFog.Reset(); QuestJournal.Hide(); _loadingScreen.Begin(); Release(); Bindings.Clear(); MessageHook.Clear(); Assets.SceneLoaded(); }
         public override void OnSaveEnd(string slot) { LocationMarkers.SaveEnded(slot); }
         public override void OnOriginShift(Vector3 delta) { MapFog.OriginShifted(); }
         public override void OnWorldReady() { LocationMarkers.WorldReady(SaveBus.Slot); MapFog.WorldReady(SaveBus.Slot); SceneCache.Reset(); SceneCache.BeginKeys(); _attach.RunNow(); }
         public override void Shutdown()
         {
+            InventoryStyle.Restore();
             Running = false; Release();
             Scheduler.StopCoroutine(_updateCheck); _updateCheck = null;
             ChaseCameraHud.Clear();

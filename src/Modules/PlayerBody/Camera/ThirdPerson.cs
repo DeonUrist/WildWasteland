@@ -200,6 +200,7 @@ namespace WildWasteland.Modules.PlayerBody
             if (!On || Peek || Game.Paused) { Save(); return; }
             float w = 0f;
             try { w = Input.mouseScrollDelta.y; } catch (System.Exception) { }
+            if (WildWasteland.Core.Services.Map != null && WildWasteland.Core.Services.Map.Open) w = 0f;   // the map zooms with the wheel
             bool car = Game.InCar;
             if (w != 0f && !car)
             {
