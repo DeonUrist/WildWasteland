@@ -310,6 +310,8 @@ namespace WildWasteland.Modules.CleanHUD
         private readonly Dictionary<CanvasGroup, GroupState> _original = new Dictionary<CanvasGroup, GroupState>();
         private readonly Dictionary<Transform, CanvasGroup> _hiddenGroups = new Dictionary<Transform, CanvasGroup>();
         private Button _modsButton;
+        private Button _languageButton;
+        private bool _languageShown;
         private float _nextModsScan;
         private static readonly string[] TitleHidden = { "Canvas_MM/MainMenu", "Canvas_MM/Game Name", "Canvas_MM/EnterSeedText", "Canvas_MM/MusicText", "Canvas_MM/Version_text", "Canvas_MM/row_bg", "Canvas_MM/LoadingText" };
         private static readonly string[] PauseHidden = { "MainMenu_Canvas/MainMenu", "MainMenu_Canvas/row_bg" };
@@ -441,6 +443,7 @@ namespace WildWasteland.Modules.CleanHUD
             _root = null; _main = _sub = _modal = _status = null; _sound = null; _screen = "main"; _seedEdit = false; _vanillaWatch = null;
             _capRow = null; _capBlock = null; _keyView = _keyContent = _keyThumb = null; _keyHint = null; _warnText = null; _warnChecked = false;
             _modsButton = null; _nextModsScan = 0; _nextFrame.Clear(); _later.Clear(); BlockCancelFrame = -1;
+            _languageButton = null; _languageShown = false;
             _updateButton = _discordButton = _githubButton = null;
         }
 
@@ -531,6 +534,17 @@ namespace WildWasteland.Modules.CleanHUD
                 if (tx != null && tx.text != null && string.Equals(tx.text.Trim(), "MODS", StringComparison.OrdinalIgnoreCase)) { _modsButton = b; return b; }
             }
             return null;
+        }
+
+        private Button FindLanguageButton()
+        {
+            if (_van == null) return null;
+            if (_languageButton == null)
+            {
+                var t = _van.transform.Find("ApocaLanguage_Button");
+                if (t != null) _languageButton = t.GetComponent<Button>();
+            }
+            return _languageButton != null && _languageButton.isActiveAndEnabled ? _languageButton : null;
         }
 
         // ---------------------------------------------------------------- UI building helpers
@@ -699,6 +713,7 @@ namespace WildWasteland.Modules.CleanHUD
             _main = R(_rootRt, "main", 0, 0, 1920, 1080);
             const float X = 120, Y = 320, W = 500, RH = 64;
             var rows = new List<KeyValuePair<string, Action>>();
+            _languageShown = FindLanguageButton() != null;
             if (_ctx == Ctx.Title)
             {
                 rows.Add(new KeyValuePair<string, Action>("CONTINUE", ContinueLatest));
@@ -707,6 +722,7 @@ namespace WildWasteland.Modules.CleanHUD
                 rows.Add(new KeyValuePair<string, Action>("LOAD GAME", () => ShowSlots(true)));
                 rows.Add(new KeyValuePair<string, Action>("SETTINGS", ShowSettings));
                 rows.Add(new KeyValuePair<string, Action>("MODS", OpenMods));
+                if (_languageShown) rows.Add(new KeyValuePair<string, Action>("LANGUAGE", OpenLanguage));
                 rows.Add(new KeyValuePair<string, Action>("QUIT", () => Confirm("QUIT THE GAME?", () => Click("Canvas_MM/MainMenu/Quit"))));
             }
             else
@@ -718,6 +734,7 @@ namespace WildWasteland.Modules.CleanHUD
                 rows.Add(new KeyValuePair<string, Action>("TUTORIAL", () => Click("MainMenu_Canvas/MainMenu/Tutorial")));
                 rows.Add(new KeyValuePair<string, Action>("CREDITS", () => Click("MainMenu_Canvas/MainMenu/Credits")));
                 rows.Add(new KeyValuePair<string, Action>("MODS", OpenMods));
+                if (_languageShown) rows.Add(new KeyValuePair<string, Action>("LANGUAGE", OpenLanguage));
                 rows.Add(new KeyValuePair<string, Action>("QUIT TO MENU", () => Confirm("QUIT TO MAIN MENU?", QuitToMenu)));
             }
             bool mods = FindModsButton() != null; _modsShown = mods;
@@ -748,9 +765,12 @@ namespace WildWasteland.Modules.CleanHUD
 
         private void RefreshLabels()
         {
-            if (_screen == "main" && _modal == null && !_seedEdit && _main != null && (FindModsButton() != null) != _modsShown)
+            var language = FindLanguageButton();
+            if (language != null) HideGo(language.transform);
+            if (_rootRt != null) HideGo(_rootRt.Find("ApocaLanguage_Button"));
+            if (_screen == "main" && _modal == null && !_seedEdit && _main != null && ((FindModsButton() != null) != _modsShown || (language != null) != _languageShown))
             {
-                // Apocasetter adds its MODS button a moment after the menu appears
+                // Optional mods add their buttons a moment after the menu appears
                 UnityEngine.Object.Destroy(_main.gameObject); BuildMain(); _nextFrame.Add(() => SelectFirst(_main)); return;
             }
             if (_warnText != null)
@@ -802,6 +822,22 @@ namespace WildWasteland.Modules.CleanHUD
         {
             var b = FindModsButton();
             if (b != null) b.onClick.Invoke();
+        }
+
+        private void OpenLanguage()
+        {
+            var b = FindLanguageButton();
+            if (b == null) return;
+            b.onClick.Invoke();
+            // Keep the source's fonts and selection callbacks, above our menu background.
+            for (int i = 0; i < _van.transform.childCount; i++)
+            {
+                var t = _van.transform.GetChild(i);
+                if (t == b.transform || !t.name.StartsWith("ApocaLanguage_", StringComparison.Ordinal)) continue;
+                var c = t.GetComponent<Canvas>() ?? t.gameObject.AddComponent<Canvas>();
+                c.overrideSorting = true; c.sortingOrder = _root.GetComponent<Canvas>().sortingOrder + 1;
+                if (t.GetComponent<GraphicRaycaster>() == null) t.gameObject.AddComponent<GraphicRaycaster>();
+            }
         }
 
         private void Resume()
