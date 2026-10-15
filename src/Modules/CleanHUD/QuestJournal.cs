@@ -34,7 +34,7 @@ namespace WildWasteland.Modules.CleanHUD
         internal static void Install(CleanHudModule owner)
         {
             Clear(); PluginInfo info;
-            if (!Chainloader.PluginInfos.TryGetValue("local.apocalypterquests", out info) || ReferenceEquals(info.Instance, null) || info.Metadata.Version != new Version(1, 8, 0)) return;
+            if (!Chainloader.PluginInfos.TryGetValue("local.apocalypterquests", out info) || ReferenceEquals(info.Instance, null)) return;
             var type = info.Instance.GetType();
             _ready = Get<bool>(type, "ready"); _open = Get<bool>(type, "showLog"); _text = Get<string>(type, "logText");
             _book = Get<object>(type, "book"); _done = Get<int>(type.Assembly.GetType("ApocalypterQuests.QuestBook", true), "TotalDone");

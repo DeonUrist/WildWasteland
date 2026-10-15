@@ -87,7 +87,7 @@ namespace WildWasteland.Modules.Guns
                 float wheel = Services.Map != null && Services.Map.Open ? 0f : Input.mouseScrollDelta.y;   // the map zooms with the wheel
                 if (wheel != 0f)
                 {
-                    _target = Mathf.Clamp(_target * Mathf.Pow(.82f, wheel), .25f, 1f);
+                    _target = Mathf.Clamp(_target * Mathf.Pow(.82f, wheel), 1f / 3f, 1f);
                     Log.Info("[Guns] Ironsight zoom target: " + (1f / _target).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + "x");
                 }
             }

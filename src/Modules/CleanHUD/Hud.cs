@@ -540,6 +540,10 @@ namespace WildWasteland.Modules.CleanHUD
             if (!visible) { ChaseCameraHud.TraceState(_rpm, false); if (_wasVisible) _src.Restore(); _wasVisible = false; return; }
             _wasVisible = true;
             _src.RefreshHiddenIfNeeded();
+            bool panels = !Binoculars.Raised;
+            if (_groups["vitals"].gameObject.activeSelf != panels) _groups["vitals"].gameObject.SetActive(panels);
+            if (_groups["weapon"].gameObject.activeSelf != panels) _groups["weapon"].gameObject.SetActive(panels);
+            if (_groups["slots"].gameObject.activeSelf != panels) _groups["slots"].gameObject.SetActive(panels);
             var l = _layoutFile.Current;
             bool needs = CleanHudModule.ShowNeeds.Value, nums = CleanHudModule.ShowHealthNumbers.Value; float sc = CleanHudModule.Scale.Value;
             if (_appliedRevision != _layoutFile.Revision || needs != _needsOn || nums != _numbersOn || !Mathf.Approximately(sc, _scaleOn))

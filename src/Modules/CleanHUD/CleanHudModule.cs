@@ -19,10 +19,10 @@ namespace WildWasteland.Modules.CleanHUD
         internal static ConfigEntry<float> Scale;
         internal static ConfigEntry<bool> ShowConvoys, ShowLocations;
         internal static ConfigEntry<bool> AmbiguousPatrols, AmbiguousLocations;
-        internal static ConfigEntry<bool> ShowCompass, MapEnabled;
-        internal static ConfigEntry<MapDetail> MapMarkers, MapRoutes;
-        internal static ConfigEntry<bool> FogOfWar, MapTrafficMarkers;
-        internal static ConfigEntry<float> FogRadius, FogEdge, FogOpacity;
+        internal static ConfigEntry<bool> ShowCompass, MapEnabled, DrivingHudOnlyThirdPerson;
+        internal static ConfigEntry<MapDetail> MapMarkers, MapRoutes, MapTrafficMarkers;
+        internal static ConfigEntry<bool> FogOfWar;
+        internal static ConfigEntry<float> FogRadius, FogEdge, FogOpacity, BinocularZoom;
         internal static LayoutFile Layout;
         private Hud _hud;
         private Menu _menu;
@@ -47,11 +47,19 @@ namespace WildWasteland.Modules.CleanHUD
             ShowConvoys = cfg.Player("HUD", "ShowConvoys", true, "Compass icons and distances for vehicle groups: merchants yellow, Coyotes green, patrols red and convoys orange.");
             ShowLocations = cfg.Player("HUD", "ShowLocations", true, "Compass icons and distances for native locations within 1 km.");
             AmbiguousPatrols = cfg.Player("HUD", "AmbiguousPatrols", true, "Show all compass vehicle groups with white vehicle icons, keeping their distances.");
-            AmbiguousLocations = cfg.Player("HUD", "AmbiguousLocations", true, "Show undiscovered compass locations as neutral question marks. Approaching within 100 m remembers their real icons and colors. Quest flags are unchanged.");
+            AmbiguousLocations = cfg.Player("HUD", "AmbiguousLocations", true, "Show undiscovered compass locations as neutral question marks. Approaching within 100 m or spotting through binoculars remembers their real icons and colors. Quest flags are unchanged.");
             ShowCompass = cfg.Player("HUD", "Compass", true, "Show the compass, including its direction strip and all markers.");
+            DrivingHudOnlyThirdPerson = cfg.Player("HUD", "DrivingHudOnlyThirdPerson", true, "Show the gear/RPM/speed HUD only while driving in third person. Off allows either camera view; the source HUD enable switch still applies.");
             MapEnabled = cfg.Player("Map", "Enabled", true, "Enable the native debug map on the game's Map key.");
-            MapMarkers = cfg.Player("Map", "Markers", MapDetail.Ambiguous, "Off hides map markers; Ambiguous shows question marks until locations are discovered within 100 m; On shows their icons and colors. Discoveries are saved. Map icons have no name labels.");
-            MapTrafficMarkers = cfg.Player("Map", "TrafficMarkers", true, "World traffic markers: the moving dots and names of patrols, convoys, merchants and foot travelers. They respect the fog of war; with Markers Ambiguous they show as gray Unknown.");
+            MapMarkers = cfg.Player("Map", "Markers", MapDetail.Ambiguous, "Off hides map markers; Ambiguous shows question marks until locations are discovered within 100 m or spotted through binoculars; On shows their icons and colors. Discoveries are saved. Map icons have no name labels.");
+            bool savedTrafficMode = Legacy.Get(cfg.Main.ConfigFilePath, cfg.Section("Map"), "TrafficMarkersMode") != null;
+            MapTrafficMarkers = cfg.Player("Map", "TrafficMarkersMode", MapDetail.Ambiguous, "World traffic markers: moving dots and names of patrols, convoys, merchants and foot travelers. Off hides them; Ambiguous shows gray Unknown; On shows their colors and names. Independent of location markers; fog of war still applies.");
+            if (!savedTrafficMode)
+            {
+                string traffic = Legacy.Get(cfg.Main.ConfigFilePath, cfg.Section("Map"), "TrafficMarkers");
+                if (traffic == "false") MapTrafficMarkers.Value = MapDetail.Off;
+                else if (traffic == "true") MapTrafficMarkers.Value = MapMarkers.Value == MapDetail.Ambiguous ? MapDetail.Ambiguous : MapDetail.On;
+            }
             bool savedRoutes = Legacy.Get(cfg.Main.ConfigFilePath, cfg.Section("Map"), "Routes") != null;
             MapRoutes = cfg.Player("Map", "Routes", MapDetail.Off, "Route lines of world traffic only (the moving markers are World traffic markers). Off hides them; Ambiguous draws them gray; On in faction colors.");
             if (!savedRoutes)
@@ -62,12 +70,13 @@ namespace WildWasteland.Modules.CleanHUD
             }
             FogOfWar = cfg.Player("Map", "FogOfWar", true, "Hide the parts of the map you have not explored yet. Exploring is recorded while this is off.");
             cfg.Migrate(FogOfWar, "local.immersivemap.cfg", "Fog", "Enabled");
-            FogRadius = cfg.Player("Map", "FogRevealRadius", 500f, "Meters around you that are revealed on the map as you travel.", new AcceptableValueRange<float>(50f, 2000f));
+            FogRadius = cfg.Player("Map", "FogRevealRadius", 500f, "Base range in meters. Exploration reveals twice this radius around you; raised binoculars extend the viewed cone twice as far again.", new AcceptableValueRange<float>(50f, 2000f));
             cfg.Migrate(FogRadius, "local.immersivemap.cfg", "Fog", "RevealRadius");
             FogEdge = cfg.Player("Map", "FogEdgeFade", 200f, "Width in meters of the soft edge, measured inward from the reveal radius. 0 = hard edge.", new AcceptableValueRange<float>(0f, 1000f));
             cfg.Migrate(FogEdge, "local.immersivemap.cfg", "Fog", "EdgeFadeDistance");
             FogOpacity = cfg.Player("Map", "FogOpacity", 1f, "1 hides unexplored areas completely; lower values leave them faintly visible.", new AcceptableValueRange<float>(0f, 1f));
             cfg.Migrate(FogOpacity, "local.immersivemap.cfg", "Fog", "FogOpacity");
+            BinocularZoom = cfg.Player("Map", "BinocularZoom", 1f, "Remembered additional binocular magnification. Scroll while binoculars are raised to change it from 1x to 2x.", new AcceptableValueRange<float>(1f, 2f));
             MenuEnabled = Bind(cfg, "Menu", "Enabled", true, "Replace the title and pause menus with CleanHUD's menus.");
             AccentTheme.Setting = cfg.Player("Menu", "Accent", "Yellow", "CleanHUD text and border accent; also selectable at the bottom of the title and pause menus.", new AcceptableValueList<string>(AccentTheme.Names));
             EnableCheats = Bind(cfg, "Menu", "EnableCheats", false, "Add the game's cheat controls to the menu settings.");
@@ -114,6 +123,7 @@ namespace WildWasteland.Modules.CleanHUD
             Layout.Poll(true);
             Assets.Preload();
             SceneCache.Reset();
+            Binoculars.Init(this);
             LocationMarkers.Init();
             MapFog.Init();
             _loadingScreen = new LoadingScreen();
@@ -196,6 +206,7 @@ namespace WildWasteland.Modules.CleanHUD
         }
         public override void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
+            Binoculars.Reset();
             InventoryStyle.Restore();
             LocationMarkers.Begin(false);
             if (_questMap != null) _questMap.SceneLoaded(); TalkDialogue.Hide(); QuestJournal.Hide();
@@ -209,6 +220,7 @@ namespace WildWasteland.Modules.CleanHUD
         public override void OnWorldReady() { LocationMarkers.WorldReady(SaveBus.Slot); MapFog.WorldReady(SaveBus.Slot); SceneCache.Reset(); SceneCache.BeginKeys(); _attach.RunNow(); }
         public override void Shutdown()
         {
+            Binoculars.Shutdown();
             InventoryStyle.Restore();
             Running = false; Release();
             Scheduler.StopCoroutine(_updateCheck); _updateCheck = null;

@@ -1,6 +1,11 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using BepInEx;
+using BepInEx.Bootstrap;
 using UnityEngine;
 
 namespace WildWasteland.Core
@@ -43,6 +48,92 @@ namespace WildWasteland.Core
         }
 
         public static bool Present { get { Resolve(); return _set != null; } }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal static bool QueueDisable(PluginInfo info, out string error)
+        {
+            error = null;
+            try
+            {
+                PluginInfo setter;
+                if (!Chainloader.PluginInfos.TryGetValue(GUID, out setter) || ReferenceEquals(setter.Instance, null))
+                { error = "Apocasetter is not loaded"; return false; }
+                var assembly = setter.Instance.GetType().Assembly;
+                var updates = assembly.GetType("Apocasetter.Updates");
+                var catalog = assembly.GetType("Apocasetter.Catalog");
+                var installed = updates != null ? updates.GetField("InstallerPresent", BindingFlags.Public | BindingFlags.Static) : null;
+                var stage = updates != null ? updates.GetMethod("Stage", BindingFlags.Public | BindingFlags.Static) : null;
+                var opFor = updates != null ? updates.GetMethod("OpFor", BindingFlags.Public | BindingFlags.Static) : null;
+                var find = catalog != null ? catalog.GetMethod("Find", BindingFlags.Public | BindingFlags.Static) : null;
+                if (installed == null || stage == null || opFor == null || find == null || !(bool)installed.GetValue(null))
+                { error = "Apocasetter installer/API is missing"; return false; }
+                var pending = opFor.Invoke(null, new object[] { info.Metadata.GUID }) as Dictionary<string, object>;
+                object operation;
+                if (pending != null && pending.TryGetValue("op", out operation) && ((string)operation == "disable" || (string)operation == "remove"))
+                    return DisableSaved(assembly, info.Metadata.GUID, out error);
+                object entry = find.Invoke(null, new object[] { info.Metadata.GUID });
+                var pathsMethod = entry != null ? entry.GetType().GetMethod("PluginPaths", BindingFlags.Public | BindingFlags.Instance) : null;
+                var paths = pathsMethod != null ? pathsMethod.Invoke(entry, null) as IEnumerable : null;
+                if (paths == null) { error = "Apocasetter could not locate the plugin files"; return false; }
+                string plugins = Path.GetFullPath(Paths.PluginPath).TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+                string ownDll = Path.GetFullPath(info.Location);
+                foreach (var other in Chainloader.PluginInfos.Values)
+                    if (other != info && !string.IsNullOrEmpty(other.Location)
+                        && string.Equals(Path.GetFullPath(other.Location), ownDll, StringComparison.OrdinalIgnoreCase))
+                    { error = "the DLL also contains another plugin"; return false; }
+                var files = new List<object>();
+                foreach (object item in paths)
+                {
+                    string path = Path.GetFullPath((string)item).TrimEnd('\\', '/');
+                    if (!path.StartsWith(plugins, StringComparison.OrdinalIgnoreCase))
+                    { error = "plugin path is outside BepInEx/plugins"; return false; }
+                    bool shared = false;
+                    foreach (var other in Chainloader.PluginInfos.Values)
+                    {
+                        if (other == info || string.IsNullOrEmpty(other.Location)) continue;
+                        string location = Path.GetFullPath(other.Location);
+                        if (string.Equals(location, path, StringComparison.OrdinalIgnoreCase))
+                        { error = "the DLL also contains another plugin"; return false; }
+                        if (location.StartsWith(path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) shared = true;
+                    }
+                    // Keep shared folders; move only the replaced plugin's DLL in that case.
+                    if (shared) path = ownDll;
+                    if (!files.Contains(path)) files.Add(path);
+                }
+                if (files.Count == 0) { error = "no plugin files found"; return false; }
+                stage.Invoke(null, new object[] { new Dictionary<string, object> {
+                    { "op", "disable" }, { "guid", info.Metadata.GUID }, { "name", info.Metadata.Name },
+                    { "version", info.Metadata.Version.ToString() }, { "paths", files }, { "removeConfig", false }
+                } });
+                return DisableSaved(assembly, info.Metadata.GUID, out error);
+            }
+            catch (Exception e) { error = (e.InnerException ?? e).Message; return false; }
+        }
+
+        // Updates.Stage logs disk-write failures rather than throwing; only promise a restart after the operation is saved.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static bool DisableSaved(Assembly assembly, string guid, out string error)
+        {
+            error = "Apocasetter could not save the disable operation";
+            string path = Path.Combine(Paths.CachePath, "Apocasetter", "pending.json");
+            if (!File.Exists(path)) return false;
+            var json = assembly.GetType("Apocasetter.MiniJson");
+            var parse = json != null ? json.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static) : null;
+            var root = parse != null ? parse.Invoke(null, new object[] { File.ReadAllText(path) }) as Dictionary<string, object> : null;
+            object value;
+            if (root == null || !root.TryGetValue("ops", out value)) return false;
+            var operations = value as IEnumerable;
+            if (operations == null) return false;
+            foreach (object item in operations)
+            {
+                var op = item as Dictionary<string, object>;
+                object id, kind;
+                if (op != null && op.TryGetValue("guid", out id) && string.Equals(id as string, guid, StringComparison.OrdinalIgnoreCase)
+                    && op.TryGetValue("op", out kind) && ((kind as string) == "disable" || (kind as string) == "remove"))
+                { error = null; return true; }
+            }
+            return false;
+        }
 
         /// <summary>True while the Apocasetter Mods window blocks game input.</summary>
         public static bool InputBlocked

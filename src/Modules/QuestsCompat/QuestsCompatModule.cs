@@ -86,7 +86,7 @@ namespace WildWasteland.Modules.QuestsCompat
             }
             if (Chainloader.PluginInfos.TryGetValue("local.apocalypterquests", out info) && !ReferenceEquals(info.Instance, null))
             {
-                if (info.Metadata.Version != new Version(1, 8, 0)) throw new NotSupportedException("Quest compatibility requires Apocalypter Quests 1.8.0");
+                if (info.Metadata.Version != new Version(1, 8, 0)) Log.Warn("[QuestsCompat] Apocalypter Quests " + info.Metadata.Version + " differs from the tested 1.8.0; attempting compatibility with this version");
                 _quests = info.Instance; var type = _quests.GetType(); var asm = type.Assembly;
                 _questUpdate = Binding.Call(type, "Update"); _questLate = Binding.Call(type, "LateUpdate"); _questGui = Binding.Call(type, "OnGUI"); _questTick = Binding.Call(type, "Tick");
                 _save = Binding.Call(type, "SaveBook"); _load = Binding.Call(type, "LoadBook"); _reset = Binding.Call(type, "ResetSession");
@@ -139,7 +139,7 @@ namespace WildWasteland.Modules.QuestsCompat
                 Scheduler.Sliced(this, "World cache", 500, ScanStep);
                 Scheduler.Interval(this, "Marker providers", .5f, ReconcileMarkers);
                 if (SaveBus.State != null) StateChanged(null, SaveBus.State);
-                Log.Always("[QuestsCompat] Apocalypter Quests 1.8.0 scheduled; ES3 key ApocalypterQuests retained");
+                Log.Always("[QuestsCompat] Apocalypter Quests " + info.Metadata.Version + " scheduled; ES3 key ApocalypterQuests retained");
             }
             if (_talk == null && _quests == null) Log.Always("[QuestsCompat] Talk/Quests not loaded; compatibility idle");
         }

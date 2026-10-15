@@ -17,7 +17,7 @@ namespace WildWasteland.Modules.NPC
             BepInEx.PluginInfo standalone;
             if (Chainloader.PluginInfos.TryGetValue(GUID, out standalone) && !ReferenceEquals(standalone.Instance, null))
             {
-                Core.Log.Always("[NPC] Women of Wasteland is loaded separately; built-in female bodies and crew conversion stay off. Disable the standalone plugin and restart to use the integrated feature.");
+                Core.Log.Always("[NPC] Women of Wasteland: " + ReplacementGuard.Status(GUID) + ". Built-in female bodies wait until restart.");
                 return;
             }
             InstallAssets(module.Dir);

@@ -12,7 +12,7 @@ namespace WildWasteland.Core.UI
     /// <summary>Pages owned by Core: module overview (on/off), performance, Harmony inventory, core settings.</summary>
     internal static class CorePages
     {
-        internal static ToolPage GamePage;
+        internal static ToolPage GamePage, DebugPage, DeveloperPage;
         static readonly List<ToolPage> _debugPages = new List<ToolPage>();
         static ConfigPage _settings;
         static ConfigEntry<bool> _poi;
@@ -24,7 +24,9 @@ namespace WildWasteland.Core.UI
             ToolWindow.Add(GamePage);
             ToolWindow.Add(new ActionPage(null, ToolGroups.General, "Modules", Modules));
             ToolWindow.Add(WildWasteland.Modules.Performance.PerformancePage.Instance);   // #133: separate Performance tab
-            ToolWindow.Add(new ActionPage(null, ToolGroups.General, "Debug", Debug) { DebugOnly = true });
+            DebugPage = new ActionPage(null, ToolGroups.General, "Debug", Debug) { DebugOnly = true };
+            DeveloperPage = new ActionPage(null, ToolGroups.General, "Developer", Developer) { DebugOnly = true };
+            ToolWindow.Add(DebugPage); ToolWindow.Add(DeveloperPage);
             _settings = new ConfigPage(null, ToolGroups.General, "Other settings", Plugin.Settings, d => true) { Intro = "Remaining gameplay values and switches." };
             foreach (var e in ModuleHost.Entries) if (e.Module.Id == "POI") _poi = e.Config.Enabled;
         }
@@ -78,23 +80,6 @@ namespace WildWasteland.Core.UI
             if (_poi != null) Switch(l, "New POI", _poi);
 
             l.Heading("HUD");
-            Switch(l, "Clean HUD", CleanHudSettings.Enabled);
-            Switch(l, "Clean menus", CleanHudSettings.MenuEnabled);
-            Switch(l, "Needs", CleanHudSettings.ShowNeeds);
-            Switch(l, "HP and armor numbers", CleanHudSettings.ShowHealthNumbers);
-            Switch(l, "Insanity", CleanHudSettings.ShowInsanity);
-            Switch(l, "Vehicle Hints", Player.VehicleHotkeyHint);
-            if (WildWasteland.Modules.CleanHUD.ChaseCameraHud.HudEnabled != null) Switch(l, "Gear/RPM/Speed Hud", WildWasteland.Modules.CleanHUD.ChaseCameraHud.HudEnabled);
-            Switch(l, "Vehicle Icons", Player.VehicleStatusHint);
-            Switch(l, "Compass", CleanHudSettings.ShowCompass);
-            CompassDetail(l, "Patrols on compass", CleanHudSettings.ShowConvoys, CleanHudSettings.AmbiguousPatrols);
-            CompassDetail(l, "Locations on compass (1 km)", CleanHudSettings.ShowLocations, CleanHudSettings.AmbiguousLocations);
-            Switch(l, "Map", CleanHudSettings.MapEnabled);
-            Switch(l, "Fog of war", CleanHudSettings.FogOfWar);
-            CleanHudSettings.MapMarkers.Value = (MapDetail)l.Choices("Map markers", (int)CleanHudSettings.MapMarkers.Value, "Off", "Ambiguous", "On");
-            Switch(l, "World traffic markers", CleanHudSettings.MapTrafficMarkers);
-            CleanHudSettings.MapRoutes.Value = (MapDetail)l.Choices("Map Routes", (int)CleanHudSettings.MapRoutes.Value, "Off", "Ambiguous", "On");
-            l.Entry(CleanHudSettings.Scale);
             CrosshairSelection(l);
             Switch(l, "Grabbing dot", HudSettings.SelectionDot);
             bool damage = HudSettings.HudEnabled.Value && HudSettings.DamageNumbers.Value == 2;
@@ -105,6 +90,27 @@ namespace WildWasteland.Core.UI
             Switch(l, "Toggle Ironsights", WildWasteland.Modules.Guns.GunsModule.ToggleIronsights);
             l.KeyPair("Shout", WildWasteland.Modules.NPC.NpcModule.ShoutKey, "Shout modifier", WildWasteland.Modules.NPC.NpcModule.ShoutModifier);
             if (!ModuleHost.IsRunning(HudSettings.Instance)) l.Text("Enable Combat HUD in Modules to use these HUD settings.");
+            Switch(l, "Needs", CleanHudSettings.ShowNeeds);
+            Switch(l, "HP and armor numbers", CleanHudSettings.ShowHealthNumbers);
+            Switch(l, "Insanity", CleanHudSettings.ShowInsanity);
+            Switch(l, "Vehicle Hints", Player.VehicleHotkeyHint);
+            var drivingHud = WildWasteland.Modules.CleanHUD.ChaseCameraHud.HudEnabled;
+            if (drivingHud != null)
+            {
+                int mode = !drivingHud.Value ? 0 : CleanHudSettings.DrivingHudOnlyThirdPerson.Value ? 1 : 2;
+                int selected = l.Choices("Gear/RPM/Speed HUD", mode, "Off", "3rd person", "On");
+                if (selected != mode) { CleanHudSettings.DrivingHudOnlyThirdPerson.Value = selected == 1; drivingHud.Value = selected != 0; }
+            }
+            Switch(l, "Vehicle Icons", Player.VehicleStatusHint);
+            Switch(l, "Compass", CleanHudSettings.ShowCompass);
+            CompassDetail(l, "Patrols on compass", CleanHudSettings.ShowConvoys, CleanHudSettings.AmbiguousPatrols);
+            CompassDetail(l, "Locations on compass (1 km)", CleanHudSettings.ShowLocations, CleanHudSettings.AmbiguousLocations);
+            Switch(l, "Map", CleanHudSettings.MapEnabled);
+            Switch(l, "Fog of war", CleanHudSettings.FogOfWar);
+            CleanHudSettings.MapMarkers.Value = (MapDetail)l.Choices("Map markers", (int)CleanHudSettings.MapMarkers.Value, "Off", "Ambiguous", "On");
+            CleanHudSettings.MapTrafficMarkers.Value = (MapDetail)l.Choices("World traffic markers", (int)CleanHudSettings.MapTrafficMarkers.Value, "Off", "Ambiguous", "On");
+            CleanHudSettings.MapRoutes.Value = (MapDetail)l.Choices("Map Routes", (int)CleanHudSettings.MapRoutes.Value, "Off", "Ambiguous", "On");
+            l.Entry(CleanHudSettings.Scale);
         }
 
         static void CompassDetail(ToolLayout l, string label, ConfigEntry<bool> show, ConfigEntry<bool> ambiguous)
@@ -162,7 +168,7 @@ namespace WildWasteland.Core.UI
                 bool enabled = GUI.enabled; GUI.enabled = enabled && e.State != ModuleState.OffConflict;
                 if (e.Config != null) l.Toggle(e.Config.Enabled, e.Module.DisplayName);
                 GUI.enabled = enabled;
-                if (e.State == ModuleState.OffConflict) l.Text("Remove the replaced standalone mod to enable this module: " + e.Conflict, Ledger.Danger);
+                if (e.State == ModuleState.OffConflict) l.Text("Standalone replacement: " + e.Conflict, Ledger.Danger);
                 else if (e.State == ModuleState.InitFailed || e.State == ModuleState.DisabledAfterErrors) l.Text("Could not start. Switch off and on to retry: " + e.LastError, Ledger.Danger);
             }
             l.Heading("Performance");
@@ -171,15 +177,15 @@ namespace WildWasteland.Core.UI
 
         static bool DebugSetting(ConfigEntryBase e)
         {
-            if (VerboseSetting(e)) return false;
-            if (ReferenceEquals(e, CleanHudSettings.Enabled) || ReferenceEquals(e, CleanHudSettings.MenuEnabled)
-                || ReferenceEquals(e, CleanHudSettings.ShowNeeds) || ReferenceEquals(e, CleanHudSettings.ShowHealthNumbers)
+            if (VerboseSetting(e) || ReferenceEquals(e, Plugin.DeveloperMode)) return false;
+            if (ReferenceEquals(e, CleanHudSettings.ShowNeeds) || ReferenceEquals(e, CleanHudSettings.ShowHealthNumbers)
                 || ReferenceEquals(e, CleanHudSettings.ShowInsanity) || ReferenceEquals(e, CleanHudSettings.Scale)
                 || ReferenceEquals(e, CleanHudSettings.ShowConvoys) || ReferenceEquals(e, CleanHudSettings.ShowLocations)
                 || ReferenceEquals(e, CleanHudSettings.AmbiguousPatrols) || ReferenceEquals(e, CleanHudSettings.AmbiguousLocations)
                 || ReferenceEquals(e, CleanHudSettings.ShowCompass) || ReferenceEquals(e, CleanHudSettings.MapEnabled)
                 || ReferenceEquals(e, CleanHudSettings.MapMarkers) || ReferenceEquals(e, CleanHudSettings.MapRoutes)
-                || ReferenceEquals(e, CleanHudSettings.FogOfWar) || ReferenceEquals(e, CleanHudSettings.MapTrafficMarkers)) return false;
+                || ReferenceEquals(e, CleanHudSettings.FogOfWar) || ReferenceEquals(e, CleanHudSettings.MapTrafficMarkers)
+                || ReferenceEquals(e, CleanHudSettings.DrivingHudOnlyThirdPerson)) return false;
             if (ReferenceEquals(e, Player.Character) || ReferenceEquals(e, Player.BodyFirstPerson) || ReferenceEquals(e, Player.FullBodyOnlyOnFoot)
                 || ReferenceEquals(e, Player.VehicleHotkeyHint) || ReferenceEquals(e, Player.VehicleStatusHint)
                 || ReferenceEquals(e, Player.EmptyHandArms) || ReferenceEquals(e, Player.FirstPersonArmsOnlyOnFoot) || ReferenceEquals(e, Player.OcclusionPrototype)
@@ -206,6 +212,7 @@ namespace WildWasteland.Core.UI
         static bool VerboseSetting(ConfigEntryBase e)
         {
             if (e.SettingType != typeof(bool)) return false;
+            if (ReferenceEquals(e, WildWasteland.Modules.NPC.NpcModule.ShowNav)) return true;
             string key = e.Definition.Key;
             return key.IndexOf("Verbose", System.StringComparison.OrdinalIgnoreCase) >= 0 || key == "Log" || key.EndsWith("Log", System.StringComparison.OrdinalIgnoreCase);
         }
@@ -215,26 +222,49 @@ namespace WildWasteland.Core.UI
             foreach (var key in file.Keys)
             {
                 var e = file[key];
-                if (!ReferenceEquals(e, Plugin.VerboseLog) && VerboseSetting(e)) l.Toggle((ConfigEntry<bool>)e, key.Section + " / " + key.Key);
+                if (!ReferenceEquals(e, Plugin.VerboseLog) && VerboseSetting(e))
+                    l.Toggle((ConfigEntry<bool>)e, ReferenceEquals(e, WildWasteland.Modules.NPC.NpcModule.ShowNav)
+                        ? "Show navigation, ghosts and NPC states in the world" : key.Section + " / " + key.Key);
             }
         }
+
+        static bool RetainedDebugSetting(ConfigEntryBase e)
+        {
+            if (VerboseSetting(e) || ReferenceEquals(e, Patrols.MenuKey) || ReferenceEquals(e, Patrols.TemplateDumpKey)) return true;
+            return e.SettingType == typeof(bool) && DebugSetting(e) && !ReferenceEquals(e, Player.WeaponAdjust)
+                && !ReferenceEquals(e, Patrols.TurretSpotEditor) && !ReferenceEquals(e, Patrols.BusPassengerPoseEditorEnabled);
+        }
+
+        static bool DeveloperSetting(ConfigEntryBase e) { return DebugSetting(e) && !RetainedDebugSetting(e); }
 
         static void Debug(ToolLayout l)
         {
             l.DeduplicateEntries = true;
+            l.Heading("Patrol editor");
+            l.Entry(Patrols.MenuKey); l.Entry(Patrols.TemplateDumpKey);
+            if (l.Button("Open the patrol editor", Patrols.Running && GameRefs.InPlay, true, 320))
+                ToolWindow.CloseThen(() => { if (Patrols.Instance != null && !Patrols.Instance.OpenEditor()) Log.Warn("[Patrols] the patrol editor opens only in play (not in a menu or while another editor is open)"); });
             l.Heading("Logging");
             l.Toggle(Plugin.VerboseLog, "VerboseLog");
             l.Text("General verbose logging. The module log switches below retain their own behavior; NPC traces also work with general logging off.");
             Logging(l, Plugin.Settings); Logging(l, Plugin.Tools);
-            l.Text("Editors, debug switches, gameplay values and diagnostics. Changes are saved immediately unless an editor has its own Save button. Fine tuning (offsets, poses, AI constants) is kept in config/WildWasteland/tools.cfg.");
-            l.EntryFilter = DebugSetting; l.DeduplicateEntries = true;
+            l.EntryFilter = RetainedDebugSetting;
             Switches(l);
+            l.EntryFilter = null;
+            l.Space(12);
+            l.Toggle(Plugin.DeveloperMode, "Developer mode");
+        }
+
+        static void Developer(ToolLayout l)
+        {
+            l.Text("Editors, debug switches, gameplay values and diagnostics. Changes are saved immediately unless an editor has its own Save button. Fine tuning (offsets, poses, AI constants) is kept in config/WildWasteland/tools.cfg.");
+            l.EntryFilter = DeveloperSetting; l.DeduplicateEntries = true;
             l.Heading("Tools");
             foreach (var p in _debugPages) if (p.IsTool && IsPatrolsTool(p)) DrawDebugPage(l, p);   // patrol / convoy / merchant editors first
             foreach (var p in _debugPages) if (p.IsTool && !IsPatrolsTool(p)) DrawDebugPage(l, p);
             l.Space(12); l.Heading("Settings and diagnostics");
             foreach (var p in _debugPages) if (!p.IsTool) DrawDebugPage(l, p);
-            l.Prefix = "Debug/";
+            l.Prefix = "Developer/";
             _settings.Draw(l);
             l.Heading("Harmony patches"); Harmony(l);
             if (l.Button("Write startup summary to the log", true, false, 360)) Log.Always(ModuleHost.Summary());
@@ -279,7 +309,8 @@ namespace WildWasteland.Core.UI
                 if (e == null || !DebugSetting(e)) continue;
                 string sec = key.Section; int cut = sec.IndexOf(" / ", System.StringComparison.Ordinal);
                 string prefix = cut >= 0 ? sec.Substring(0, cut) : sec;
-                var item = new SwitchItem { Entry = e, Label = Readable(key.Key), Section = sec, Order = -1, Index = index, Heading = "Core", HeadingOff = "Core" };
+                string label = ReferenceEquals(e, CleanHudSettings.Enabled) ? "Clean HUD" : ReferenceEquals(e, CleanHudSettings.MenuEnabled) ? "Clean menus" : Readable(key.Key);
+                var item = new SwitchItem { Entry = e, Label = label, Section = sec, Order = -1, Index = index, Heading = "Core", HeadingOff = "Core" };
                 for (int m = 0; m < ModuleHost.Entries.Count; m++)
                 {
                     var me = ModuleHost.Entries[m];
@@ -312,6 +343,7 @@ namespace WildWasteland.Core.UI
             if (count != _switchCount) { _switchCount = count; BuildSwitches(); }
             if (_switches.Count == 0) return;
             l.Heading("Switches");
+            l.Toggle(WildWasteland.Modules.Patrols.WarRig.S.GroundRecoveryEnabled, "Ground recovery");
             int group = int.MinValue;
             for (int i = 0; i < _switches.Count; i++)
             {

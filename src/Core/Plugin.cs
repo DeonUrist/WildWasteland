@@ -22,8 +22,10 @@ namespace WildWasteland
     [BepInDependency("com.denis.apocalypter.apocaunloader", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.healthstacks", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.itweenguard", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("com.denis.apocalypter.stewpot", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.gunplayhud", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.cleanhud", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("local.immersivemap", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.apocapocket", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.apocapatrol", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.warrig", BepInDependency.DependencyFlags.SoftDependency)]
@@ -46,7 +48,7 @@ namespace WildWasteland
         public static Plugin Instance;
         public static ConfigFile Main, Settings, Tools;
         public static ConfigEntry<Key> ToolWindowKey;
-        public static ConfigEntry<bool> EnableDebug;
+        public static ConfigEntry<bool> EnableDebug, DeveloperMode;
         public static ConfigEntry<bool> VerboseLog;
         public static ConfigEntry<float> FrameBudgetMs;
 
@@ -78,12 +80,13 @@ namespace WildWasteland
                     "Opens Wild Wasteland settings: Game, Modules and, when enabled, Debug.");
                 if (!hasWindowKey && oldKey != null) ToolWindowKey.SetSerializedValue(oldKey);
                 EnableDebug = Main.Bind("General", "Enable Debug", false,
-                    "Show the Debug section in Wild Wasteland settings. Contains all advanced settings, editors and diagnostics.");
+                    "Show Debug in Wild Wasteland settings: logging, switches, patrol editor access and the optional Developer menu.");
 
                 RegisterModules();
                 Core.ModuleHost.BindAll(Settings, Tools);
 
                 VerboseLog = Settings.Bind("Debug", "VerboseLog", false, "Detailed info logging for every module (off for normal play).");
+                DeveloperMode = Settings.Bind("Debug", "Developer mode", false, "Show Developer while Enable Debug is on. Contains advanced settings, editors and diagnostics.");
                 FrameBudgetMs = Tools.Bind("Core", "Frame budget (ms)", 2f, new ConfigDescription("Sliced background work (bakes, scans) stops for the frame once Wild Wasteland used this much time.", new AcceptableValueRange<float>(0.5f, 8f)));
                 Core.Log.Verbose = VerboseLog.Value;
                 VerboseLog.SettingChanged += (s, a) => Core.Log.Verbose = VerboseLog.Value;
@@ -93,6 +96,7 @@ namespace WildWasteland
                 Core.Runner.Ensure();
                 RegisterCoreJobs();
                 Core.SaveTypes.Install();
+                Core.ReplacementGuard.Prepare();
                 Core.HealthStacks.Init();
                 Core.ITweenGuard.Init();
                 Core.QuietFsm.Install();
@@ -123,6 +127,7 @@ namespace WildWasteland
             Core.ModuleHost.Add(new Modules.POI.PoiModule());
             Core.ModuleHost.Add(new Modules.QuestsCompat.QuestsCompatModule());
             Core.ModuleHost.Add(new Modules.EngineSimCompat.EngineSimCompatModule());
+            Core.ModuleHost.Add(new Modules.Survival.SurvivalModule());
             Core.ModuleHost.Add(new Modules.Performance.PerformanceModule());   // last: its PlayMaker hooks run after every gameplay module's
         }
 
@@ -156,6 +161,7 @@ namespace WildWasteland
 
         static void OnSceneLoaded(Scene s, LoadSceneMode m)
         {
+            Core.ReplacementGuard.SceneLoaded(s);
             Core.Runner.Ensure();
             Core.GameRefs.OnSceneLoaded(s, m);
             Core.Origin.Reset();

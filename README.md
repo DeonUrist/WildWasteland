@@ -2,7 +2,7 @@
 
 A BepInEx 5 mod for **Apocalypter** that combines gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
 
-Version **0.1.25 RC22** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
+Version **0.1.26 RC23** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
 
 | Module | What it is | Replaces (remove these from `BepInEx\plugins`) |
 |---|---|---|
@@ -12,13 +12,17 @@ Version **0.1.25 RC22** (plugin GUID `com.denis.apocalypter.wildwasteland`). Sta
 | Combat HUD (`HUD`) | Crosshair styles, selection dot, hit marker, damage numbers, headshot sound | Gunplay HUD 1.2.2 |
 | Clean HUD & menus (`CleanHUD`) | Vitals, weapon silhouettes and ammo, quick slots, strip compass, message log, title/pause menus and controls catalog | CleanHUD 1.5.1 |
 | Patrols, traffic & War Rig (`Patrols`) | Raider cars, trucks and bikes with live crews, patrols and convoys, persistent world traffic with faction battles and Coyote merchants, vehicle templates and editors, the War Rig tanker trailer | Apocapatrol 2.14.4, War Rig 1.1.3, Merchant Object Spotter |
+| Survival (`Survival`) | Stew pots for filling, drinking, cooking, spoilage and optional pouring | Stew Pot 0.1.1 |
+| Performance (`Performance`) | Experimental vanilla runtime, rendering and world optimizations; separate F3 Performance page and presets | - |
+| Points of interest (`POI`) | Generated War Rig encounter sites | - |
+| Optional compatibility (`QuestsCompat`, `EngineSimCompat`) | Scheduling and integration for separately installed Talk/Quests and Engine Sim | None; keep these dependencies installed |
 
-While any of those standalone plugins is still installed, the module that replaces it **stays off** (the log says which DLL to remove, and the F7 Modules page shows it) - nothing runs twice, but nothing of that module runs either. Apocaraider (the old monolith) is not detected: remove it by hand.
+With Apocasetter and its installer available, WW queues replaced standalones for disable and shows a title-menu restart notice. Restart before playing so the installer can move their files into its recoverable disabled cache; configs remain intact. WW waits for that restart before taking over the conflicting features. Without the installer, follow the notice to disable the named mods manually. This also covers Immersive Map, WomenOfWasteland, HealthStacks and iTweenGuard; optional Talk, Quests, Engine Sim, ChaseCamera and Apocapocket remain installed. Apocaraider (the old monolith) is not detected: remove it by hand.
 
 ## Install
 
 1. BepInEx 5 is installed and Apocasetter is recommended (the F6 Mods menu shows and rebinds every setting; WW works without it).
-2. Move the replaced mods out of `BepInEx\plugins\` (e.g. into `BepInEx\disabled-by-WildWasteland\`; keep them around until you are happy). Keep their config and data files - WW reads them once.
+2. Disable the replaced mods, or let Apocasetter queue their disable and restart when WW requests it. Keep their config and data files for migration. Preserve customized external PNGs and models when updating.
 3. Unzip the release into `BepInEx\plugins\`:
    ```
    BepInEx\plugins\WildWasteland\WildWasteland.dll
@@ -29,14 +33,17 @@ While any of those standalone plugins is still installed, the module that replac
    BepInEx\plugins\WildWasteland\HUD\Sounds\, Textures\   headshot.mp3, crosshair textures
    BepInEx\plugins\WildWasteland\CleanHUD\Icons\        editable map, compass and bolts currency PNGs
    BepInEx\plugins\WildWasteland\Patrols\             templates, textures, sounds, layouts, WarRig\ models
+   BepInEx\plugins\WildWasteland\Survival\Models\, Sounds\   stew pot defaults
    ```
    If an asset is missing, WW falls back to the old plugin folder (`plugins\Apocaplayer\`, `plugins\NPCAI\Models\`, `plugins\Gunplay\Sounds\`, `plugins\GunplayHUD\Sounds\`, `plugins\Apocapatrol\`, `plugins\WarRig\`) or to a copy built into the DLL, and warns in the log. Patrols copies its old data into its new folder on the first run.
    Preserve your customized `CleanHUD\Icons\` files when updating; copy only missing defaults from the archive.
-4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.25]` and a summary `Wild Wasteland 0.1.25 modules:` with every module `on`.
+4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.26]` and a summary `Wild Wasteland 0.1.26 modules:`. Resolve any restart notice before testing the affected modules.
 
 Engine Sim compatibility (#127, Testing): **Engine Sim is optional; WW works normally without it and the bridge stays idle.** If you want its features, install [Engine Sim 1.7.0](https://github.com/Wad67/Apocalypter-enginesim/releases/tag/v1.7.0) separately, including its native library and impulse responses. WW schedules its manager and supplies a 500 microsecond scene-discovery cache; the original native simulation/audio threads, engine selection, settings and vehicle-part physics remain with Engine Sim. With its experimental simulated drivetrain enabled, the existing Ignition key supports click to toggle and hold to crank; vehicle hints and CleanHUD's existing engine-status icon follow the coupled engine. Patrols start/stop requests use the simulated switch. Turn off the Engine Sim compatibility module to restore the standalone callbacks. Engine Sim is not included in this archive. Its settings remain in its own Apocasetter page and cfg files; only `[EngineSimCompat] Enabled` is added to WW settings.cfg. Performance and in-game verification remain pending.
 
 ## Settings: F6 and F7
+
+RC23: binoculars remember 1–2x additional wheel zoom, identify visible locations and traffic, and show colored captions with capitalized location names without numeric IDs. Fog reveals twice its former radius; binoculars extend the viewed cone to 2x normal range, scoped sniper rifles to 1.5x with no identification or names. Weapon wheel zoom caps at 3x. World traffic markers now have independent Off / Ambiguous / On choices. Debug and Developer are separate pages; Clean HUD/Clean menus switches live in Debug. Includes Survival/Stew Pot (spilling off by default), automatic standalone replacement, updated quest compatibility and transparent editable body portraits. Performance remains experimental. See [RC23 notes and tests](notes/release-0.1.26-RC23.md).
 
 RC22: adds an adjacent CleanHUD LANGUAGE picker for optional ApocaLanguage, with English language names in the main menu font, and eight saved accent choices for CleanHUD text and borders. Swatches are ordered by color, centered at the bottom and raised clear of the screen edge. Hides Apocasetter's duplicate corner MODS button and improves distance-travelled visibility with an accent bar. Includes all RC21 assets. See [RC22 notes and tests](notes/release-0.1.25-RC22.md).
 
@@ -63,7 +70,7 @@ RC12: F3 → Debug starts with general VerboseLog and groups all other WW verbos
 RC11: Settings → Game → HUD → Patrols on compass → Ambiguous keeps vehicle icons and makes every group white. Locations on compass → Ambiguous uses white question marks. Both keep distances; map modes and quest flags retain their existing behavior. Existing ambiguity settings are preserved.
 
 - **F6 (Apocasetter → Wild Wasteland)** shows `In-Game Settings Button` (default **F3**) and `Enable Debug` (default false). The Apocasetter opt-in remains enabled and hidden. File: `BepInEx\config\com.denis.apocalypter.wildwasteland.cfg`.
-- **Internal SETTINGS menu** (default **F3**, historically called F7) has **Game** (Player, World, HUD), **Modules** (module switches and performance), and **Debug** when enabled in F6. It pauses the game; Esc or CLOSE closes it. Gameplay values and keys live in `BepInEx\config\WildWasteland\settings.cfg`; technical settings live in `tools.cfg`. Debug includes editors and switches; fine tuning stays in the config file.
+- **Internal SETTINGS menu** (default **F3**, historically called F7) has **Game**, **Modules**, **Performance**, and **Debug** when enabled in F6. Debug contains logging, gameplay/debug switches and patrol editor access; its final Developer mode switch reveals a separate **Developer** page for the remaining advanced tools. It pauses the game; Esc or CLOSE closes it. Gameplay values and keys live in `BepInEx\config\WildWasteland\settings.cfg`; technical settings live in `tools.cfg`.
 - RC1 defaults match Denis's reviewed setup, except **Toggle Ironsights stays off** as requested. CleanHUD needs and HP/armor numbers are on, the crosshair is Vanilla, observing is toggled, camera occlusion is off, and third-person distances are 3.26 m on foot / 5.38 m in cars. Patrols debug spawn controls and traffic debug-map routes are on. Global verbose logging and Enable Debug remain off. The [complete defaults audit](docs/defaults-rc1.md) records the 691 RC1 base entries; RC2 adds ShowConvoys and ShowLocations, both enabled by default. Existing config values and first-run standalone migration are preserved.
 
 Module data and sidecars: `BepInEx\config\WildWasteland\<Module>\`.

@@ -12,7 +12,7 @@ namespace WildWasteland.Modules.CleanHUD
         internal static void Install(CleanHudModule owner)
         {
             PluginInfo info;
-            if (!Chainloader.PluginInfos.TryGetValue("local.apocalypterquests", out info) || ReferenceEquals(info.Instance, null) || info.Metadata.Version != new Version(1, 8, 0)) return;
+            if (!Chainloader.PluginInfos.TryGetValue("local.apocalypterquests", out info) || ReferenceEquals(info.Instance, null)) return;
             Core.Patches.Patch(owner, AccessTools.Method(info.Instance.GetType(), "AddToast"), prefix: AccessTools.Method(typeof(QuestNotifications), "BeforeToast"));
         }
         private static bool BeforeToast(string __0)

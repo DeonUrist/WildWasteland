@@ -54,8 +54,9 @@ namespace WildWasteland.Modules.CleanHUD
         public bool Exists(int id) { return _ids.Contains(id); }
         public bool Hidden(Vector3 scene) { return MapFog.Hides(scene); }
         public bool Open { get { return _open; } }
-        public bool TrafficMarkers { get { return CleanHudModule.MapTrafficMarkers.Value; } }
+        public MapDetail TrafficMarkers { get { return CleanHudModule.MapTrafficMarkers.Value; } }
         public float Zoom { get { return _zoom; } }
+        public bool Observe(Transform target, string name, Color color) { return Binoculars.Observe(target, name, color); }
         public void Remove(int id)
         { for (int i = _entries.Count - 1; i >= 0; i--) if (_entries[i].Id == id) { Destroy(_entries[i]); _ids.Remove(id); _entries.RemoveAt(i); } }
         public void RemoveAll(string owner)

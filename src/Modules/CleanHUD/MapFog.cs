@@ -34,7 +34,11 @@ namespace WildWasteland.Modules.CleanHUD
         private static Vector3 _last;
         private static bool _havePosition, _idle;
         private static float _idleRadius, _idleInner;
+        private static Vector3 _idleForward;
+        private static float _idleCone, _idleRange;
+        private static bool _idleBinoculars;
         private static string _saves;
+        internal static float RevealRadius { get { return Mathf.Max(Cell, CleanHudModule.FogRadius.Value) * 2f; } }
 
         private static byte[] New() { var d = new byte[4096]; for (int i = 0; i < d.Length; i++) d[i] = 255; return d; }
         private static long Key(int cx, int cz) { return ((long)cx << 32) ^ (uint)cz; }
@@ -44,7 +48,7 @@ namespace WildWasteland.Modules.CleanHUD
             Reset();
             PluginInfo info;
             _standDown = Chainloader.PluginInfos.TryGetValue(SourceGuid, out info) && !ReferenceEquals(info.Instance, null);
-            if (_standDown) CleanHudModule.Warn("Immersive Map is loaded; Wild Wasteland fog of war stays off. Remove ImmersiveMap.dll to use it.");
+            if (_standDown) CleanHudModule.Warn("Immersive Map: " + ReplacementGuard.Status(SourceGuid) + ". Wild Wasteland fog waits until restart.");
             _saves = Path.Combine(Core.Assets.ModuleConfigDir("CleanHUD"), "Saves");
             SaveBus.StateChanged -= SaveState; SaveBus.StateChanged += SaveState;
         }
@@ -96,12 +100,18 @@ namespace WildWasteland.Modules.CleanHUD
             bool still = _havePosition && p.x == _last.x && p.y == _last.y && p.z == _last.z;
             _last = p; _havePosition = true;
             if (jump) { _holdUntil = now + .5f; return; }
-            float radius = Mathf.Max(Cell, CleanHudModule.FogRadius.Value);
+            float radius = RevealRadius;
             float inner = Mathf.Clamp(radius - CleanHudModule.FogEdge.Value, 0f, radius * .999f);
+            var forward = Binoculars.Forward; forward.y = 0f;
+            bool binoculars = Binoculars.Viewing && forward.sqrMagnitude > .01f;
+            forward = binoculars ? forward.normalized : Vector3.zero;
+            float cone = binoculars ? Mathf.Cos(Binoculars.HalfAngle) : 1f;
+            float range = radius * (binoculars ? Binoculars.RangeScale : 1f);
             // Standing exactly still after a pass that revealed nothing: the same pass would reveal nothing again.
-            if (still && _idle && radius == _idleRadius && inner == _idleInner) return;
+            if (still && _idle && radius == _idleRadius && inner == _idleInner && binoculars == _idleBinoculars && forward == _idleForward && cone == _idleCone && range == _idleRange) return;
             _idle = true; _idleRadius = radius; _idleInner = inner;
-            int step = Mathf.Max(1, (int)(dt * 255f)), reach = Mathf.CeilToInt(radius / Cell) + 1;
+            _idleBinoculars = binoculars; _idleForward = forward; _idleCone = cone; _idleRange = range;
+            int step = Mathf.Max(1, (int)(dt * 255f)), reach = Mathf.CeilToInt(range / Cell) + 1;
             int px = Mathf.FloorToInt(p.x / Cell), pz = Mathf.FloorToInt(p.z / Cell);
             long lastKey = long.MinValue; Chunk chunk = null;
             for (int dz = -reach; dz <= reach; dz++)
@@ -110,8 +120,10 @@ namespace WildWasteland.Modules.CleanHUD
                 for (int dx = -reach; dx <= reach; dx++)
                 {
                     int cx = px + dx; float ox = (cx + .5f) * Cell - p.x;
-                    float d = Mathf.Sqrt(ox * ox + oz * oz); if (d >= radius) continue;
-                    int reveal = (int)((d <= inner ? 1f : (radius - d) / (radius - inner)) * 255f); if (reveal <= 0) continue;
+                    float d = Mathf.Sqrt(ox * ox + oz * oz), limit = radius, solid = inner;
+                    if (binoculars && d > 0f && ox * forward.x + oz * forward.z >= d * cone) { limit = range; solid += range - radius; }
+                    if (d >= limit) continue;
+                    int reveal = (int)((d <= solid ? 1f : (limit - d) / (limit - solid)) * 255f); if (reveal <= 0) continue;
                     long key = Key(cx >> 6, cz >> 6);
                     if (key != lastKey)
                     {

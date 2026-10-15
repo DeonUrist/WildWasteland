@@ -36,7 +36,7 @@ namespace WildWasteland.Modules.CleanHUD
         internal static void Install(CleanHudModule owner)
         {
             Clear(); PluginInfo info;
-            if (!Chainloader.PluginInfos.TryGetValue("local.apocalypterquests", out info) || ReferenceEquals(info.Instance, null) || info.Metadata.Version != new Version(1, 8, 0)) return;
+            if (!Chainloader.PluginInfos.TryGetValue("local.apocalypterquests", out info) || ReferenceEquals(info.Instance, null)) return;
             var type = info.Instance.GetType();
             _lines = Get<List<string>>(type, "trackerLines"); _enabled = Get<ConfigEntry<bool>>(type, "showTracker");
             _ready = Get<bool>(type, "ready"); _log = Get<bool>(type, "showLog"); _style = Get<GUIStyle>(type, "trackStyle");

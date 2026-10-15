@@ -17,7 +17,7 @@ namespace WildWasteland.Core
             BepInEx.PluginInfo info;
             if (Chainloader.PluginInfos.TryGetValue(GUID, out info) && !ReferenceEquals(info.Instance, null))
             {
-                Log.Warn("[Core] HealthStacks: standalone mod installed; built-in fix stays off. Remove HealthStacks.dll to use the built-in fix.");
+                Log.Warn("[Core] HealthStacks: " + ReplacementGuard.Status(GUID) + ". Built-in fix waits until restart.");
                 return;
             }
             Hooks.GetButtonDownUpdate.Prefix(null, TakeItemUsePatch.Prefix);

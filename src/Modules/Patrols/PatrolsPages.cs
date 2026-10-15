@@ -58,12 +58,6 @@ namespace WildWasteland.Modules.Patrols
         void PatrolEditorPage(ToolLayout l)
         {
             l.Text("The patrol / convoy / merchant / loot editor (the \"ledger\"): patrol and convoy groups with their minimum distance, boss kills, chance, faction and roster; the car and truck templates (driver, passenger, turrets, loot, explode chance); merchant shop types; car and truck loot profiles. It pauses the game while open and saves PatrolsAndLoot.json and the template files.");
-            if (l.Button("Open the patrol editor", Running && InPlay, true, 320))
-                ToolWindow.CloseThen(() => { if (Instance != null && !Instance.OpenEditor()) Log.Warn("[Patrols] the patrol editor opens only in play (not in a menu or while another editor is open)"); });
-            if (!InPlay) l.Text("Load a game first: the editor opens only while you play.", Ledger.Danger);
-            l.Heading("Hotkey");
-            l.Value("Patrol editor key", KeyName(MenuKey));
-            l.Entry(MenuKey);
             l.Heading("Spawn controls");
             l.Text("With AllowDebugSpawns on, the editor shows: \"Spawn template\" (the selected template parked 8 m ahead of you, setup only), an \"S\" button per group and SPAWN in the footer (a real departure of that group from a nearby camp - these two need World traffic on in F6).");
             l.Toggle(AllowDebugSpawns, "Show spawn controls (AllowDebugSpawns)");

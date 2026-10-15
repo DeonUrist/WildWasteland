@@ -127,19 +127,22 @@ namespace WildWasteland.Modules.Patrols
                 _gameInk.End();
                 }
                 _mapLabels.Clear();_mapBattles.Clear();
-                // World traffic markers (their own switch, fog of war respected; "Unknown" with Map markers Ambiguous): moving dots + names
+                // World traffic markers (their own detail setting, fog of war respected; "Unknown" with traffic Ambiguous): moving dots + names
                 // of every traffic group, cars and foot travelers alike. Map Routes only draws the route lines above.
                 if(lblOn)
                 {
                 foreach(var journey in _journeys)if(!Fogged(mapApi,journey.position))
-                CacheMapLabel(journey.position,rect,RouteColor(journey,MapUnknown),MapName(journey),journey.foot);
+                CacheMapLabel(journey.position,rect,RouteColor(journey,MapUnknown&&!TrafficCompass.Known(journey)),MapName(journey),journey.foot);
                 if(first&&Core.Log.Verbose)LogFootDots(mapApi,rect);
                 foreach(var camp in TrafficLocations.Known.Values)if(camp.cleared&&mapApi==null)
                 CacheMapLabel(camp.center,rect,Color.gray,camp.name+" [Cleared]");
                 foreach(var battle in _battles)
                 {if(Fogged(mapApi,battle.position))continue;var p=MapPoint(battle.position,rect);_mapBattles.Add(new Rect(p.x-9f,p.y-9f,18f,18f));}
                 foreach(var merchant in MerchantHost.All)if(merchant!=null&&!Owns(merchant.GetComponent<PatrolMarker>())&&(mapApi==null||!mapApi.Hidden(merchant.transform.position)))
-                CacheMapLabel(TrafficSpace.World(merchant.transform.position),rect,_lblHide?Color.gray:Color.yellow,_lblHide?"Unknown":_inkNames?merchant.Data?.group??"Coyote merchant":"Merchant");
+                {
+                bool known=TrafficCompass.Known(TrafficCompass.MerchantKey(merchant));
+                CacheMapLabel(TrafficSpace.World(merchant.transform.position),rect,_lblHide&&!known?Color.gray:Color.yellow,_lblHide&&!known?"Unknown":_inkNames||known?merchant.Data?.group??"Coyote merchant":"Merchant");
+                }
                 }
             }
             if(traffic)
@@ -259,15 +262,15 @@ namespace WildWasteland.Modules.Patrols
         }
         private Vector2 MapPoint(Vector3 world,Rect rect)
         {var p=_gameMap.WorldToViewportPoint(TrafficSpace.Scene(world));return new Vector2(p.x*rect.width,(1f-p.y)*rect.height);}
-        internal static string MapName(TrafficJourney journey)
-        {return MapUnknown?"Unknown":MapNames&&!string.IsNullOrEmpty(journey.name)?journey.name:journey.merchant?"Merchant":journey.convoy?"Convoy":"Patrol";}
-        // Map Routes (Off / Ambiguous / On): the route lines only. World traffic markers (Off / On): the moving dots + names, whose
-        // ambiguity follows Map markers (Ambiguous = gray "Unknown"). Without CleanHUD's map service the old debug switches decide both.
+        internal static string MapName(TrafficJourney journey,bool reveal=false)
+        {bool known=reveal||TrafficCompass.Known(journey);return MapUnknown&&!known?"Unknown":(MapNames||known)&&!string.IsNullOrEmpty(journey.name)?journey.name:journey.merchant?"Merchant":journey.convoy?"Convoy":"Patrol";}
+        // Map Routes and World traffic markers each use Off / Ambiguous / On for route lines and moving dots + names respectively.
+        // Traffic ambiguity is independent of location markers. Without CleanHUD's map service the old debug switches decide both.
         private static bool RoutesOn {get{var m=Core.Services.Map;return m!=null?m.Routes!=Core.MapDetail.Off:PatrolsModule.TrafficDebugMap.Value;}}
-        private static bool MarkersOn {get{var m=Core.Services.Map;return m!=null?m.TrafficMarkers:PatrolsModule.TrafficDebugMap.Value;}}
+        private static bool MarkersOn {get{var m=Core.Services.Map;return m!=null?m.TrafficMarkers!=Core.MapDetail.Off:PatrolsModule.TrafficDebugMap.Value;}}
         private static bool InkUnknown {get{var m=Core.Services.Map;return m!=null?m.Routes==Core.MapDetail.Ambiguous:PatrolsModule.HideRouteType.Value;}}
-        private static bool MapUnknown {get{var m=Core.Services.Map;return m!=null?m.Markers==Core.MapDetail.Ambiguous:PatrolsModule.HideRouteType.Value;}}
-        private static bool MapNames {get{var m=Core.Services.Map;return m!=null?m.Markers!=Core.MapDetail.Ambiguous:PatrolsModule.RealPatrolNames.Value;}}
+        private static bool MapUnknown {get{var m=Core.Services.Map;return m!=null?m.TrafficMarkers==Core.MapDetail.Ambiguous:PatrolsModule.HideRouteType.Value;}}
+        private static bool MapNames {get{var m=Core.Services.Map;return m!=null?m.TrafficMarkers!=Core.MapDetail.Ambiguous:PatrolsModule.RealPatrolNames.Value;}}
         internal static Color32 RouteColor(TrafficJourney journey,bool unknown)
         {
             if(unknown)return new Color32(150,150,150,255);

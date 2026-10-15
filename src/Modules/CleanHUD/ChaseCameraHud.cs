@@ -127,6 +127,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (!Core.GameRefs.InGame) return Unavailable("game gate");
             if (Core.ApocasetterBridge.InputBlocked || !Application.isFocused) return Unavailable("input/focus gate");
             if (!_resolve()) { _owner = null; _drivingVehicle = null; return Unavailable("driving binding"); }
+            if (CleanHudModule.DrivingHudOnlyThirdPerson.Value && !_thirdPerson()) return Unavailable("first person view");
             // Camera scope/binocular state can remain latched until ESC; it does not own vehicle instrument visibility.
             var car = _car();
             if (_owner != car) { _owner = car; _drivingVehicle = null; _nextVehicleSearch = 0; }

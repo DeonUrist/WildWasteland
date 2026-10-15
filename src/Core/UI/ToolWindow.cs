@@ -89,7 +89,7 @@ namespace WildWasteland.Core.UI
         static List<ToolPage> Sorted()
         {
             var l = new List<ToolPage>();
-            foreach (var p in _pages) if (!p.DebugOnly || Plugin.EnableDebug.Value) l.Add(p);
+            foreach (var p in _pages) if (Visible(p)) l.Add(p);
             l.Sort((a, b) =>
             {
                 int ga = GroupIndex(a.Group), gb = GroupIndex(b.Group);
@@ -97,6 +97,10 @@ namespace WildWasteland.Core.UI
                 return _pages.IndexOf(a).CompareTo(_pages.IndexOf(b));
             });
             return l;
+        }
+        static bool Visible(ToolPage p)
+        {
+            return (!p.DebugOnly || Plugin.EnableDebug.Value) && (p != CorePages.DeveloperPage || Plugin.DeveloperMode.Value);
         }
         static int GroupIndex(string g) { int i = Array.IndexOf(ToolGroups.Order, g); return i < 0 ? ToolGroups.Order.Length : i; }
 
@@ -109,8 +113,8 @@ namespace WildWasteland.Core.UI
                 try { d(); } catch (Exception e) { Log.Error("F7 deferred action", e); }
             }
             if (!_open) return;
-            if (_current != null && _current.DebugOnly && !Plugin.EnableDebug.Value)
-            { _current = CorePages.GamePage; _scroll = Vector2.zero; Ledger.ClearNumbers(); ToolLayout.CancelRebind(); _current.OnShow(); }
+            if (_current != null && !Visible(_current))
+            { _current = Plugin.EnableDebug.Value ? CorePages.DebugPage : CorePages.GamePage; _scroll = Vector2.zero; Ledger.ClearNumbers(); ToolLayout.CancelRebind(); _current.OnShow(); }
             if (Event.current.type == EventType.Layout)
             {
                 _session.Maintain();

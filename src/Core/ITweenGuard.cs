@@ -20,7 +20,7 @@ namespace WildWasteland.Core
             BepInEx.PluginInfo info;
             if (Chainloader.PluginInfos.TryGetValue(GUID, out info) && !ReferenceEquals(info.Instance, null))
             {
-                Log.Warn("[Core] iTween guard: standalone iTweenGuard installed; built-in fix stays off. Remove iTweenGuard.dll to use the built-in fix.");
+                Log.Warn("[Core] iTween guard: " + ReplacementGuard.Status(GUID) + ". Built-in fix waits until restart.");
                 return;
             }
             var target = AccessTools.Method(typeof(iTween), "TweenUpdate");

@@ -73,7 +73,7 @@ namespace WildWasteland.Core
                 if (conflict != null)
                 {
                     e.State = ModuleState.OffConflict; e.Conflict = conflict;
-                    Log.Warn("[" + e.Module.Id + "] OFF: the standalone mod '" + conflict + "' is installed. Remove it from BepInEx\\plugins (Wild Wasteland replaces it), otherwise every feature would run twice.");
+                    Log.Warn("[" + e.Module.Id + "] waiting for standalone replacement: " + conflict + ".");
                     continue;
                 }
                 if (!e.Config.Enabled.Value) { e.State = ModuleState.OffByConfig; continue; }
@@ -91,7 +91,7 @@ namespace WildWasteland.Core
             {
                 PluginInfo info;
                 if (Chainloader.PluginInfos.TryGetValue(guid, out info) && !ReferenceEquals(info.Instance, null))
-                    return info.Metadata.Name + " " + info.Metadata.Version + " (" + System.IO.Path.GetFileName(info.Location) + ")";
+                    return info.Metadata.Name + " " + info.Metadata.Version + " (" + System.IO.Path.GetFileName(info.Location) + "): " + ReplacementGuard.Status(guid);
             }
             return null;
         }

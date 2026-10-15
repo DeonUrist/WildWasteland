@@ -90,7 +90,7 @@ namespace WildWasteland.Modules.Guns
             NpcAim = cfg.Player("", "NpcAim", true,
                 "NPC gunmen aim at the centre of your body and lead moving targets (tuning in F7 > Weapons & HUD > NPC aim). Off = the game's own aim point (your head) and no lead. Needs Projectiles.");
             IronsightWheelZoom = cfg.Player("", "IronsightWheelZoom", true,
-                "First person: while aiming down sights, scroll up to zoom in smoothly and down to zoom out. Up to 4x additional zoom, including scopes. Leaving sights resets the zoom.");
+                "First person: while aiming down sights, scroll up to zoom in smoothly and down to zoom out. Up to 3x additional zoom, including scopes. Leaving sights resets the zoom.");
             ToggleIronsights = cfg.Player("", "ToggleIronsights", false,
                 "Press Aim Down Sights once to aim and again to stop aiming. Off: hold the button as in the original game.");
             SmoothWeaponSwitch = cfg.Player("", "SmoothWeaponSwitch", true,
