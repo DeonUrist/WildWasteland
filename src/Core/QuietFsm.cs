@@ -9,7 +9,7 @@ namespace WildWasteland.Core
     // the player looks at or touches for an "ID" FSM (GetFsmString ID on {Item}: car frame "collider" children, switch_lights, a car
     // root...). PlayMaker's ActionHelpers.GetGameObjectFsm prints a Unity warning "Could not find FSM: ID on GameObject: collider"
     // each time it is missing - hundreds per minute in the BepInEx console.
-    // This prefix does the same lookup (first PlayMakerFSM with that name, else null) without the warning. Off: the vanilla method runs.
+    // This prefix does the same lookup (first PlayMakerFSM with that name, else the first PlayMakerFSM like vanilla) without the warning. Off: the vanilla method runs.
     internal static class QuietFsm
     {
         private static readonly List<PlayMakerFSM> _buf = new List<PlayMakerFSM>();
@@ -33,8 +33,9 @@ namespace WildWasteland.Core
                 __0.GetComponents(_buf);
                 for (int i = 0; i < _buf.Count; i++)
                     if (_buf[i] != null && _buf[i].FsmName == __1) { __result = _buf[i]; _buf.Clear(); return false; }
+                // vanilla falls back to go.GetComponent<PlayMakerFSM>() (the first FSM, or null) after the warning
+                __result = _buf.Count > 0 ? _buf[0] : null;
                 _buf.Clear();
-                __result = null;
                 if (++_hidden == 1 && Log.Verbose) Log.Info("[Core] QuietFsm: hiding \"Could not find FSM\" warnings (first: " + __1 + " on " + __0.name + ")");
                 return false;
             }

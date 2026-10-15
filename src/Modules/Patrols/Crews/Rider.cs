@@ -60,10 +60,7 @@ namespace WildWasteland.Modules.Patrols
             PassengerGuard.NeutralizeContact(go);  // melee / fire-contact damage FSMs and hitbox off (a passive body that can be shot)
             go.name = prefab.name + "(Rider)";
             CrewAppearance.Dress(go, prefabName, randomize);
-            var carCols = car.GetComponentsInChildren<Collider>(true);
-            foreach (var a in go.GetComponentsInChildren<Collider>(true))
-                foreach (var b in carCols)
-                    if (a != null && b != null) Physics.IgnoreCollision(a, b, true);
+            // no per-pair IgnoreCollision with the car (thousands of PhysX pair rebuilds per seat): the body is all triggers (NoContacts)
             var root = go.GetComponent<Rigidbody>() ?? go.AddComponent<Rigidbody>();
             root.isKinematic = true;
             root.interpolation = RigidbodyInterpolation.None;
@@ -86,6 +83,10 @@ namespace WildWasteland.Modules.Patrols
         // also hid the body from raycasts: shots went through it into the driver. 2.2.3: every collider of the body (inactive props included)
         // is a trigger instead - no contacts, but the game's raycasts hit triggers (QueriesHitTriggers), so it is shot as before. Every
         // Rigidbody kinematic. The body is only ever replaced (a fresh mob jumps off, the game's carcass on death), never made solid again.
+        // Seated drivers, passengers and turrets (#133 follow-up): NO physical contact with anything while seated - only bullet
+        // hits (vanilla raycasts hit triggers; WW Guns counts triggers on objects with a Bodypart FSM, which every NPC root and head
+        // has). Replaces the old per-pair Physics.IgnoreCollision of every occupant collider vs every car collider. Bail-out and
+        // death never reuse the seated body (a fresh prefab instance / the game's _Dead ragdoll), so it is never made solid again.
         internal static void NoContacts(GameObject go)
         {
             foreach (var rb in go.GetComponentsInChildren<Rigidbody>(true)) if (rb != null) rb.isKinematic = true;
@@ -95,6 +96,26 @@ namespace WildWasteland.Modules.Patrols
                 var mc = c as MeshCollider; if (mc != null && !mc.convex) mc.convex = true;   // a trigger mesh collider must be convex
                 c.isTrigger = true;
             }
+        }
+
+        // Cheap periodic re-check: only the occupant's own colliders (no car colliders, no pair rebuilds). Reused buffers.
+        private static readonly List<Collider> _ncCols = new List<Collider>();
+        private static readonly List<Rigidbody> _ncBodies = new List<Rigidbody>();
+        internal static void KeepNoContacts(GameObject go)
+        {
+            if (go == null) return;
+            _ncCols.Clear(); go.GetComponentsInChildren(true, _ncCols);
+            for (int i = 0; i < _ncCols.Count; i++)
+            {
+                var c = _ncCols[i];
+                if (c == null || c.isTrigger || c is TerrainCollider) continue;
+                var mc = c as MeshCollider; if (mc != null && !mc.convex) mc.convex = true;
+                c.isTrigger = true;
+            }
+            _ncCols.Clear();
+            _ncBodies.Clear(); go.GetComponentsInChildren(true, _ncBodies);
+            for (int i = 0; i < _ncBodies.Count; i++) { var rb = _ncBodies[i]; if (rb != null && !rb.isKinematic) rb.isKinematic = true; }
+            _ncBodies.Clear();
         }
 
         // the automatic spot (feet). Car: turret 1 on the top of the car (the highest point of its renderers, centred), turrets 2 and 3 behind
@@ -520,8 +541,8 @@ namespace WildWasteland.Modules.Patrols
             if (_car == null || _anchor == null) { Destroy(this); return; }
             if (transform.parent == null || !Alive()) { Die(); return; }
             if (!_gunner && Time.time >= _nextHide) { _nextHide = Time.time + 0.5f; HideOwnWeapons(); }
-            // weapon props toggled by the game drop their collision ignores with the car (a kinematic body would shove it): re-applied
-            if (Time.time >= _nextIgnore) { _nextIgnore = Time.time + 1f; Patrol.IgnoreCollisionsIfChanged(gameObject, _car, _carCols); _carMarker = _car.GetComponent<PatrolMarker>(); }
+            // a collider the game adds or enables later (weapon prop) is made a trigger too - no contacts at all while seated
+            if (Time.time >= _nextIgnore) { _nextIgnore = Time.time + 1f; Rider.KeepNoContacts(gameObject); _carMarker = _car.GetComponent<PatrolMarker>(); }
 
             // the player took this car, or it blew up: off the roof
             if(_marker?.SetupOnly==true)return;

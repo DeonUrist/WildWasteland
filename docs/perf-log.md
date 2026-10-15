@@ -8,6 +8,10 @@ Budget (initial targets, adjust in docs/decisions.md):
 - Load: WW work after a save load spread over >= 10 frames, no single frame > 8 ms.
 - Sliced background work (nav bakes, scene scans) stops for the frame once `[Core] Frame budget (ms)` (tools.cfg, default 2 ms) is used.
 
+### 0.1.26 / #133 vanilla optimization, first pass — 2026-10-15 — NOT YET MEASURED
+
+New module `Performance` (notes/plan-Performance.md), 38 features on by default, preset Balanced, own F7 tab "Performance" with frame-time ring (avg/p95/p99, spikes tagged save/load/tile/cull), GC alloc/frame, draw calls, SetPass, shadow casters and a census file button. PlayMaker runtime: FsmList side index + targeted events, fast removal, broadcast without copies, PlayMakerGUI loop over GUI candidates only, unhandled trigger/visibility events skipped, one shared mouse-pick ray per frame, string-convert reuse, FSM sleep via `Fsm.ManualUpdate` (FS1), compiled FsmProperty/CallMethod/action loading. Game logic: sliced culler replacing the four __GameManager__/NewGO sweeps, car simulation LOD, exact poll-sleep for hinge/wait/option polls, vehicle reflection FSMs -> direct NWH, LightFlicker 20 Hz manager, HUD/DayTime throttles, Coyote broadcast filter, duplicate Rigidbody skip, capsule writes. Rendering: point-light shadow budget + distance cull, dead post-FX skipped, TAA(no blend) -> SMAA/FXAA, sun shadow caps, terrain detail, particles, small-caster shadows, cull-only LODGroups, camera layer cull distances, Low-only far clip/texture limit, NPC animator/IK culling. World: MapMagic thread/apply budget, CCD sweep, time/physics sleep, origin-jump scan sharing, Azure FixedUpdate throttles, GC slice. Built and compiled only (agents could not run Unity; FS2-FS4 conversions unit-checked on mono against vanilla). Denis: measure Vanilla preset + all features Off vs default on the verification scenarios; run FS1, PM2, PM7, FS2, PM10 in Shadow first and expect 0 mismatches.
+
 ## What the scheduler measures (F7 -> Debug & performance -> Performance)
 
 ### 0.1.13 RC10 / #127 Engine Sim — 2026-10-15 — NOT YET MEASURED

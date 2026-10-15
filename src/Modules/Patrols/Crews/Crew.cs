@@ -328,10 +328,9 @@ namespace WildWasteland.Modules.Patrols
                 var pax = marker != null ? marker.Passenger : null;
                 if ((!_dead && _driver != null) || pax != null)
                 {
-                    if(!_carCollidersKnown||Hold){_carCollidersKnown=true;_car.GetComponentsInChildren(true,_carColliders);}
-                    var carCols = _carColliders;
-                    if (!_dead && _driver != null) Patrol.IgnoreCollisionsIfChanged(_driver, _car, carCols);
-                    if (pax != null) Patrol.IgnoreCollisionsIfChanged(pax, _car, carCols);
+                    // seated occupants have no contacts at all (Rider.NoContacts); only colliders added since are made triggers
+                    if (!_dead && _driver != null) Rider.KeepNoContacts(_driver);
+                    if (pax != null) Rider.KeepNoContacts(pax);
                 }
             }
             if (_dead && PassengerReacts()) return;

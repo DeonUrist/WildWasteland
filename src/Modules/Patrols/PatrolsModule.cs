@@ -79,6 +79,8 @@ namespace WildWasteland.Modules.Patrols
             Try("Seated LOS guard", () => SeatedLosGuard.Install(this));
             Try("Suspension", () => Suspension.Install(this));
             Core.Hooks.SetFsmFloatEnter.Postfix(this, Ram.AfterSetFsmFloat);
+            Core.Hooks.SetFsmFloatDo.Prefix(this, Ram.BeforeSetFsmFloat);   // a car never rams its own (trigger-only) crew
+            Core.Hooks.SendEventEnter.Prefix(this, Ram.BeforeSendEvent);
             Try("Motorcycle save hook (saved motorcycles may not load)", () => MotorcycleIntegration.Install(this));
 
             Paint.Init(DataDir);

@@ -136,6 +136,8 @@ namespace WildWasteland.Core
         /// <summary>ES3ReferenceMgrBase.GetPrefab(long,bool): the first handler that returns a prefab wins.</summary>
         public static readonly PrefabHook GetPrefab = new PrefabHook();
         /// <summary>NWH FloatingOrigin.Jump: Core raises IModule.OnOriginShift; modules needing the raw before/after use these.</summary>
+        /// <summary>PlayMakerFSM.OnEnable postfix (after vanilla appended the FSM to FsmList). Postfix handlers only.</summary>
+        public static readonly Hook<PlayMakerFSM> FsmEnable = new Hook<PlayMakerFSM>("PlayMakerFSM.OnEnable");
         public static readonly Hook<NWH.Common.FloatingOrigin.FloatingOrigin> OriginJump = new Hook<NWH.Common.FloatingOrigin.FloatingOrigin>("FloatingOrigin.Jump");
 
         public delegate bool FsmEventPrefix(Fsm fsm, FsmEvent ev, FsmEventData data);
@@ -265,6 +267,7 @@ namespace WildWasteland.Core
             Use(ProcessEvent.PrefixCount, ProcessEvent.Applied, typeof(P_ProcessEvent), () => ProcessEvent.Applied = true);
             Use(EnterState.PrefixCount + EnterState.PostfixCount, EnterState.Applied, typeof(P_EnterState), () => EnterState.Applied = true);
             Use(GetPrefab.PrefixCount, GetPrefab.Applied, typeof(P_GetPrefab), () => GetPrefab.Applied = true);
+            Use(FsmEnable.PostfixCount, FsmEnable.Applied, typeof(P_FsmEnable), () => FsmEnable.Applied = true);
             // FloatingOrigin.Jump is always patched: Core raises IModule.OnOriginShift from it.
             Use(1, OriginJump.Applied, typeof(P_OriginJump), () => OriginJump.Applied = true);
         }
@@ -302,6 +305,7 @@ namespace WildWasteland.Core
             Add(sb, "Fsm.ProcessEvent", ProcessEvent.Applied, ProcessEvent.PrefixCount, 0);
             Add(sb, "Fsm.EnterState", EnterState.Applied, EnterState.PrefixCount, EnterState.PostfixCount);
             Add(sb, "ES3.GetPrefab", GetPrefab.Applied, GetPrefab.PrefixCount, 0);
+            Add(sb, FsmEnable.Target, FsmEnable.Applied, FsmEnable.PrefixCount, FsmEnable.PostfixCount);
             Add(sb, OriginJump.Target, OriginJump.Applied, OriginJump.PrefixCount, OriginJump.PostfixCount);
             return sb.ToString();
         }
@@ -332,6 +336,7 @@ namespace WildWasteland.Core
         [HarmonyPatch(typeof(SensorGetLineOfSightResult), "OnEnter3D")] static class P_LosEnter3D { static bool Prefix(SensorGetLineOfSightResult __instance) { return LosEnter3D.RunPrefix(__instance); } }
         [HarmonyPatch(typeof(SensorGetLineOfSightResult), "OnUpdate3D")] static class P_LosUpdate3D { static bool Prefix(SensorGetLineOfSightResult __instance) { return LosUpdate3D.RunPrefix(__instance); } }
         [HarmonyPatch(typeof(SensorGetDetections), "DoAction")] static class P_SensorDetectionsDo { static bool Prefix(SensorGetDetections __instance) { return SensorDetectionsDo.RunPrefix(__instance); } }
+        [HarmonyPatch(typeof(PlayMakerFSM), "OnEnable")] static class P_FsmEnable { static void Postfix(PlayMakerFSM __instance) { FsmEnable.RunPostfix(__instance); } }
         [HarmonyPatch(typeof(Fsm), "ProcessEvent")] static class P_ProcessEvent { static bool Prefix(Fsm __instance, FsmEvent fsmEvent, FsmEventData eventData) { return ProcessEvent.Run(__instance, fsmEvent, eventData); } }
         [HarmonyPatch(typeof(Fsm), "EnterState")] static class P_EnterState { static bool Prefix(Fsm __instance, FsmState state) { return EnterState.RunPrefix(__instance, state); } static void Postfix(Fsm __instance, FsmState state) { EnterState.RunPostfix(__instance, state); } }
         [HarmonyPatch(typeof(ES3Internal.ES3ReferenceMgrBase), "GetPrefab", typeof(long), typeof(bool))]

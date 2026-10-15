@@ -34,11 +34,11 @@ namespace WildWasteland.Modules.Patrols.WarRig
             }
             return null;
         }
-        // ---- WW wiring. SendEvent / SetFsmFloat go through the shared Core.Hooks dispatchers; the Assembly-CSharp targets and
-        // PlayMakerFSM.OnEnable are module patches. First line of every hot handler: no War Rig loaded -> nothing can be sheltered.
+        // ---- WW wiring. SendEvent / SetFsmFloat go through the shared Core.Hooks dispatchers; the Assembly-CSharp targets are module patches;
+        // PlayMakerFSM.OnEnable goes through Core.Hooks.FsmEnable. First line of every hot handler: no War Rig loaded -> nothing can be sheltered.
         internal static void Install(Core.IModule owner)
         {
-            Core.Patches.Patch(owner, AccessTools.Method(typeof(PlayMakerFSM), "OnEnable"), postfix: AccessTools.Method(typeof(TrackDust), "Postfix"));
+            Core.Hooks.FsmEnable.Postfix(owner, TrackDust.Postfix);   // shared dispatcher (Performance also needs PlayMakerFSM.OnEnable)
             Core.Patches.Patch(owner, AccessTools.Method(typeof(Explosion), "ShouldApplyForce"), postfix: AccessTools.Method(typeof(RadialForce), "Postfix"));
             Core.Patches.Patch(owner, AccessTools.Method(typeof(Tornado), "OnTriggerStay"), prefix: AccessTools.Method(typeof(Suction), "Prefix"));
             Core.Hooks.SetFsmFloatDo.Prefix(owner, DamageValue.Prefix);

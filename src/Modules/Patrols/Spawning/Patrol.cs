@@ -731,15 +731,13 @@ namespace WildWasteland.Modules.Patrols
             drv.name = prefab.name + "(Driver)";
             CrewAppearance.Dress(drv, prefabName, randomize);
 
-            var carCols = car.GetComponentsInChildren<Collider>(true);
             var drvCols = drv.GetComponentsInChildren<Collider>(true);
-            foreach (var a in drvCols) foreach (var b in carCols)
-                if (a != null && b != null) Physics.IgnoreCollision(a, b, true);
 
             var root = drv.GetComponent<Rigidbody>();
             if (root == null) root = drv.AddComponent<Rigidbody>();
             root.isKinematic = true;
             root.interpolation = RigidbodyInterpolation.None;
+            Rider.NoContacts(drv);   // no contacts while seated, only bullet hits (was: every collider pair vs the car ignored)
             drv.transform.SetParent(sit, true);
 
             int bones = 0;
@@ -818,14 +816,10 @@ namespace WildWasteland.Modules.Patrols
             go.name = prefab.name + "(" + role + ")";
             CrewAppearance.Dress(go, prefabName, randomize);
 
-            var carCols = car.GetComponentsInChildren<Collider>(true);   // once, not once per occupant collider
-            foreach (var a in go.GetComponentsInChildren<Collider>(true))
-                foreach (var b in carCols)
-                    if (a != null && b != null) Physics.IgnoreCollision(a, b, true);
-
             var root = go.GetComponent<Rigidbody>() ?? go.AddComponent<Rigidbody>();
             root.isKinematic = true;
             root.interpolation = RigidbodyInterpolation.None;
+            Rider.NoContacts(go);   // no contacts while seated, only bullet hits (was: every collider pair vs the car ignored)
             go.transform.SetParent(anchor, true);
             if (PatrolsModule.PoseEnabled.Value)
             {
@@ -915,7 +909,6 @@ namespace WildWasteland.Modules.Patrols
             }
             if (roots.Count == 0) { PatrolsModule.Verbose("Eject: no carcass near the driver seat"); return null; }
             var carCols = car.GetComponentsInChildren<Collider>(true);
-            var paxCols = pax != null ? pax.GetComponentsInChildren<Collider>(true) : new Collider[0];
             var left = -car.transform.right;
             foreach (var root in roots)
             {
@@ -928,8 +921,7 @@ namespace WildWasteland.Modules.Patrols
                 foreach (var a in root.GetComponentsInChildren<Collider>(true))
                 {
                     if (a == null) continue;
-                    foreach (var b in carCols) if (b != null) Physics.IgnoreCollision(a, b, true);
-                    foreach (var b in paxCols) if (b != null) Physics.IgnoreCollision(a, b, true);
+                    foreach (var b in carCols) if (b != null) Physics.IgnoreCollision(a, b, true);   // the carcass is solid; the passenger is all triggers (no pairs needed)
                 }
                 var velocity = left * PatrolsModule.EjectSpeed + Vector3.up * (PatrolsModule.EjectSpeed * 0.5f) - car.transform.forward * 0.5f;
                 Launch(root, velocity);
@@ -996,8 +988,8 @@ namespace WildWasteland.Modules.Patrols
             if (pose != null) pose.Reseat(sit);
             pax.name = pax.name.Replace("(Passenger)", "(Driver)");
             if (guard != null) guard.SetDriverMode(sit);
-            int pairs = IgnoreCollisions(pax, car);
-            PatrolsModule.Verbose("Takeover: " + pax.name + " on " + sit.name + ", " + pairs + " collider pairs vs the car ignored");
+            Rider.KeepNoContacts(pax);   // already contact-free from its seat; covers props it picked up since
+            if (Core.Log.Verbose) PatrolsModule.Verbose("Takeover: " + pax.name + " on " + sit.name);
             if (oldAnchor != null && oldAnchor.name == "Apocapatrol.PassengerPos") UnityEngine.Object.Destroy(oldAnchor.gameObject);
             return pax;
         }

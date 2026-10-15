@@ -37,6 +37,7 @@ Dispatcher semantics = HarmonyX with separate plugins: every prefix handler runs
 | `HutongGames.PlayMaker.Fsm.ProcessEvent(FsmEvent, FsmEventData)` | prefix | NPC: `Brain.BeforeDrivingHide` (filters driving retreat), `DogAnimations.BeforeDamageEvent` (only with the dog bundle; skips); Guns: `Fsm_Event_Patch.Prefix` -> `Unloader.OnFsmEvent` (never skips), `WeaponTransition.BeforeEvent` (delays player weapon switches while lowering) | EVERY FSM event | NPC Brain: `_npcs.Count == 0 \|\| !On`, event "hide", Attack/trigger; dogs: `Dogs.Count == 0 \|\| !Running`; Guns: `Unloader.Busy` field compare; transition: cached WeaponInHand FSM reference, SmoothWeaponSwitch, replay guard | Apocasaver `Fsm_ProcessEvent_Patch` (separate Harmony owner; coexists) |
 | `Fsm.EnterState(FsmState)` | prefix + postfix (never skip) | Guns: `MagazineStatePatch` -> `PerGunAmmo.BeforeState` / `AfterState` (WeaponInHand, SaveLoadGame) | every state entry of every FSM (x2) | `Fsm.Name.Length != 12` (both watched names are 12 chars) | Apocasaver `AutosaveStatePatch` (postfix) |
 | `ES3Internal.ES3ReferenceMgrBase.GetPrefab(long,bool)` | prefix (first resolver returning a prefab wins) | Patrols: `MotorcycleIntegration.ResolvePrefab` (id 735710202610050001), `PrefabLookup.Resolve` (War Rig, id 735710202610090001) | per prefab lookup on load | `id != PrefabId` | |
+| `PlayMakerFSM.OnEnable` | postfix (observe) | Patrols: `NativeStormProtection.TrackDust.Postfix`; Performance: `FsmRegistry.OnEnablePost` (PM1 index), `GuiLoopFeature.OnFsmEnabled` (PM5) | per FSM enable | Patrols: `FsmName != "SandPlayer"`; Performance: registry users > 0 / static `On` | |
 | `NWH.Common.FloatingOrigin.FloatingOrigin.Jump` | prefix + postfix (**always patched**) | Core: `Origin.BeforeJump` / `AfterJump` -> `IModule.OnOriginShift(delta)` for every running module (PlayerBody: active climb path; NPC: ghosts, nav boxes, brain/idle/nests/webs positions; Guns: bullets in flight; HUD: floating numbers; Patrols: `TrafficSpace.OriginShift`). No module subscribes to the raw `Hooks.OriginJump`. | per 1000 m jump | delta == zero -> nothing | standalone Apocapatrol (`TrafficSpace.OriginJump`, removed) |
 
 ## 2. Core-only patches (`Core.Patches.Patch(null, ...)`, Harmony id = GUID)
@@ -119,7 +120,6 @@ Shared `GetButtonDown.OnUpdate` prefix: `CancelHook.Prefix`, registered after HU
 | Target | Kind | Handler | Filter (first line) | Hot? |
 |---|---|---|---|---|
 | `GetDistance.OnEnter` | prefix (skip + Finish) | `PoiEncounter.BeforeCleanupDistance` | Cached actions of __GameManager__/DeleteFarAwayItems only; protected tankers/parts and undriven POI trucks take the native FINISHED path instead of distance deletion | native 10 s cleanup sweep |
-| `PlayMakerFSM.OnEnable` | postfix | `NativeStormProtection.TrackDust.Postfix` | `FsmName != "SandPlayer"` (string, per enable, not per frame) | per FSM enable |
 | `Explosion.ShouldApplyForce(GameObject)` | postfix | `NativeStormProtection.RadialForce.Postfix` | `__result && rigs loaded` | per explosion force query |
 | `Tornado.OnTriggerStay(Collider)` | prefix (skip) | `NativeStormProtection.Suction.Prefix` | rigs loaded | per tornado contact per physics step |
 | `MotorcycleMod.Factory.Template()` (third party, only when loaded) | postfix | `MotorcycleIntegration.PrepareRearAccess` | - | rare |
@@ -128,9 +128,35 @@ Shared `GetButtonDown.OnUpdate` prefix: `CancelHook.Prefix`, registered after HU
 
 Dropped from Apocapatrol / War Rig: the 6 + 1 Harmony ids, `TrafficSpace.OriginJump` (Core.Origin), WarRig `PatchAll(assembly)`, `Apocasetter.Catalog.OptedIn` postfix (SettingsIntegration), WarRig's separate `CreateObject` / `GetPrefab` patches (now dispatcher subscribers). Non-Harmony hooks: `TerrainTile.OnBeforeTilePrepare / OnTileFinalized`, `Application.quitting += PatrolPersistence.FlushPending`, `SaveBus.StateChanged += PatrolPersistence.OnStateChanged` (subscribed in Init, removed in Shutdown).
 
+### Performance (#133, first pass, Testing)
+
+Every patch is installed once when its feature first starts and stays for the module lifetime; bodies test the feature's static flag first (Off = one bool test). Hook subscriptions: `Fsm.ProcessEvent` prefix (FS1 wake, CT8 Coyote filter; both return true unless CT8 drops a no-op repeat), `Fsm.EnterState` postfix (PollSleep wake, CT2), `CreateObject.OnEnter` postfix (render scan of spawned objects), `PlayMakerFSM.OnEnable` postfix (above).
+
+| Feature | Target | Kind |
+|---|---|---|
+| PM1/PM3 registry | `PlayMakerFSM.OnDisable`, `PlayMakerFSM.OnDestroy` | prefix (replaces when PM3 is on; exact copies) |
+| PM2 | `Fsm.SendEventToFsmOnGameObject(GameObject,string,FsmEvent)`, `Fsm.BroadcastEventToGameObject(GameObject,FsmEvent,FsmEventData,bool,bool)` | prefix (replaces) |
+| PM4 | `Fsm.BroadcastEvent(FsmEvent,bool)`, `PlayMakerFSM.BroadcastEvent(FsmEvent)` | prefix (replaces) |
+| PM5 | `PlayMakerGUI.OnGUI` (replaces), `PlayMakerFSM.OnDisable/OnDestroy` (observe), `Fsm.CreateSubFsm` (postfix), `PlayMakerOnGUI.Start` (postfix), `PlayMakerFSM.OnBecameVisible/OnBecameInvisible` (prefix, skips proven no-op events) | mixed |
+| PM6 | `Fsm.OnTriggerEnter/Stay/Exit`, `Fsm.OnCollisionEnter/Stay/Exit` | prefix (exact copies; unhandled system event skipped) |
+| PM7 | `ActionHelpers.DoMousePick` | prefix (shared per-frame cast); PlayerBody `PickAssist` postfix still runs after it |
+| PM10 | `ConvertFloatToString` / `ConvertIntToString` private Do methods | prefix |
+| FS1 | `Fsm.Update` (postfix: sleep decision), `Fsm.Event(FsmEventTarget,FsmEvent)`, `SwitchState`, `Start`, `OnEnable`, `Stop`, `Init`, `Reinitialize`, `Clear`, `OnDestroy`, `DelayedEvent` x2, every physics/animator/GUI callback of `Fsm`, `FsmStateAction.Finish`, `PlayMakerFSM.OnBeforeSerialize`, `PlayMakerFSM.Awake` (postfix) | prefix = wake |
+| FS2 | `FsmProperty.GetValue`, `FsmProperty.SetValue` | prefix (replaces, falls back to vanilla) |
+| FS3 | `CallMethod.DoMethodCall` | transpiler (MethodBase.Invoke -> compiled invoker) |
+| FS4 | `ActionData.CreateAction(Context,int)`, `ActionData.LoadActionField`, `ActionData.LoadActions` | transpilers |
+| Content (FsmEdits) | `PlayMakerFSM.Awake` | postfix (applies verified FSM edits; clears copied ManualUpdate) |
+| CT2 | `SetIsKinematic.OnEnter` | prefix |
+| CT9 | `AddComponent.OnEnter` | prefix (duplicate Rigidbody) |
+| RC5 | `ThreadManager.TaskThreadAction` (MapMagic) | prefix |
+| EN7 | `AzureTimeController.FixedUpdate`, `AzureWeatherController.FixedUpdate` | prefix |
+| EN2 | `PostProcessEffectSettings.IsEnabledAndSupported` (postfix), `SharpenRenderer.Render` (prefix) | resolved by reflection (WW does not reference Unity.Postprocessing.Runtime) |
+| EN3/RC2/RC8 | `GraphicSettingHelperMethods.ChangeQualitySettings` | postfix (re-apply caps after the graphics menu) |
+| RC6 | `FastIKFabric.LateUpdate` | prefix (skip invisible/far rigs; never the player) |
+
 ## 4. Known shared targets without a WW subscriber
 
-Other mods patch these too; if a future module needs them, add a dispatcher: `Rotate.DoRotate`, `AddForce.DoAddForce` (NPC-only module patches today; ApocalypterAI patches them), `Wait.OnEnter`, `RandomWait.OnEnter`, `AudioPlay.OnEnter`, `LookAt.DoLookAt`, `FsmState.OnEnter`, `IntClamp.DoClamp`, `FloatClamp.DoClamp`, `PlayMakerFSM.OnEnable`, `ES3PlayMaker.Save/SaveAll/Load/LoadAll.Enter` (Apocasaver), `ES3Settings.get_FullPath`, `ES3IO.CommitBackup` (Apocasaver only - never patch these for save purposes, see notes/HostMods.md 2.6).
+Other mods patch these too; if a future module needs them, add a dispatcher: `Rotate.DoRotate`, `AddForce.DoAddForce` (NPC-only module patches today; ApocalypterAI patches them), `Wait.OnEnter`, `RandomWait.OnEnter`, `AudioPlay.OnEnter`, `LookAt.DoLookAt`, `FsmState.OnEnter`, `IntClamp.DoClamp`, `FloatClamp.DoClamp`, `ES3PlayMaker.Save/SaveAll/Load/LoadAll.Enter` (Apocasaver), `ES3Settings.get_FullPath`, `ES3IO.CommitBackup` (Apocasaver only - never patch these for save purposes, see notes/HostMods.md 2.6).
 
 ### POI (#81)
 

@@ -23,6 +23,7 @@ namespace WildWasteland.Core.UI
             GamePage = new GameSettingsPage();
             ToolWindow.Add(GamePage);
             ToolWindow.Add(new ActionPage(null, ToolGroups.General, "Modules", Modules));
+            ToolWindow.Add(WildWasteland.Modules.Performance.PerformancePage.Instance);   // #133: separate Performance tab
             ToolWindow.Add(new ActionPage(null, ToolGroups.General, "Debug", Debug) { DebugOnly = true });
             _settings = new ConfigPage(null, ToolGroups.General, "Other settings", Plugin.Settings, d => true) { Intro = "Remaining gameplay values and switches." };
             foreach (var e in ModuleHost.Entries) if (e.Module.Id == "POI") _poi = e.Config.Enabled;

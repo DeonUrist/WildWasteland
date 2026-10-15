@@ -130,6 +130,7 @@ namespace WildWasteland.Modules.CleanHUD
             QuestJournal.Install(this);
             Core.Patches.Patch(this, AccessTools.Method(typeof(UiTextSetText), "OnEnter"), postfix: AccessTools.Method(typeof(MessageHook), "Postfix"));
             Hooks.GetButtonDownUpdate.Prefix(this, CancelHook.Prefix);
+            Hooks.EnterState.Postfix(this, PauseCursorFix.AfterEnterState);
             Scheduler.Sliced(this, "Scene key discovery", 500, SceneCache.Step);
             Scheduler.Sliced(this, "Weapon icons", 500, Assets.RenderStep);
             Scheduler.Sliced(this, "Accent panels", 500, AccentTheme.Step);

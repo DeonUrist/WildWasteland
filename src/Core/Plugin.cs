@@ -41,7 +41,7 @@ namespace WildWasteland
     {
         public const string GUID = "com.denis.apocalypter.wildwasteland";
         public const string NAME = "Wild Wasteland";
-        public const string VERSION = "0.1.25";
+        public const string VERSION = "0.1.26";
 
         public static Plugin Instance;
         public static ConfigFile Main, Settings, Tools;
@@ -123,6 +123,7 @@ namespace WildWasteland
             Core.ModuleHost.Add(new Modules.POI.PoiModule());
             Core.ModuleHost.Add(new Modules.QuestsCompat.QuestsCompatModule());
             Core.ModuleHost.Add(new Modules.EngineSimCompat.EngineSimCompatModule());
+            Core.ModuleHost.Add(new Modules.Performance.PerformanceModule());   // last: its PlayMaker hooks run after every gameplay module's
         }
 
         static void ApplyAudioVoices(int want)
