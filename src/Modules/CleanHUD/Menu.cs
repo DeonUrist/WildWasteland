@@ -48,6 +48,13 @@ namespace WildWasteland.Modules.CleanHUD
         }
     }
 
+    public sealed class MenuScrollRect : ScrollRect
+    {
+        public override void OnBeginDrag(PointerEventData e) { }
+        public override void OnDrag(PointerEventData e) { }
+        public override void OnEndDrag(PointerEventData e) { }
+    }
+
     // Arrow inside a row: handles its own down/click so the row button does not take the press.
     public sealed class ClickZone : MonoBehaviour, IPointerDownHandler, IPointerClickHandler
     {
@@ -260,6 +267,7 @@ namespace WildWasteland.Modules.CleanHUD
         private static bool _updateChecked;
         private static string _updateUrl;
         private MenuButton _updateButton;
+        private MenuButton _discordButton, _githubButton;
 
         internal static System.Collections.IEnumerator CheckUpdates()
         {
@@ -396,6 +404,9 @@ namespace WildWasteland.Modules.CleanHUD
             if (_sub != null) _sub.gameObject.SetActive(_screen != "main");
             bool showUpdate = _screen == "main" && _modal == null && _updateUrl != null;
             if (_updateButton != null && _updateButton.gameObject.activeSelf != showUpdate) _updateButton.gameObject.SetActive(showUpdate);
+            bool showDiscord = _screen == "main" && _modal == null;
+            if (_discordButton != null && _discordButton.gameObject.activeSelf != showDiscord) _discordButton.gameObject.SetActive(showDiscord);
+            if (_githubButton != null && _githubButton.gameObject.activeSelf != showDiscord) _githubButton.gameObject.SetActive(showDiscord);
 
             if (_screen != "main" || _modal != null || _seedEdit) BlockCancelFrame = Time.frameCount + 1;
             if (_capRow != null) { TickCapture(); return; }
@@ -430,7 +441,7 @@ namespace WildWasteland.Modules.CleanHUD
             _root = null; _main = _sub = _modal = _status = null; _sound = null; _screen = "main"; _seedEdit = false; _vanillaWatch = null;
             _capRow = null; _capBlock = null; _keyView = _keyContent = _keyThumb = null; _keyHint = null; _warnText = null; _warnChecked = false;
             _modsButton = null; _nextModsScan = 0; _nextFrame.Clear(); _later.Clear(); BlockCancelFrame = -1;
-            _updateButton = null;
+            _updateButton = _discordButton = _githubButton = null;
         }
 
         private static bool IsActive(string path) { var t = SettingsModel.FindPath(path); return t != null && t.gameObject.activeInHierarchy; }
@@ -650,16 +661,27 @@ namespace WildWasteland.Modules.CleanHUD
             {
                 _updateButton = CenteredRow(_rootRt, 0, 0, 390, 64, "UPDATE AVAILABLE", 30, () => Application.OpenURL(_updateUrl));
                 var rt = (RectTransform)_updateButton.transform; rt.anchorMin = rt.anchorMax = rt.pivot = Vector2.one; rt.anchoredPosition = new Vector2(-60, -60);
-                T(rt, "mod", 0, 62, 390, 30, 20, TextAnchor.MiddleCenter, Dim, "WILD WASTELAND");
+                rt.sizeDelta = new Vector2(390, 100);
+                var plate = R(rt, "plate", -40, -40, 470, 180).gameObject.AddComponent<RawImage>();
+                plate.texture = Assets.Tex("panel_weapon"); plate.raycastTarget = false; plate.transform.SetAsFirstSibling();
+                T(rt, "mod", 0, 62, 390, 30, 20, TextAnchor.MiddleCenter, Gold, "WILD WASTELAND");
                 _updateButton.gameObject.SetActive(false);
+            }
+            _discordButton = CenteredRow(_rootRt, 0, 0, 200, 48, "DISCORD", 26, () => Application.OpenURL("https://discord.gg/f56btNbPg"));
+            var discordRect = (RectTransform)_discordButton.transform;
+            discordRect.anchorMin = discordRect.anchorMax = discordRect.pivot = new Vector2(1, 0); discordRect.anchoredPosition = new Vector2(-60, 204);
+            _githubButton = CenteredRow(_rootRt, 0, 0, 200, 48, "GITHUB", 26, () => Application.OpenURL("https://github.com/DeonUrist/WildWasteland"));
+            var githubRect = (RectTransform)_githubButton.transform;
+            githubRect.anchorMin = githubRect.anchorMax = githubRect.pivot = new Vector2(1, 0); githubRect.anchoredPosition = new Vector2(-60, 140);
+            foreach (var link in new[] { _discordButton, _githubButton })
+            {
+                Plate(link.transform, 0, 0, 200, 48); var plate = link.transform.GetChild(link.transform.childCount - 1); plate.GetComponent<Image>().raycastTarget = false; plate.SetAsFirstSibling();
             }
 
             _status = R(_rootRt, "status", 0, 0, 1920, 1080);
             _status.anchorMin = _status.anchorMax = new Vector2(0, 0); _status.pivot = new Vector2(0, 0); _status.anchoredPosition = Vector2.zero;
             _statusText = T(_status, "status", 120, 1080 - 96, 1200, 40, 24, TextAnchor.MiddleLeft, Dim, "");
             Shade(_statusText, .7f);
-            _warnText = T(_status, "keywarn", 120, 1080 - 136, 1400, 40, 24, TextAnchor.MiddleLeft, Red, "");
-            Shade(_warnText, .7f);
 
             BuildMain();
             _screen = "main";
@@ -1205,15 +1227,19 @@ namespace WildWasteland.Modules.CleanHUD
             }
             if (y == 0) T(_keyContent, "none", 22, 0, W - 60, KeyRH, 22, TextAnchor.MiddleLeft, Dim, "NO KEYS");
             _keyContent.sizeDelta = new Vector2(W - 14, y);
-            var sr = _keyView.gameObject.AddComponent<ScrollRect>();
+            var sr = _keyView.gameObject.AddComponent<MenuScrollRect>();
             sr.content = _keyContent; sr.viewport = _keyView; sr.horizontal = false; sr.vertical = true;
             sr.movementType = ScrollRect.MovementType.Clamped; sr.inertia = false; sr.scrollSensitivity = 48;
             _keyContent.anchoredPosition = new Vector2(0, Mathf.Clamp(_keyScrollY, 0, Mathf.Max(0, y - vh)));
             // scroll bar
             if (y > vh)
             {
-                Img(p, "track", X + W - 6, vy, 3, vh, new Color(Gold.r, Gold.g, Gold.b, .15f));
-                _keyThumb = Img(p, "thumb", X + W - 7, vy, 5, Mathf.Max(30, vh * vh / y), Gold).rectTransform;
+                var track = Img(p, "track", X + W - 18, vy, 18, vh, new Color(Gold.r, Gold.g, Gold.b, .15f), true);
+                _keyThumb = Img(track.transform, "thumb", 0, 0, 0, 0, Gold, true).rectTransform;
+                _keyThumb.pivot = new Vector2(.5f, .5f); _keyThumb.sizeDelta = new Vector2(-10, 0);
+                var scrollbar = track.gameObject.AddComponent<Scrollbar>();
+                scrollbar.direction = Scrollbar.Direction.BottomToTop; scrollbar.handleRect = _keyThumb; scrollbar.targetGraphic = _keyThumb.GetComponent<Image>();
+                scrollbar.transition = Selectable.Transition.None; sr.verticalScrollbar = scrollbar;
             }
             _keyHint = T(p, "hint", X + 22, Y + H - 52, W - 44, 36, 20, TextAnchor.MiddleLeft, Dim, "");
             ShowKeyHint();
@@ -1370,7 +1396,7 @@ namespace WildWasteland.Modules.CleanHUD
             BuildSettings();
         }
 
-        // keep the selected row in view (keyboard navigation) and move the scroll thumb
+        // keep the selected row in view (keyboard navigation)
         private void TickKeyScroll()
         {
             if (_keyContent == null || _keyView == null) return;
@@ -1389,13 +1415,6 @@ namespace WildWasteland.Modules.CleanHUD
                     pos.y = Mathf.Clamp(pos.y, 0, Mathf.Max(0, ch - vh));
                     _keyContent.anchoredPosition = pos;
                 }
-            }
-            if (_keyThumb != null && ch > vh)
-            {
-                float th = _keyThumb.sizeDelta.y, t = Mathf.Clamp01(_keyContent.anchoredPosition.y / Mathf.Max(1f, ch - vh));
-                var tp = _keyThumb.anchoredPosition;
-                float top0 = -((RectTransform)_keyView).anchoredPosition.y;
-                _keyThumb.anchoredPosition = new Vector2(tp.x, -(top0 + t * (vh - th)));
             }
         }
 
