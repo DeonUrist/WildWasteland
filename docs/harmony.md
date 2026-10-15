@@ -55,6 +55,7 @@ Not Harmony but worth knowing: `Core.SaveBus` polls `SaveLoadGame.ActiveStateNam
 
 | Target | Kind | Handler | Filter (first line) | Hot? |
 |---|---|---|---|---|
+| `ApocaChaseCamera.ApocaplayerBridge.FindType` (optional, 0.2.5) | prefix | `ChaseCameraCompat.BeforeFindType` | PlayerBody running; maps only the five former Apocaplayer types to this module and its config facade | Source bridge discovery only; ChaseCamera owns its original view/aim/origin hooks |
 | `HutongGames.PlayMaker.Actions.MouseLook.OnUpdate` | prefix (skip) | `ThirdPerson.BeforeMouseLook` | `return !Orbiting` (static bool) | every MouseLook, every frame |
 | `HutongGames.PlayMaker.ActionHelpers.DoMousePick(float,int)` | postfix | `PickAssist.AfterDoMousePick` | `Running` + static `ThirdPerson.On / CarShift` | once per frame something picks |
 | `HutongGames.PlayMaker.Actions.iTweenMoveTo.OnEnter` | prefix | `AimTransition.BeforeMoveTo` | `Fsm.Name == "AimDownSights"` | per ADS press / release |
@@ -104,6 +105,7 @@ No module-only patches (its single target is the shared `SetFsmFloat.OnEnter` pr
 
 | Target | Kind | Handler | Filter (first line) | Hot? |
 |---|---|---|---|---|
+| `ApocaChaseCamera.DrivingReadings.Capture` (optional, 0.2.5) | transpiler (observation) | `ChaseCameraHud.CaptureReadings` / `Record` | Successful source snapshot; bridge ready + CleanHUD running; original return value retained | Per source driving HUD tick; typed snapshot fields, no boxing, scans or replacement telemetry |
 | `UiTextSetText.OnEnter` | postfix | `MessageHook.Postfix` | `!Active`, null Text, everyFrame; HUD canvas only, timed-state classification cached by FsmState | per UI text state entry |
 | `Apocasaver.AutosavePresentation.Begin` / `.End` (optional, reflected third-party UI methods) | postfix | `ApocasaverLoading.AfterBegin` / `.AfterEnd` | Cached loading screen provider null; display only, exceptions contained | per autosave presentation begin/end |
 | `Apocasaver.SaveNaming.OnGUI` (optional, reflected third-party UI method) | prefix | `ApocasaverLoading.BeforeNameGui` | Running + Clean menus enabled + naming popup open; replaces drawing only, original Confirm/Cancel delegates retain save/input/cursor lifecycle; original popup when off or drawing fails | per source OnGUI callback; no other known patchers |
@@ -151,6 +153,7 @@ All targets below are optional external DLL methods, installed only for Talk 2.0
 | QuestsCompat | Hire.TryMount / AttachGuard / LendArmPose / TeachAll / PatrolShootDistance | LegacyTypes transpiler; provider resolves original Apocapatrol type names | On mount/setup or range refresh |
 | QuestsCompat | Hire.FootShoot / PlayShotAnim / WatchShots; CountShot | AnimationCalls transpiler suppresses native Animator.Play only while WW owns this animator; Shot postfix drives shot/reload clips | Per shot / shot observation |
 | QuestsCompat | Hire.FeedTarget / HoldFire | Prefixes feed explicit follower target and reload hold to Patrols | Per mounted follower update |
+| QuestsCompat | Quests.Plugin.BuildButtons; HireNpc / AskForWork / AcceptQuest / RunTalkAction | CrewButtons postfix hides hiring while seated and new quest offers for current/former crew; prefixes block hiring before reputation charge and new quests, including scripted quest.give. Former crew may be hired on foot; existing turn-ins and dismissal remain available | Per dialogue rebuild/action; Patrols crew service plus saved NPC-name history, current seat parenting for hiring |
 | CleanHUD | Talk.DialogueUI.ShowDialogue / AppendChatLine / SetChoices | Changed postfix; invalidates mirrored chat | Per dialogue change; no reflection in Tick |
 | CleanHUD | Quests.Plugin.AddToast | QuestNotifications.BeforeToast prefix; queues the existing CleanHUD message log and suppresses only the source popup/log duplication, keeping a WW quest log line | Per notification; CleanHUD running + HUD enabled, otherwise original |
 | CleanHUD | Quests.Plugin.Shadowed | QuestTracker.BeforeShadowed prefix; suppresses only the tracker style while an attached CleanHUD owns its replacement, preserving source log/toast drawing | Per source GUI text; cached GUIStyle reference comparison, original when CleanHUD off |

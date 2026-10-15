@@ -16,6 +16,8 @@ namespace WildWasteland.Modules.Patrols
                 default: return null;
             }
         }
+        public bool IsCrew(GameObject npc)
+        { return npc != null && (npc.GetComponent<SimpleBanditTag>() != null || npc.GetComponent<Pose>() != null); }
         public void Animated(GameObject npc, bool enabled)
         {
             var pose = npc != null ? npc.GetComponent<Pose>() : null;

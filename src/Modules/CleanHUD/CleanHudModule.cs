@@ -84,6 +84,7 @@ namespace WildWasteland.Modules.CleanHUD
         public override void Init()
         {
             Running = true; _retry = 0; _throttle.Clear();
+            ChaseCameraHud.Clear(); ChaseCameraHud.Install(this);
             ApocapocketInventory.Install(this);
             MessageHook.Clear(); Bindings.Clear(); Menu.BlockCancelFrame = -1;
             var dir = Core.Assets.ModuleConfigDir(Id);
@@ -128,6 +129,7 @@ namespace WildWasteland.Modules.CleanHUD
         private void MapChanged(object sender, EventArgs args) { if (Running && _questMap != null) _questMap.ApplyEnabled(); }
         private void AttachHud()
         {
+            ChaseCameraHud.Install(this);
             if (!KeyCatalog.ScanStarted) KeyCatalog.StartScan();
             if (!Enabled.Value || Time.unscaledTime < _retry) return;
             if (_hud != null && !_hud.Valid) Release();
@@ -178,6 +180,7 @@ namespace WildWasteland.Modules.CleanHUD
         public override void Shutdown()
         {
             Running = false; Release();
+            ChaseCameraHud.Clear();
             TalkDialogue.Dispose();
             QuestTracker.Clear();
             if (ReferenceEquals(Services.Map, _questMap)) Services.Map = null;

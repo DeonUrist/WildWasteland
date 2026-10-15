@@ -861,6 +861,7 @@ namespace WildWasteland.Modules.Patrols
                 Register.Name(mob, prefab.name); CrewAppearance.Transfer(gameObject, mob); Register.Add(mob, false);
                 if (health > 0f) { Patrol.SetHealth(mob, health); mob.AddComponent<Patrol.LateHealth>().Value = health; }
                 PatrolsModule.Verbose("Rider: " + mob.name + " landed and fights on foot");
+                Core.Services.RaiseCrewBailedOut(_car, gameObject, mob);
             }
             if (_marker != null) _marker.DropRider(gameObject);
             Destroy(gameObject);

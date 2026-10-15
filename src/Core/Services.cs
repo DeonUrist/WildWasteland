@@ -234,6 +234,8 @@ namespace WildWasteland.Core
     {
         // Legacy Quests binds these types by reflection; the provider owns the mapping.
         Type ResolveType(string name);
+        // Includes dismounted crew while their existing runtime tags are present.
+        bool IsCrew(GameObject npc);
         void Animated(GameObject npc, bool enabled);
         void Combat(GameObject npc, GameObject target, float blockedUntil);
     }

@@ -23,6 +23,10 @@ namespace WildWasteland.Modules.QuestsCompat
         private static Func<object, BepInEx.Configuration.ConfigEntry<bool>> _pauseTalk;
         private static readonly EditorSession DialogueSession = new EditorSession();
         private static Func<object, object> _book;
+        private static Func<object, object> _bridge;
+        private static Func<object, Transform> _dialogueNpc;
+        private static Func<object, IList> _buttons;
+        private static Func<object, string> _buttonKey;
         private static Func<object, MethodInfo> _immersiveAdd;
         private static Action<object, bool> _setReady;
         private static Action<object, PlayMakerFSM> _saveFsm;
@@ -52,7 +56,7 @@ namespace WildWasteland.Modules.QuestsCompat
         public override void Init()
         {
             _owner = this; _generation++; _newWorld = false; _dispatch = _tickDispatch = false;
-            ClearScan();
+            ClearScan(); CrewHistory.Clear();
             PluginInfo info;
             if (Chainloader.PluginInfos.TryGetValue("com.example.apocalypter.talk", out info) && !ReferenceEquals(info.Instance, null))
             {
@@ -91,9 +95,14 @@ namespace WildWasteland.Modules.QuestsCompat
                 Patch(game, "FindItems", transpiler: "ItemScan");
                 foreach (var name in new[] { "FindPeople", "FindEnemies", "FindBodies", "LiveNames", "FindNpcNames" }) Patch(game, name, transpiler: "PeopleScan");
                 QuestFollower.Install(this, asm, _quests);
+                _bridge = Binding.Get<object>(type, "bridge"); _dialogueNpc = Binding.Get<Transform>(asm.GetType("ApocalypterQuests.TalkBridge", true), "Npc");
+                _buttons = Binding.Get<IList>(type, "wantButtons"); _buttonKey = Binding.Get<string>(asm.GetType("ApocalypterQuests.TalkBtn", true), "Key");
+                Patch(type, "BuildButtons", postfix: "CrewButtons"); Patch(type, "HireNpc", "HireAllowed");
+                Patch(type, "AskForWork", "WorkAllowed"); Patch(type, "AcceptQuest", "WorkAllowed"); Patch(type, "RunTalkAction", "CrewTalkAction");
                 var hooks = asm.GetType("ApocalypterQuests.Hooks", true);
                 foreach (var name in new[] { "OpenPostfix", "ClosePostfix", "CreateObjectPostfix" }) PluginLifetime.Install(this, hooks, name);
                 SaveBus.StateChanged += StateChanged;
+                Services.CrewBailedOut += CrewHistory.Bailed;
                 Scheduler.EveryFrame(this, "Quest frame", QuestFrame);
                 Scheduler.EveryFrame(this, "Quest poses", QuestLate, Phase.LateUpdateLast);
                 Scheduler.Gui(this, "Quest windows", QuestGui);
@@ -114,6 +123,27 @@ namespace WildWasteland.Modules.QuestsCompat
                 throw new InvalidOperationException("Compatibility hook failed: " + type.Name + "." + name);
         }
         private static bool ScheduledOnly() { return _dispatch; }
+        private static bool VehicleCrew(Transform npc)
+        {
+            if (npc == null || npc.parent == null || Services.FollowerVehicles == null) return false;
+            var pose = Services.FollowerVehicles.ResolveType("Apocapatrol.Pose");
+            return pose != null && npc.GetComponent(pose) != null;
+        }
+        private static bool WorkAllowed(object __instance) { return !CrewHistory.Blocked(_dialogueNpc(_bridge(__instance))); }
+        private static bool HireAllowed(Transform __2) { return !VehicleCrew(__2); }
+        private static bool CrewTalkAction(object __instance, string __0) { return __0 != "quest.give" || WorkAllowed(__instance); }
+        private static void CrewButtons(object __instance)
+        {
+            var npc = _dialogueNpc(_bridge(__instance));
+            bool seated = VehicleCrew(npc), blocked = CrewHistory.Blocked(npc);
+            if (!seated && !blocked) return;
+            var buttons = _buttons(__instance);
+            for (int i = buttons.Count - 1; i >= 0; i--)
+            {
+                string key = _buttonKey(buttons[i]);
+                if ((blocked && (key == "work" || key == "accept")) || (seated && key == "hire")) buttons.RemoveAt(i);
+            }
+        }
         private static bool TickOnly() { return _tickDispatch; }
         private static bool SkipWatcher() { return false; }
         private static bool KeepDialogueModel() { return false; }
@@ -142,19 +172,22 @@ namespace WildWasteland.Modules.QuestsCompat
             if (_quests == null) return;
             if (state == "LoadGame" || state == "LoadVar" || state == "generateTerrain 2" || state == "loaded" || state == "setSeed" || state == "generateTerrain")
             {
+                if (state == "LoadGame" || state == "setSeed") CrewHistory.Begin(state == "setSeed");
                 if (_ready(_quests)) { _setReady(_quests, false); _reset(_quests); _generation++; ClearScan(); }
                 _newWorld = state == "setSeed" || state == "generateTerrain";
                 if (_newWorld) _bookClear(_book(_quests));
             }
             else if (state == "isPlay" && !_ready(_quests))
             {
+                CrewHistory.Load(_newWorld);
                 _setReady(_quests, true); if (!_newWorld) _load(_quests);
                 Log.Always("[QuestsCompat] Quest world ready; original save/profile rules active");
             }
             else if (state == "SaveGame" && _ready(_quests))
             {
                 string slot = SaveBus.Slot; int generation = _generation;
-                SaveBus.AfterSave(() => { if (_quests != null && generation == _generation && slot == SaveBus.Slot) _save(_quests); });
+                var crew = CrewHistory.Snapshot();
+                SaveBus.AfterSave(() => { if (_quests != null && generation == _generation && slot == SaveBus.Slot) { CrewHistory.Save(slot, crew); _save(_quests); } });
             }
         }
         private static void ClearScan() { Items.Clear(); People.Clear(); _nextItems.Clear(); _nextPeople.Clear(); _scan = _scanRevision = 0; _scanAt = 0; _scanReady = false; DeliveryRecovery.Clear(); }
@@ -173,7 +206,7 @@ namespace WildWasteland.Modules.QuestsCompat
             if (f != null)
             {
                 if (f.FsmName == "ItemName") _nextItems.Add(f);
-                else if (f.FsmName == "Health" || f.FsmName == "ID") _nextPeople.Add(f);
+                else if (f.FsmName == "Health" || f.FsmName == "ID") { _nextPeople.Add(f); if (f.FsmName == "Health") CrewHistory.Observe(f.gameObject); }
             }
             return true;
         }
@@ -235,6 +268,7 @@ namespace WildWasteland.Modules.QuestsCompat
         public override void Shutdown()
         {
             _generation++; SaveBus.StateChanged -= StateChanged; ClearMarkers(); ClearScan();
+            Services.CrewBailedOut -= CrewHistory.Bailed;
             if (_quests != null && _reset != null) _reset(_quests);
             QuestFollower.Uninstall();
             if (_quests != null && _saveFsm != null) { _saveFsm(_quests, GameRefs.SaveLoadGame); _hadSaveFsm(_quests, GameRefs.SaveLoadGame != null); _saveState(_quests, SaveBus.State); }

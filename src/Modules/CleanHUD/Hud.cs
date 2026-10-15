@@ -62,6 +62,9 @@ namespace WildWasteland.Modules.CleanHUD
         private string _vehicleVolume;
         private int _vehicleFrame = -2;
         private float _vehicleVolumeWidth;
+        private RectTransform _driving;
+        private Text _speed, _rpm, _gear;
+        private float _nextDrivingText;
         private readonly RawImage[] _needIcon = new RawImage[3];
         private readonly Text[] _needNum = new Text[3];
         private int _hpValue = int.MinValue, _arValue = int.MinValue, _sanValue = int.MinValue;
@@ -129,6 +132,7 @@ namespace WildWasteland.Modules.CleanHUD
             {
                 foreach (var id in Layout.Ids) Group(id);
                 BuildVitals(); BuildWeapon(); BuildSlots(); BuildCompass();
+                BuildDriving();
                 _quests = new QuestTracker(_root.transform, _font, Gold, HudWhite);
                 Canvas.willRenderCanvases += BeforeRender;
             }
@@ -262,6 +266,36 @@ namespace WildWasteland.Modules.CleanHUD
             _vehicleVolumeText = Txt(_vehicle, "volume", 0, 0, 120, 60, 40, TextAnchor.MiddleLeft, HudWhite);
             Drop(_vehicleVolumeText, .9f);
             _vehicle.gameObject.SetActive(false);
+        }
+
+        private void BuildDriving()
+        {
+            _driving = R(_groups["weapon"], "driving", 0, -58, 356, 28);
+            _speed = Txt(_driving, "speed", 0, 0, 110, 28, 20, TextAnchor.MiddleLeft, HudWhite); Drop(_speed, .9f);
+            _rpm = Txt(_driving, "RPM", 114, 0, 122, 28, 20, TextAnchor.MiddleCenter, Gold); Drop(_rpm, .9f);
+            _gear = Txt(_driving, "gear", 240, 0, 116, 28, 20, TextAnchor.MiddleRight, HudWhite); Drop(_gear, .9f);
+            _driving.gameObject.SetActive(false);
+        }
+
+        private void TickDriving()
+        {
+            bool visible = ChaseCameraHud.Live && Core.GameRefs.InGame && !Core.ApocasetterBridge.InputBlocked && Application.isFocused;
+            if (_driving.gameObject.activeSelf && !visible) ChaseCameraHud.TraceHidden();
+            if (_driving.gameObject.activeSelf != visible) _driving.gameObject.SetActive(visible);
+            if (!visible) return;
+            float scale = ChaseCameraHud.Scale;
+            _driving.localScale = new Vector3(scale, scale, 1);
+            _driving.anchoredPosition = new Vector2(356 - 356 * scale, 40 + 8 * scale + ChaseCameraHud.Gap);
+            var color = ChaseCameraHud.Fraction >= .9f ? new Color(.95f, .22f, .12f) : Gold;
+            _rpm.color = color;
+            if (Time.unscaledTime >= _nextDrivingText)
+            {
+                _nextDrivingText = Time.unscaledTime + .1f;
+                _speed.text = Mathf.RoundToInt(ChaseCameraHud.Speed).ToString(CultureInfo.InvariantCulture) + " KM/H";
+                _rpm.text = (Mathf.RoundToInt(ChaseCameraHud.Rpm / 10) * 10).ToString(CultureInfo.InvariantCulture) + " RPM";
+                _gear.text = "GEAR " + ChaseCameraHud.Gear;
+            }
+            ChaseCameraHud.HideNative();
         }
 
         internal void SetVehicleStatus(bool ignitionOff, bool handbrakeOn, bool playing, string volume)
@@ -478,6 +512,7 @@ namespace WildWasteland.Modules.CleanHUD
             try { TickVitals(); } catch (Exception e) { CleanHudModule.Throttled("vitals", e); }
             _quests.Tick(_groups["insanity"], _cmp);
             TickVehicleStatus();
+            TickDriving();
             _src.Pocket.Read();
             int sel = _src.Selected;
             try { TickSlots(l, sel); } catch (Exception e) { CleanHudModule.Throttled("slots", e); }
@@ -668,6 +703,8 @@ namespace WildWasteland.Modules.CleanHUD
             Transform eye = cam != null ? cam.transform : _src.PlayerCamera;
             if (eye == null) return;
             float heading = eye.eulerAngles.y;
+            float chaseHeading;
+            if (ChaseCameraHud.TryHeading(out chaseHeading)) heading = chaseHeading;
             float arc = l.VisibleArc, half = arc / 2f, ppd = 1100f / arc, cx = 550f;
             int ti = 0, li = 0;
             for (int d = 0; d < 360; d += 15)

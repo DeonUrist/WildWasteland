@@ -2,7 +2,7 @@
 
 A BepInEx 5 mod for **Apocalypter** that combines gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
 
-Version **0.1.11 RC8** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
+Version **0.1.12 RC9** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
 
 | Module | What it is | Replaces (remove these from `BepInEx\plugins`) |
 |---|---|---|
@@ -30,7 +30,7 @@ While any of those standalone plugins is still installed, the module that replac
    BepInEx\plugins\WildWasteland\Patrols\             templates, textures, sounds, layouts, WarRig\ models
    ```
    If an asset is missing, WW falls back to the old plugin folder (`plugins\Apocaplayer\`, `plugins\NPCAI\Models\`, `plugins\Gunplay\Sounds\`, `plugins\GunplayHUD\Sounds\`, `plugins\Apocapatrol\`, `plugins\WarRig\`) or to a copy built into the DLL, and warns in the log. Patrols copies its old data into its new folder on the first run.
-4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.11]` and a summary `Wild Wasteland 0.1.11 modules:` with every module `on`.
+4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.12]` and a summary `Wild Wasteland 0.1.12 modules:` with every module `on`.
 
 ## Settings: F6 and F7
 
@@ -74,6 +74,8 @@ RC6 filters new delivery destinations to camps with a living, loaded NPC accepte
 RC7 replaces RC6's restriction with delivery recovery: distant camps qualify again; reaching an empty camp changes the objective to return the goods and explain that nobody was there. A destination already known to be cleared, or an empty return point, fails the quest. Native spawners must finish and a fresh NPC scan plus 15 seconds of active play near the empty point must pass. Return progress uses the existing quest save fields. See [RC7 behavior and test steps](notes/release-0.1.10-RC7.md).
 
 RC8 uses flags for every quest phase, with each flag matching its quest tracker bar color. The tracker clears the compass even when Insanity is hidden. Clean menus also styles Apocasaver's save-name prompt. The full package includes Women of Wasteland assets with a 33% default population. Existing configured population values remain preserved. See [RC8 changes and test steps](notes/release-0.1.11-RC8.md).
+
+RC9 adds optional **ApocaChaseCamera 0.2.5** compatibility. Keep it installed separately: it retains its driving camera and original instruments with vanilla UI. CleanHUD shows smaller unboxed speed/RPM/gear text above the weapon panel, with RPM redline color and the rendered camera's compass heading. Size, height and enable remain ChaseCamera settings; hide diagnostics require WW verbose logging. RC9 also includes the pending crew quest restrictions: seated crew cannot be hired; current/former crew cannot offer new quests, with former-crew names saved per slot. See [RC9 changes and tests](notes/release-0.1.12-RC9.md).
 
 ## Build
 

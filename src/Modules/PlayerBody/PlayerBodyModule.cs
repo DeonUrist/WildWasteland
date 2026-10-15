@@ -283,6 +283,7 @@ namespace WildWasteland.Modules.PlayerBody
             MigrateSidecars();
             Running = true;
             BodyRunner.ResetAll();
+            ChaseCameraCompat.Init(this);
 
             // data (was Plugin.Awake): ignition row keys, weapon poses, aim lift, climbing clips, female pain sounds
             IgnitionControl.Load(LegacyIgnitionKey());
@@ -333,6 +334,7 @@ namespace WildWasteland.Modules.PlayerBody
 
         public override void Shutdown()
         {
+            ChaseCameraCompat.Clear();
             Services.Animation = null;
             if (_eof != null && _eofHost != null && _eofHost == Core.Runner.Instance) Scheduler.StopCoroutine(_eof);
             _eof = null; _eofHost = null; IgnitionJob = null;
