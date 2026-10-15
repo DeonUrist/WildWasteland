@@ -13,7 +13,6 @@ namespace WildWasteland.Modules.Patrols
     internal static class Cargo
     {
         private class Slot { public GameObject Prefab; public int Count; }
-        private const int ItemsPerFrame = 4;
 
         // the top of the car's own solid geometry under a point: a ray from 1.2 m above, down 2.5 m, ignoring triggers, the crew and loose items
         private static float SeatSurface(GameObject car, Vector3 p)
@@ -52,10 +51,9 @@ namespace WildWasteland.Modules.Patrols
             var rear = Patrol.FindChild(ct, "hinge_seat_rear");
             var driver = Patrol.FindChild(ct, "hinge_seat_driver");
             Vector3 spot = rear != null && rear.gameObject.activeInHierarchy ? rear.position : driver != null ? driver.position - ct.forward * 0.6f : ct.position;
-            int placed = 0;
             foreach (var slot in slots) for (int i = 0; i < slot.Count; i++)
             {
-                if (placed++ % ItemsPerFrame == 0) { yield return null; if (car == null) yield break; }
+                yield return BuildQueue.Continue; if (car == null) yield break;
                 Vector3 p = spot + ct.right * UnityEngine.Random.Range(-0.3f, 0.3f) + ct.forward * UnityEngine.Random.Range(-0.2f, 0.2f);
                 var go = UnityEngine.Object.Instantiate(slot.Prefab, p + ct.up, ct.rotation);
                 go.SetActive(true); var bounds = Bounds(go);
@@ -101,7 +99,7 @@ namespace WildWasteland.Modules.Patrols
                 wanted += slot.Count;
                 for (int i = 0; i < slot.Count; i++)
                 {
-                    if (sinceYield >= ItemsPerFrame) { sinceYield = 0; yield return null; if (car == null || t == null) yield break; }
+                    if (sinceYield > 0) { sinceYield = 0; yield return BuildQueue.Continue; if (car == null || t == null) yield break; }
                     sinceYield++;
                     var go = UnityEngine.Object.Instantiate(slot.Prefab, t.TransformPoint(new Vector3(0f, ceilY + 5f, 0f)), t.rotation);
                     go.SetActive(true);

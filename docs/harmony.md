@@ -138,12 +138,12 @@ FS4 is an exception to the Off fast path: once installed, its prefix always runs
 
 | Feature | Target | Kind |
 |---|---|---|
-| PM1/PM3 registry | `PlayMakerFSM.OnDisable`, `PlayMakerFSM.OnDestroy` | prefix (replaces when PM3 is on; exact copies) |
+| PM1/PM3 registry | `Fsm.OnEnable`; `PlayMakerFSM.OnDisable`, `PlayMakerFSM.OnDestroy` | enable prefix observes after native list append and before callbacks; disable copy removes the index at the native removal point while tracking, using vanilla List.Remove when PM3 is off; destroy copy when PM3 is on |
 | PM2 | `Fsm.SendEventToFsmOnGameObject(GameObject,string,FsmEvent)`, `Fsm.BroadcastEventToGameObject(GameObject,FsmEvent,FsmEventData,bool,bool)` | prefix (replaces) |
 | PM4 | `Fsm.BroadcastEvent(FsmEvent,bool)`, `PlayMakerFSM.BroadcastEvent(FsmEvent)` | prefix (replaces) |
 | PM5 | `PlayMakerGUI.OnGUI` (replaces), `PlayMakerFSM.OnDisable/OnDestroy` (observe), `Fsm.CreateSubFsm` (postfix), `PlayMakerOnGUI.Start` (postfix), `PlayMakerFSM.OnBecameVisible/OnBecameInvisible` (prefix, skips proven no-op events) | mixed |
 | PM6 | `Fsm.OnTriggerEnter/Stay/Exit`, `Fsm.OnCollisionEnter/Stay/Exit` | prefix (exact copies; unhandled system event skipped) |
-| PM7 | `ActionHelpers.DoMousePick` | prefix (shared per-frame cast); PlayerBody `PickAssist` postfix still runs after it |
+| PM7 | `ActionHelpers.DoMousePick` | prefix (shared per-frame cast); PlayerBody `PickAssist` postfix still runs after it; Shadow compares collider/triangle exactly and point/distance within 0.1 mm to exclude PhysX float noise |
 | PM10 | `ConvertFloatToString` / `ConvertIntToString` private Do methods | prefix |
 | FS1 | `Fsm.Update` (postfix: sleep decision), `Fsm.Event(FsmEventTarget,FsmEvent)`, `SwitchState`, `Start`, `OnEnable`, `Stop`, `Init`, `Reinitialize`, `Clear`, `OnDestroy`, `DelayedEvent` x2, every physics/animator/GUI callback of `Fsm`, `FsmStateAction.Finish`, `PlayMakerFSM.OnBeforeSerialize`, `PlayMakerFSM.Awake` (postfix) | prefix = wake |
 | FS2 | `FsmProperty.GetValue`, `FsmProperty.SetValue` | prefix (replaces, falls back to vanilla) |

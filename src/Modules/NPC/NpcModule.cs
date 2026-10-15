@@ -83,6 +83,7 @@ namespace WildWasteland.Modules.NPC
             Scheduler.EveryFrame(this, "Senses", Senses.Tick);
             Scheduler.EveryFrame(this, "Nav", Nav.Tick);
             Scheduler.EveryFrame(this, "Brain", Brain.Tick);
+            Scheduler.Sliced(this, "NPC.Rigs", 1000, Brain.BuildRig, Phase.LateUpdate);
             Scheduler.EveryFrame(this, "Idle", Idle.Tick);
             Scheduler.Interval(this, "Passthrough", 0.25f, Passthrough.Tick, Phase.Update, true);
             Scheduler.EveryFrame(this, "Burrow", Burrow.Tick);

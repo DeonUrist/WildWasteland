@@ -54,7 +54,7 @@ namespace WildWasteland.Modules.NPC
             public FsmGameObject Target;              // Detection.detectedObj
             public bool Ranged; public WeaponRanges.Kind Kind; public PlayMakerFSM MovementFsm; public float MadeAt, NextRangedCheck;
             public Animator Anim; public string AimState; public bool Frozen;   // the shooting animation held on its first frame = aiming
-            public object Body; public float RigTried; public bool Strafing;     // (1.2.0) this gunman's Apocaplayer ModAPI character (ApBody): the player's clips and logic
+            public object Body; public float RigTried; public bool Strafing, RigQueued;     // (1.2.0) this gunman's Apocaplayer ModAPI character (ApBody): the player's clips and logic
             public int ReloadRounds; public bool ReloadShown, Cocks, WasBurst;     // (1.2.0) one-round-at-a-time reloads, the reload shown on the body, pump / bolt guns, the last frame's burst
             public Transform Weapon; public string WeaponKey;                       // the gun model in its hand and the pose table's key for it
             public int Shots, Magazine; public bool Reloading; public float ReloadUntil, ReloadLen; public int ReloadSoundsPlayed;   // (1.1.2) the magazine: shots since the last reload, its size (0 = never reloads)
@@ -103,6 +103,8 @@ namespace WildWasteland.Modules.NPC
         }
 
         private static readonly Dictionary<int, Npc> _npcs = new Dictionary<int, Npc>();
+        private static readonly Queue<Npc> _rigs = new Queue<Npc>();
+        private static int _rigFrame = -1;
         internal static void SetFollowerDriven(GameObject npc, bool enabled, float reloadUntil)
         {
             Npc n;
@@ -126,12 +128,14 @@ namespace WildWasteland.Modules.NPC
         private static readonly float[] _scores = new float[32];
         private static readonly float[] _blocks = new float[32];
 
-        public static void OnSceneLoaded() { foreach (var kv in _npcs) if (kv.Value.Body != null) ApBody.Detach(kv.Value.Body); _npcs.Clear(); _ignored.Clear(); _arrive.Clear(); _active = 0; ReloadSounds.Clear(); _pending.Clear(); _pendingAt.Clear(); ApBody.Reset(); }
+        public static void OnSceneLoaded() { ClearRigs(); foreach (var kv in _npcs) if (kv.Value.Body != null) ApBody.Detach(kv.Value.Body); _npcs.Clear(); _ignored.Clear(); _arrive.Clear(); _active = 0; ReloadSounds.Clear(); _pending.Clear(); _pendingAt.Clear(); ApBody.Reset(); }
+        private static void ClearRigs() { while (_rigs.Count > 0) _rigs.Dequeue().RigQueued = false; _rigFrame = -1; }
 
         // (WW) module shutdown: every brain lets go (the game's pedal, facing, Unstuck and animation again), kneeling gunmen stand up, frozen
         // aim poses play on, bodies animated by the player animation framework are handed back
         internal static void Shutdown()
         {
+            ClearRigs();
             foreach (var kv in _npcs)
             {
                 var n = kv.Value;
@@ -1693,7 +1697,8 @@ namespace WildWasteland.Modules.NPC
             var rb = owner.GetComponent<Rigidbody>();
             if (rb == null || !rb.useGravity) return null;         // flyers (bats, wasps, Terror of the Night) have gravity off
             PlayMakerFSM attack = null, movement = null, detection = null, unstuck = null;
-            foreach (var f in owner.GetComponents<PlayMakerFSM>())
+            var fsms = owner.GetComponents<PlayMakerFSM>();
+            foreach (var f in fsms)
             {
                 if (f == null) continue;
                 switch (f.FsmName)
@@ -1710,7 +1715,7 @@ namespace WildWasteland.Modules.NPC
             if (target == null) return null;
             var n = new Npc { Owner = owner, T = owner.transform, Rb = rb, Col = owner.GetComponent<Collider>(), Attack = attack, Movement = movement, Target = target };
             n.HideVar = attack.FsmVariables.FindFsmGameObject("Hide");
-            foreach (var f in owner.GetComponents<PlayMakerFSM>())
+            foreach (var f in fsms)
                 if (f != null && f.FsmName == "Health" && f.Fsm != null && f.Fsm.Initialized) { n.HpVar = f.FsmVariables.FindFsmFloat("Health"); if (n.HpVar != null) n.HpMax = n.HpVar.Value; break; }
             WeaponRanges.Kind kind;
             n.Ranged = WeaponRanges.GunKindOf(owner, out kind);
@@ -1753,16 +1758,26 @@ namespace WildWasteland.Modules.NPC
         private static void TryRig(Npc n)
         {
             if (n.Body != null || n.Anim == null || !n.Ranged || Time.time < n.RigTried + 2f) return;
-            n.RigTried = Time.time;
             if (!ApBody.Available || !NpcModule.ApocaplayerClips.Value) return;
+            if (n.RigQueued) return;
+            n.RigQueued = true; _rigs.Enqueue(n);
+        }
+        internal static bool BuildRig()
+        {
+            if (!NpcModule.Running || _rigFrame == Time.frameCount || _rigs.Count == 0 || Core.Scheduler.FrameMs >= Core.Scheduler.FrameBudgetMs) return false;
+            var n = _rigs.Dequeue(); n.RigQueued = false;
+            if (n.Owner == null || n.T.parent != null || !n.Owner.activeInHierarchy || n.Body != null || n.Anim == null || !n.Ranged
+                || !ApBody.Available || !NpcModule.ApocaplayerClips.Value) return _rigs.Count > 0;
+            _rigFrame = Time.frameCount; n.RigTried = Time.time;
             try
             {
                 n.Body = ApBody.Attach(n.Anim);
-                if (n.Body == null) { n.RigTried = Time.time + 30f; return; }      // not a humanoid: the game's clips (asked again much later)
+                if (n.Body == null) { n.RigTried = Time.time + 30f; return false; }      // not a humanoid: the game's clips (asked again much later)
                 n.WeaponDirty = true;      // Drive() finds the held gun model (and follows the game's swaps of it)
                 if (NpcModule.BrainLog.Value) NpcModule.Log.LogInfo("Brain: " + n.Owner.name + " animated by Apocaplayer's ModAPI");
             }
             catch (Exception e) { n.Body = null; NpcModule.Warn("Brain: Apocaplayer's ModAPI for " + n.Owner.name + ": " + e.Message); }
+            return false;
         }
 
         // (1.2.0) a hop over a low lip (the brain's or Idle's): the player's jump on the body (ModAPI: the take-off, held in the air, the landing)

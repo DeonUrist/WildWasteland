@@ -129,7 +129,11 @@ namespace WildWasteland.Modules.Performance
 
         static bool SameHit(RaycastHit a, RaycastHit b)
         {
-            return a.collider == b.collider && a.distance == b.distance && a.point.Equals(b.point) && a.normal.Equals(b.normal) && a.triangleIndex == b.triangleIndex;
+            // PhysX's single-hit and multi-hit terrain queries can differ in the last float bits. Require the same
+            // surface and allow at most 0.1 mm of position/distance noise; this changes only Shadow diagnostics.
+            return a.collider == b.collider && a.triangleIndex == b.triangleIndex
+                && Mathf.Abs(a.distance - b.distance) <= .0001f && (a.point - b.point).sqrMagnitude <= .00000001f
+                && (a.normal - b.normal).sqrMagnitude <= .00000001f;
         }
 
         [HarmonyPatch]

@@ -106,6 +106,7 @@ namespace WildWasteland.Modules.Patrols
         public override void Shutdown()
         {
             Running = false;
+            Try("build queue", BuildQueue.Reset);
             if (Services.FollowerVehicles is QuestFollowers) Services.FollowerVehicles = null;
             if (Services.Camps is TrafficCamps.Status) Services.Camps = null;
             TrafficCompass.Clear();
@@ -166,6 +167,7 @@ namespace WildWasteland.Modules.Patrols
         void RegisterJobs()
         {
             Scheduler.Interval(this, "Patrols.Prefab cache", .5f, Prefabs.Refresh).RunNow();
+            Scheduler.Sliced(this, "Patrols.Build", 1000, BuildQueue.Step);
             TrafficCompass.Clear();
             Scheduler.Interval(this, "Compass markers", .5f, TrafficCompass.Tick);
             Scheduler.EveryFrame(this, "Patrol.Tick", () => { if (_patrol != null) _patrol.Tick(); });

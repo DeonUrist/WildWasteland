@@ -271,8 +271,8 @@ namespace WildWasteland.Modules.Patrols
                 _patrol.SpawnAt(group[i], spots[i], rot, true, car => { pending--; if (car != null) cars.Add(car); });
                 yield return new WaitForSeconds(BuildInterval);
             }
-            float until = Time.time + 30f;
-            while (pending > 0 && Time.time < until) yield return null;
+            while (pending > 0 && _patrol != null && Patrol.SceneGen == gen) yield return null;
+            if (_patrol == null || Patrol.SceneGen != gen) yield break;
             int released = 0;
             foreach (var car in cars)
             {

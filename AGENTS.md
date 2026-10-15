@@ -263,6 +263,8 @@ MANAGED=... BEPCORE=... sh tools/config-harness/run.sh /path/outdir [BepInEx/con
 - Do not transpile `ActionData.LoadActionField`: the #133 attempt broke deserialization. FS4 uses the ActionDataPort prefix copy, with reflection fallback inside the copy even when Off.
 - Do not access Unity scene APIs during Plugin.Awake. Performance defers feature startup until the first loaded scene; RenderSettings.sun during chainloading caused a native crash.
 - Runtime evidence and remaining verification gates: `notes/perf-handover.md`, `notes/perf-preparation.md`. A headless startup check cannot verify GPU rendering, cursor behavior or gameplay that it never enters.
+- PM2 registry timing must match native FsmList membership during callbacks: PlayMakerFSM.OnEnable appends before calling Fsm.OnEnable; OnDisable sends Disable before removing itself. Register at the Fsm.OnEnable entry and remove after Disable, before Fsm.OnDisable. Postfix-only enable indexing misses reentrant receivers and reverses nested enable order (copied-save Shadow run: 60 mismatches).
+- A Harmony reverse copy of LoadActionField also produced Missing LoadActionField errors in the temporary verifier, even with widened branches. For sampled FS4 comparisons, use the independent decompiled vanilla algorithm with reflection, preserve nextParamIndex, and capture state before the FS4 prefix. Denis explicitly authorized the temporary isolated headless driver for this performance task; it lives only under ignored verification/runtime-perf, redirects save/settings IO to copies, and must never ship or enter the normal plugins folder.
 
 ## 8. Deploy and verify (every build)
 

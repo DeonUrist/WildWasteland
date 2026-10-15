@@ -213,7 +213,7 @@ namespace WildWasteland.Modules.Patrols
             Migrate(cfg, CampTrafficRange, "Experimental", "Camp traffic range");
 
             const string mc = "Merchants";
-            MaxMerchants = cfg.Player(mc, "Max merchants", 3, "Maximum merchants, with at most one of each shop type. Zero disables automatic merchants.", new AcceptableValueRange<int>(0, 3));
+            MaxMerchants = cfg.Player(mc, "Max merchants", 2, "Maximum merchants, with at most one of each shop type. Zero disables automatic merchants.", new AcceptableValueRange<int>(0, 3));
             Migrate(cfg, MaxMerchants, "Experimental", "Max merchants");
             MerchantSpawnChance = cfg.Player(mc, "Merchant spawn chance", 100f, "Average percentage of Max merchants represented by routes. Whole slots are guaranteed; the remaining fractional slot is rolled at each check. 100 fills the cap; zero creates no merchant routes.", new AcceptableValueRange<float>(0f, 100f));
             Migrate(cfg, MerchantSpawnChance, "Experimental", "Merchant spawn chance");
@@ -294,7 +294,7 @@ namespace WildWasteland.Modules.Patrols
             Migrate(cfg, TrafficMaxGroups, "World traffic prototype", "MaxGroups");
             TrafficMaxRealCars = cfg.Tool(TTraffic, "MaxRealCars", 24, "Budget for nearby physical traffic cars; pending builds reserve slots", new AcceptableValueRange<int>(1, 100));
             Migrate(cfg, TrafficMaxRealCars, "World traffic prototype", "MaxRealCars");
-            TrafficLoadRange = cfg.Tool(TTraffic, "LoadRange", 650f, "Load traffic within this distance of the player, m", new AcceptableValueRange<float>(100f, 2000f));
+            TrafficLoadRange = cfg.Tool(TTraffic, "LoadRange", 750f, "Load traffic within this distance of the player, m", new AcceptableValueRange<float>(100f, 2000f));
             Migrate(cfg, TrafficLoadRange, "World traffic prototype", "LoadRange");
             TrafficUnloadRange = cfg.Tool(TTraffic, "UnloadRange", 1000f, "Unload only once every group member is this far away; always at least LoadRange + 100 m", new AcceptableValueRange<float>(200f, 4000f));
             Migrate(cfg, TrafficUnloadRange, "World traffic prototype", "UnloadRange");

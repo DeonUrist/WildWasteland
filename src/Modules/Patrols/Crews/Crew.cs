@@ -113,14 +113,15 @@ namespace WildWasteland.Modules.Patrols
             _rb = car.GetComponent<Rigidbody>();
             _health = driver != null ? driver.GetComponents<PlayMakerFSM>().FirstOrDefault(f => f.FsmName == "Health") : null;
             _healthVar = null;
-            _drive = Patrol.FindFsm(car, "DriveTrigger", "Drive");
-            _handbrake = Patrol.FindFsm(car, "handbrake", "Handbrake");
+            var fsms = car.GetComponentsInChildren<PlayMakerFSM>(true);
+            _drive = Patrol.FindFsm(car, "DriveTrigger", "Drive", fsms);
+            _handbrake = Patrol.FindFsm(car, "handbrake", "Handbrake", fsms);
             var tank = Patrol.FindChild(car.transform, "Fuel");
             _tank = tank != null ? tank.GetComponents<PlayMakerFSM>().FirstOrDefault(f => f.FsmName == "LiquidAmount") : null;
             var dt = Patrol.FindChild(car.transform, "DriveTrigger");
             if (dt != null) _enterTrigger = dt.GetComponents<Collider>().FirstOrDefault(c => c is SphereCollider);
             _ctl = new InputControl(car);
-            _partDetach = car.GetComponentsInChildren<PlayMakerFSM>(true).Where(f => f.FsmName == "de_Attach").ToArray();
+            _partDetach = fsms.Where(f => f.FsmName == "de_Attach").ToArray();
 
             // nobody else drives while the driver lives: no enter trigger (no F prompt), no Drive FSM (Activate events are ignored).
             // The car's DistanceKinematic FSM is left alone: re-enabling it restarts it in KinematicOn, which freezes a moving car.

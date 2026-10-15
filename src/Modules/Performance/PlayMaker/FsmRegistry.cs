@@ -21,7 +21,8 @@ namespace WildWasteland.Modules.Performance
     /// so the list order == ascending "enable stamp", and a per-GameObject list maintained the same way keeps exactly the
     /// relative order of that object's entries in FsmList. Used by PM2 (targeted events) and PM3 (fast removal).
     /// The index is (re)built from FsmList whenever tracking starts, so it is valid when switched on mid-game.
-    /// Hooks: Core.Hooks.FsmEnable postfix (after vanilla appended), OnDisable/OnDestroy prefixes (before vanilla removes).
+    /// Hooks: Fsm.OnEnable prefix (after the component appended, before its callbacks), shared enable postfix,
+    /// and OnDisable/OnDestroy removal at the native list's removal point.
     /// </summary>
     internal static class FsmRegistry
     {
@@ -125,18 +126,27 @@ namespace WildWasteland.Modules.Performance
         [HarmonyPatch]
         internal static class Patch
         {
+            // PlayMakerFSM.OnEnable appends before calling this. Start/OnExit may immediately broadcast events or enable
+            // more FSMs: indexing only in the component postfix misses this receiver and stamps nested enables out of order.
+            [HarmonyPatch(typeof(Fsm), "OnEnable"), HarmonyPrefix]
+            static void OnEnablePre(Fsm __instance)
+            {
+                if (_users == 0) return;
+                var component = __instance.FsmComponent;
+                if (component != null && ReferenceEquals(_fsm(component), __instance)) Add(component);
+            }
 
             // Exact copy of PlayMakerFSM.OnDisable with the O(N) Object.Equals Remove replaced (FastRemove on).
             [HarmonyPatch(typeof(PlayMakerFSM), "OnDisable"), HarmonyPrefix]
             static bool OnDisablePre(PlayMakerFSM __instance)
             {
                 bool tracked = _users > 0;
-                bool inList = tracked && InList(__instance);
-                if (tracked) Remove(__instance);
-                if (!FastRemove) return true;
+                if (!FastRemove && !tracked) return true;
                 var fsm = _fsm(__instance);
                 if (fsm.Started) fsm.Event(FsmEvent.Disable);
-                RemoveFromFsmList(__instance, false);   // always scanned: membership could have been changed by other code
+                if (FastRemove) RemoveFromFsmList(__instance, false);   // membership could have changed during Disable
+                else PlayMakerFSM.FsmList.Remove(__instance);
+                if (tracked) Remove(__instance);
                 if (fsm != null && !fsm.Finished) fsm.OnDisable();
                 return false;
             }

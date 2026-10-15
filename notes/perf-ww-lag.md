@@ -14,9 +14,11 @@ Read-only code review of src/Modules/Patrols and src/Modules/NPC on top of 0.1.2
    - Cost: 30-150 ms per scan.
    - Fix: build the exact and case-insensitive indexes once per scene during load. A miss stays a miss for that scene; invalidate only when ModVehicles or ES3 register something.
 3. **The builder is sliced by item count, not by time, and the scheduler can't see it.**
+   - **Follow-up implemented, Testing:** `Spawning/BuildQueue.cs` serializes assembly under `Patrols.Build` (1 ms slice, existing 2 ms whole-frame budget). Parts/cargo yield after each item; native frame/physics waits remain. Once assembled and registered, ignition waits may overlap the next assembly. Scene/module reset cancels requests and releases their callbacks; queued positions retain world coordinates across origin shifts. Instantiate remains indivisible; the slice is not a hard upper bound on a native call.
    - Code: `Patrol.Build` (133-339) instantiates 4 parts, 4 cargo items or 1 occupant per frame. One occupant frame does Instantiate, PassengerGuard, Dress, Pose (`GetComponentsInChildren`) and a PlayableGraph. Convoys and world traffic start a new build every 0.7 s, so builds overlap. It runs as a plain coroutine, with no budget and no F3 attribution.
    - Fix: one global build queue as a `Scheduler.Sliced` job with a time budget of about 3-4 ms; one build at a time; one step per part, cargo item or occupant stage.
 4. **The settle frame scans the whole car several times and builds strings even when logging is off.**
+   - **Follow-up implemented, Testing:** one short-lived FSM snapshot feeds SetPartConditions/Headlights/RaiderMusic; Crew.Init shares one for Drive/Handbrake/de_Attach. Expensive Describe/per-condition strings are guarded. No persistent hierarchy cache or borrowed Performance type crosses modules.
    - Code: SetPartConditions, Headlights, RaiderMusic and Crew.Init each scan all FSMs with `GetComponentsInChildren<PlayMakerFSM>(true)` (200-400 FSMs). `Suspension.Describe` and per-part strings are built even when VerboseLog is off.
    - Fix: collect FSMs per part at Attach, or use the registry service below; guard log strings with `Log.Verbose`.
 
@@ -24,6 +26,7 @@ Read-only code review of src/Modules/Patrols and src/Modules/NPC on top of 0.1.2
 5. **Per-occupant reflection and bone scans** (Passenger.cs:131-160, 222-230, 341-370 plus `GetValue` at 10 Hz; `Rider.AutoSpot`). Fix: cache per action type and per prefab; use compiled getters instead of `GetValue`.
 6. **Paint does `Directory.Exists` per material** (Paint.cs:384-391), up to 4 per lookup, in the body-Instantiate frame. Fix: resolve the folder layout once in `Preload`.
 7. **NPC registration is synchronous and uncapped.**
+   - **Follow-up implemented, Testing:** `NPC.Rigs` queues eligible brains under the scheduler, at most one ApBody.Attach per frame; skips stale/seated/inactive entries and clears on scene/shutdown. Brain/Senses reuse per-registration component snapshots. This avoids assuming identical layouts across female/modded prefab instances; full registration and first glTF loads remain indivisible.
    - Rig building (`Brain.Make` → `ApBody.Attach`: PlayableGraph, AvatarMask, `GetComponentsInChildren<Component>`) happens inside the SetVelocity prefix or `RegisterPending`, all in one frame. Fix: build at most one rig per frame.
    - `Senses.Make` calls `GetComponentsInChildren` 3 times per agent. Fix: cache per prefab.
    - The first Gungirl of each variant loads a glTF in one step. Fix: prewarm at world-ready.

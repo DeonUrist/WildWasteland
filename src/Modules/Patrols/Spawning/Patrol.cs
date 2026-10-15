@@ -14,7 +14,7 @@ namespace WildWasteland.Modules.Patrols
     {
         private bool _busy;                 // the template spawner's own build (one at a time)
 
-        internal static void ResetForScene() { Prefabs.Invalidate(); Register.Invalidate(); MeleeWheels.Reset(); DayLight.Reset(); _lightState = -1; SceneGen++; WorldTraffic.ResetForScene(); }
+        internal static void ResetForScene() { BuildQueue.Reset(); Prefabs.Invalidate(); Register.Invalidate(); MeleeWheels.Reset(); DayLight.Reset(); _lightState = -1; SceneGen++; WorldTraffic.ResetForScene(); }
 
         // bumped on every scene load: a build or a convoy that waited through a load does not continue in the new world
         internal static int SceneGen;
@@ -114,7 +114,7 @@ namespace WildWasteland.Modules.Patrols
             if (_busy) { PatrolsModule.Verbose("Spawn: a build is still running"); return; }
             if (!InGame()) return;
             _busy = true;
-            StartCoroutine(Build(t, null, Quaternion.identity, true, false, null));
+            BuildQueue.Add(this, t, null, Quaternion.identity, true, false, null);
         }
 
         // Builds a template at a given place (convoy spawner). hold = the crew waits for Crew.Release() before driving off;
@@ -122,8 +122,9 @@ namespace WildWasteland.Modules.Patrols
         internal void SpawnAt(CarTemplate t, Vector3 pos, Quaternion rot, bool hold, Action<GameObject> onDone)
         {
             if (!InGame()) { if (onDone != null) onDone(null); return; }
-            StartCoroutine(Build(t, pos, rot, false, hold, onDone));
+            BuildQueue.Add(this, t, pos, rot, false, hold, onDone);
         }
+        internal void CancelBuild(bool menu, Action<GameObject> done) { if (menu) _busy = false; if (done != null) done(null); }
 
         // WW: Core.GameRefs.InGame (Menu "play" && SaveLoadGame "isPlay" && timeScale > 0, evaluated once per frame, Fsm.Initialized checked)
         internal bool InGame() { return Core.GameRefs.InGame; }
@@ -132,7 +133,7 @@ namespace WildWasteland.Modules.Patrols
 
         // at == null: SpawnDistance in front of the player, facing the player's way; otherwise exactly there.
         // The work is spread over several frames (one Instantiate group per frame) so a build never stalls a single frame for long.
-        private IEnumerator Build(CarTemplate tpl, Vector3? at, Quaternion rot, bool menu, bool hold, Action<GameObject> onDone)
+        internal IEnumerator Build(CarTemplate tpl, Vector3? at, Quaternion rot, bool menu, bool hold, Action<GameObject> onDone)
         {
             GameObject car = null;
             GameObject trailer = null;
@@ -159,7 +160,7 @@ namespace WildWasteland.Modules.Patrols
                     pos = p + fwd * PatrolsModule.SpawnDistance + Vector3.up * 1.0f;
                     rot = Quaternion.LookRotation(fwd);
                 }
-                PatrolsModule.Verbose("Building template " + tpl.Name + ": " + tpl.Describe());
+                if (Core.Log.Verbose) PatrolsModule.Verbose("Building template " + tpl.Name + ": " + tpl.Describe());
 
                 var body = Prefabs.Exact(tpl.Body);
                 if (body == null) { Core.Log.Warn("[Patrols] " + "Body prefab not found: " + tpl.Body); yield break; }
@@ -203,7 +204,7 @@ namespace WildWasteland.Modules.Patrols
                     {
                         placed[i] = AttachTemplatePart(car, tpl, i, placed);
                         if (placed[i] != null) parts++;
-                        if (i % 4 == 3) { yield return null; if (car == null) yield break; }
+                        yield return BuildQueue.Continue; if (car == null) yield break;
                     }
                     var bumperHinge = FindChild(car.transform, "hinge_bumper_front");
                     if (bumperHinge != null && !HasPart(bumperHinge))
@@ -214,20 +215,28 @@ namespace WildWasteland.Modules.Patrols
                 }
                 else
                 {
-                    parts += AttachAll(car, new[] { "hinge_wheel_FL", "hinge_wheel_FR" }, tpl.Wheel, "wheel");
+                    parts += AttachAll(car, new[] { "hinge_wheel_FL" }, tpl.Wheel, "wheel");
+                    yield return BuildQueue.Continue; if (car == null) yield break;
+                    parts += AttachAll(car, new[] { "hinge_wheel_FR" }, tpl.Wheel, "wheel");
                     yield return null; if (car == null) yield break;
-                    parts += AttachAll(car, new[] { "hinge_wheel_RL", "hinge_wheel_RR" }, tpl.RearWheel.Length > 0 ? tpl.RearWheel : tpl.Wheel, "wheel");
+                    parts += AttachAll(car, new[] { "hinge_wheel_RL" }, tpl.RearWheel.Length > 0 ? tpl.RearWheel : tpl.Wheel, "wheel");
+                    yield return BuildQueue.Continue; if (car == null) yield break;
+                    parts += AttachAll(car, new[] { "hinge_wheel_RR" }, tpl.RearWheel.Length > 0 ? tpl.RearWheel : tpl.Wheel, "wheel");
                     yield return null;
                     if (car == null) yield break;
                     string bumper = tpl.RollBumper();
                     if (bumper.Length > 0) { PatrolsModule.Verbose("Front bumper roll: " + bumper); parts += AttachAll(car, new[] { "hinge_bumper_front" }, bumper, "bumper"); }
+                    yield return BuildQueue.Continue; if (car == null) yield break;
                     parts += AttachAll(car, new[] { "hinge_engine" }, tpl.Engine, "engine");
                     yield return null; if (car == null) yield break;
                     parts += AttachAll(car, new[] { "hinge_radiator" }, tpl.Radiator, "radiator");
+                    yield return BuildQueue.Continue; if (car == null) yield break;
                     parts += AttachAll(car, new[] { "hinge_steeringwheel" }, tpl.SteeringWheel, "steeringwheel");
+                    yield return BuildQueue.Continue; if (car == null) yield break;
                     parts += AttachAll(car, new[] { "hinge_exhaust" }, tpl.Exhaust, "exhaust");
                     yield return null; if (car == null) yield break;
                     parts += AttachAll(car, new[] { "hinge_seat_driver" }, tpl.Seat, "seat");
+                    yield return BuildQueue.Continue; if (car == null) yield break;
                     parts += AttachAll(car, new[] { "hinge_seat_passenger" }, tpl.PassengerSeat, "seat");
                 }
                 parts += AttachMissingHeadlights(car);
@@ -249,7 +258,7 @@ namespace WildWasteland.Modules.Patrols
                     for (int i = 0; i < placed.Length; i++)
                     {
                         placed[i] = AttachTemplatePart(trailer, tpl.Trailer, i, placed);
-                        if (i % 4 == 3) { yield return null; if (car == null || trailer == null) yield break; }
+                        yield return BuildQueue.Continue; if (car == null || trailer == null) yield break;
                     }
                 }
 
@@ -328,20 +337,23 @@ namespace WildWasteland.Modules.Patrols
                 if (cargo != null) Cargo.SettleFsms(cargo);
                 if (trailerCargo != null) Cargo.SettleFsms(trailerCargo);
                 if (Explode.IsWreck(car)) yield break;   // crew killed during the build: it already blew up
-                SetPartConditions(car);
+                var carFsms = car.GetComponentsInChildren<PlayMakerFSM>(true);
+                SetPartConditions(car, carFsms);
                 FillParts(car);
                 if (trailer != null) { SetPartConditions(trailer); FillParts(trailer); }
                 // the lift kit's adjustment from the template (the kit's own FSM has set its lifted mounts by now)
                 if (tpl.SuspensionWidth != 1f || tpl.SuspensionHeight != 0f) Suspension.Apply(car, tpl.SuspensionWidth, tpl.SuspensionHeight, "template");
                 marker.SuspensionWidth = tpl.SuspensionWidth; marker.SuspensionHeight = tpl.SuspensionHeight;
-                PatrolsModule.Verbose("Running gear of " + car.name + ": " + Suspension.Describe(car));
-                if (DayLight.Dark) Headlights(car, true);   // raiders drive with their lights on at night
-                RaiderMusic(car);                            // a cassette in the template's radio: on, full volume ([General] Raider music)
+                if (Core.Log.Verbose) PatrolsModule.Verbose("Running gear of " + car.name + ": " + Suspension.Describe(car));
+                if (DayLight.Dark) Headlights(car, true, carFsms);   // raiders drive with their lights on at night
+                RaiderMusic(car, carFsms);                            // a cassette in the template's radio: on, full volume ([General] Raider music)
                 yield return WaitForSave(gen, saveOk);
                 if (car == null) yield break;
-                PatrolsModule.Verbose("Registered " + car.name + " for saving: " + Register.Commit(car) + " object(s)");
+                int committed = Register.Commit(car);
+                if (Core.Log.Verbose) PatrolsModule.Verbose("Registered " + car.name + " for saving: " + committed + " object(s)");
                 if (trailer != null) Register.Commit(trailer);
 
+                yield return BuildQueue.Assembled;
                 if(!tpl.SetupOnly&&(car.GetComponent<MerchantHost>()==null||car.GetComponent<MerchantHost>().Data?.travelling==true))yield return StartUp(car);
             }
             finally
@@ -386,11 +398,11 @@ namespace WildWasteland.Modules.Patrols
         // Headlights: the car's light switch (switch_panel/switch_lights, LightOff FSM "useDoor" = the player's click: click sound,
         // switch turned, HeadlightsON sent to the car) when it is off, and HeadlightsON / OFF straight to every Headlight FSM (the
         // headlight items and the dashboard gauges' backlight: global events HeadlightsON / HeadlightsOFF) for cars without a switch.
-        internal static void Headlights(GameObject car, bool on)
+        internal static void Headlights(GameObject car, bool on, PlayMakerFSM[] snapshot = null)
         {
             if (car == null) return;
             int n = 0;
-            foreach (var f in car.GetComponentsInChildren<PlayMakerFSM>(true))
+            foreach (var f in snapshot ?? car.GetComponentsInChildren<PlayMakerFSM>(true))
             {
                 if (f == null || f.Fsm == null || !f.Fsm.Initialized) continue;
                 if (f.FsmName == (on ? "LightOff" : "LightOn") && f.enabled && f.gameObject.name == "switch_lights" && f.ActiveStateName == "idle")
@@ -403,11 +415,11 @@ namespace WildWasteland.Modules.Patrols
         // A radio with a cassette in it (the cassette's CheckTag FSM has set the radio's Music.music clip and started it, the OnOff FSM
         // holds the pitch at 0 = "off"): full volume, then switched on the way the player does it - "useDoor" on the PlayStop [Play]
         // FSM (click sound, OnOff Activate = pitch 1, Play/Stop swap, so one click of the player stops it).
-        internal static void RaiderMusic(GameObject car)
+        internal static void RaiderMusic(GameObject car, PlayMakerFSM[] snapshot = null)
         {
             if (car == null || PatrolsModule.RaiderMusic == null || !PatrolsModule.RaiderMusic.Value) return;
             int n = 0;
-            foreach (var music in car.GetComponentsInChildren<PlayMakerFSM>(true))
+            foreach (var music in snapshot ?? car.GetComponentsInChildren<PlayMakerFSM>(true))
             {
                 if (music == null || music.FsmName != "Music" || music.Fsm == null || !music.Fsm.Initialized) continue;
                 var radio = music.gameObject;
@@ -1082,10 +1094,10 @@ namespace WildWasteland.Modules.Patrols
         }
 
         // Parts with a Condition FSM (engine, radiator, wheels) get a rolled condition; the FSM's tiers react to the variable.
-        private static void SetPartConditions(GameObject car)
+        private static void SetPartConditions(GameObject car, PlayMakerFSM[] snapshot = null)
         {
             int n = 0;
-            foreach (var f in car.GetComponentsInChildren<PlayMakerFSM>(true))
+            foreach (var f in snapshot ?? car.GetComponentsInChildren<PlayMakerFSM>(true))
             {
                 if (f.FsmName != "Condition" || !f.Fsm.Initialized) continue;
                 var v = f.FsmVariables.GetFsmFloat("Condition");
@@ -1095,7 +1107,7 @@ namespace WildWasteland.Modules.Patrols
                 var repair = f.gameObject.GetComponents<PlayMakerFSM>();
                 foreach (var r in repair)
                     if (r.FsmName == "Repair" && r.Fsm.Initialized) { var rv = r.FsmVariables.GetFsmFloat("Condition"); if (rv != null) rv.Value = c; }
-                PatrolsModule.Verbose("  " + f.gameObject.name + " condition " + c.ToString("0"));
+                if (Core.Log.Verbose) PatrolsModule.Verbose("  " + f.gameObject.name + " condition " + c.ToString("0"));
                 n++;
             }
             PatrolsModule.Verbose("Part conditions set on " + n + " part(s) (" + PatrolsModule.MinPartHealth.Value + ".." + PatrolsModule.MaxPartHealth.Value + " %)");
@@ -1181,9 +1193,9 @@ namespace WildWasteland.Modules.Patrols
             return null;
         }
 
-        internal static PlayMakerFSM FindFsm(GameObject car, string objectName, string fsmName)
+        internal static PlayMakerFSM FindFsm(GameObject car, string objectName, string fsmName, PlayMakerFSM[] snapshot = null)
         {
-            foreach (var f in car.GetComponentsInChildren<PlayMakerFSM>(true))
+            foreach (var f in snapshot ?? car.GetComponentsInChildren<PlayMakerFSM>(true))
                 if (f.gameObject.name == objectName && f.FsmName == fsmName) return f;
             return null;
         }

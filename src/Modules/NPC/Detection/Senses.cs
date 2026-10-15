@@ -1682,7 +1682,8 @@ namespace WildWasteland.Modules.NPC
         {
             if (owner.transform.parent != null) return null;
             PlayMakerFSM det = null, att = null;
-            foreach (var f in owner.GetComponents<PlayMakerFSM>())
+            var fsms = owner.GetComponents<PlayMakerFSM>();
+            foreach (var f in fsms)
             {
                 if (f == null) continue;
                 if (f.FsmName == "Detection") det = f; else if (f.FsmName == "Attack") att = f;
@@ -1691,9 +1692,10 @@ namespace WildWasteland.Modules.NPC
             var a = new Agent { Owner = owner, T = owner.transform, Col = owner.GetComponent<Collider>(), Detection = det, Attack = att };
             a.DetectedVar = det.FsmVariables.FindFsmGameObject("detectedObj");
             a.Tag = owner.tag;
-            a.BaseHostile = HostileTags(owner);
+            var behaviours = owner.GetComponentsInChildren<Behaviour>(true);
+            a.BaseHostile = HostileTags(owner, behaviours);
             a.Hostile = new HashSet<string>(a.BaseHostile);
-            foreach (var f in owner.GetComponents<PlayMakerFSM>()) if (f != null && f.FsmName == "PlayerIsEnemy") { a.PlayerIsEnemy = f; break; }
+            foreach (var f in fsms) if (f != null && f.FsmName == "PlayerIsEnemy") { a.PlayerIsEnemy = f; break; }
             Relation(a, false);
             a.Human = IsHuman(a.Tag);
             string prefab = PrefabOf(owner);
@@ -1707,7 +1709,7 @@ namespace WildWasteland.Modules.NPC
                 if ((i >= 0 ? n.Substring(i + 1) : n) == "Head") { a.Head = t; break; }
             }
             var sensors = new List<Behaviour>();
-            foreach (var b in owner.GetComponentsInChildren<Behaviour>(true))
+            foreach (var b in behaviours)
             {
                 if (b == null) continue;
                 string tn = b.GetType().Name;
@@ -1772,13 +1774,13 @@ namespace WildWasteland.Modules.NPC
         }
 
         // the faction's enemies: the RangeSensor's tag filter (SignalFilter.AllowedTags), as the game has it per prefab
-        private static HashSet<string> HostileTags(GameObject owner)
+        private static HashSet<string> HostileTags(GameObject owner, Behaviour[] behaviours)
         {
             var set = new HashSet<string>();
             if(owner.CompareTag("MutantSanity")){set.Add("Player");return set;}
             try
             {
-                foreach (var b in owner.GetComponentsInChildren<Behaviour>(true))
+                foreach (var b in behaviours)
                 {
                     if (b == null || b.GetType().Name != "RangeSensor") continue;
                     object filter = null;
