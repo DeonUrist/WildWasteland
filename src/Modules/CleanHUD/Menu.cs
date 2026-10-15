@@ -312,7 +312,6 @@ namespace WildWasteland.Modules.CleanHUD
         private Button _modsButton;
         private Button _languageButton;
         private bool _languageShown;
-        private float _languageY;
         private readonly List<MenuButton> _accentButtons = new List<MenuButton>();
         private float _nextModsScan;
         private static readonly string[] TitleHidden = { "Canvas_MM/MainMenu", "Canvas_MM/Game Name", "Canvas_MM/EnterSeedText", "Canvas_MM/MusicText", "Canvas_MM/Version_text", "Canvas_MM/row_bg", "Canvas_MM/LoadingText" };
@@ -750,7 +749,6 @@ namespace WildWasteland.Modules.CleanHUD
                 if (r.Key == "MODS" && !mods) continue;
                 GlyphText t;
                 var b = Row(_main, X + 8, y, W - 16, RH, r.Key, 34, r.Value, out t);
-                if (r.Key == "LANGUAGE") _languageY = y;
                 if (r.Key == "CONTINUE" && _ctx == Ctx.Title)
                 {
                     _continueBtn = b;
@@ -765,15 +763,16 @@ namespace WildWasteland.Modules.CleanHUD
                 }
                 y += RH;
             }
-            var accents = R(_main, "accents", 0, 0, 228, 44);
-            accents.anchorMin = accents.anchorMax = accents.pivot = new Vector2(.5f, 0); accents.anchoredPosition = new Vector2(0, 16);
-            Plate(accents, 0, 0, 228, 44);
+            float accentWidth = AccentTheme.Names.Length * 40 + 28;
+            var accents = R(_main, "accents", 0, 0, accentWidth, 44);
+            accents.anchorMin = accents.anchorMax = accents.pivot = new Vector2(.5f, 0); accents.anchoredPosition = new Vector2(0, 48);
+            Plate(accents, 0, 0, accentWidth, 44);
             for (int i = 0; i < AccentTheme.Names.Length; i++)
             {
-                int choice = i;
-                var rt = R(accents, "accent " + AccentTheme.Names[i], 16 + i * 40, 8, 36, 28);
+                int choice = AccentTheme.DisplayOrder[i];
+                var rt = R(accents, "accent " + AccentTheme.Names[choice], 16 + i * 40, 8, 36, 28);
                 var hit = rt.gameObject.AddComponent<Image>(); hit.color = Color.clear;
-                var square = R(rt, "square", 6, 2, 24, 24).gameObject.AddComponent<Image>(); square.color = AccentTheme.Colors[i]; square.raycastTarget = false;
+                var square = R(rt, "square", 6, 2, 24, 24).gameObject.AddComponent<Image>(); square.color = AccentTheme.Colors[choice]; square.raycastTarget = false;
                 var frame = Frame(rt, 3, -1, 30, 30, 1.5f, Gold);
                 var button = rt.gameObject.AddComponent<MenuButton>(); button.targetGraphic = hit; button.transition = Selectable.Transition.None;
                 button.OnVisual = hover => { foreach (var line in frame) line.enabled = hover || AccentTheme.Index == choice; };
@@ -851,7 +850,7 @@ namespace WildWasteland.Modules.CleanHUD
             _modal = R(_rootRt, "languages", 0, 0, 1920, 1080);
             var blocker = _modal.gameObject.AddComponent<Image>(); blocker.color = Color.clear;
             _modal.gameObject.AddComponent<ClickZone>().OnClick = CloseModal;
-            float height = Mathf.Min(660, entries.Count * 40 + 84), x = 660, y = Mathf.Min(_languageY, 1000 - height);
+            float height = Mathf.Min(660, entries.Count * 40 + 84), x = 660, y = 320;
             Plate(_modal, x, y, 480, height);
             T(_modal, "heading", x + 28, y + 12, 350, 42, 30, TextAnchor.MiddleLeft, Gold, "LANGUAGE");
             CenteredRow(_modal, x + 410, y + 12, 48, 42, "X", 28, CloseModal);
@@ -863,13 +862,9 @@ namespace WildWasteland.Modules.CleanHUD
             for (int i = 0; i < entries.Count; i++)
             {
                 var entry = entries[i]; GlyphText glyph;
-                var button = Row(content, 0, i * 40, 464, 40, "", 26, () => { entry.Choose(); CloseModal(); }, out glyph); glyph.enabled = false;
+                var button = Row(content, 0, i * 40, 464, 40, entry.Name, 26, () => { entry.Choose(); CloseModal(); }, out glyph);
                 button.name = "language " + entry.Code;
-                var text = R(button.transform, "name", 22, 0, 430, 40).gameObject.AddAccent<Text>();
-                ApocaLanguageMenu.MarkOwn(text); text.font = entry.Font; text.text = entry.Name; text.fontSize = 26; text.alignment = TextAnchor.MiddleLeft;
-                text.raycastTarget = false; text.supportRichText = false; text.resizeTextForBestFit = true; text.resizeTextMinSize = 18; text.resizeTextMaxSize = 26;
-                var visual = button.OnVisual;
-                button.OnVisual = hover => { visual(hover); text.color = hover || entry.Selected ? Gold : White; }; button.Refresh();
+                glyph.Size = Fit(entry.Name, 26, 430, 18); button.Sticky = entry.Selected; button.Refresh();
             }
             BlockCancelFrame = Time.frameCount + 1;
         }

@@ -8,9 +8,11 @@ namespace WildWasteland.Modules.CleanHUD
 {
     internal static class AccentTheme
     {
-        internal static readonly string[] Names = { "Yellow", "Green", "Blue", "Red", "Purple" };
+        internal static readonly string[] Names = { "Yellow", "Green", "Blue", "Red", "Purple", "White", "Gray", "Mint" };
+        internal static readonly int[] DisplayOrder = { 5, 6, 3, 0, 1, 7, 2, 4 };
         internal static readonly Color[] Colors = { new Color32(226, 191, 108, 255), new Color32(96, 218, 96, 255),
-            new Color32(120, 181, 240, 255), new Color32(235, 128, 124, 255), new Color32(187, 142, 236, 255) };
+            new Color32(120, 181, 240, 255), new Color32(235, 128, 124, 255), new Color32(187, 142, 236, 255),
+            new Color32(255, 255, 255, 255), new Color32(160, 160, 160, 255), new Color32(0, 255, 145, 255) };
         internal static ConfigEntry<string> Setting;
         internal static int Index;
         private static readonly HashSet<AccentTint> Graphics = new HashSet<AccentTint>();
