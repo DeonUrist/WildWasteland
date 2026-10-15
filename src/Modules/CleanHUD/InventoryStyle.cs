@@ -96,7 +96,7 @@ namespace WildWasteland.Modules.CleanHUD
         private static RectTransform Panel(Transform parent, string name, float x, float y, float w, float h, string heading)
         {
             var root = Rect(parent, name, x, y, w, h);
-            var plate = Rect(root, "plate", -40, -40, w + 80, h + 80).gameObject.AddComponent<Image>();
+            var plate = Rect(root, "plate", -40, -40, w + 80, h + 80).gameObject.AddAccent<Image>();
             plate.sprite = Menu.PlateSprite(); plate.type = Image.Type.Sliced; plate.raycastTarget = false;
             if (!string.IsNullOrEmpty(heading)) Label(root, heading, 20, 7, w - 40, 34, 27, DialogueWidgets.Gold);
             return root;
@@ -109,7 +109,7 @@ namespace WildWasteland.Modules.CleanHUD
         }
         private static RawImage Picture(Transform parent, string path, float x, float y, float w, float h)
         {
-            var image = Rect(parent, "picture", x, y, w, h).gameObject.AddComponent<RawImage>(); image.raycastTarget = false;
+            var image = Rect(parent, "picture", x, y, w, h).gameObject.AddAccent<RawImage>(); image.raycastTarget = false;
             var source = ImageAt(path); image.enabled = source != null;
             if (source != null) { image.texture = source.texture; image.uvRect = source.uvRect; Images.Add(new ImageMirror { Source = source, Target = image }); }
             return image;
@@ -120,7 +120,7 @@ namespace WildWasteland.Modules.CleanHUD
             foreach (var graphic in Native) Alphas.Add(graphic.canvasRenderer.GetAlpha());
             _view = Rect(_canvas.transform, "CleanHUD.Inventory", 0, 0, 1920, 1080);
             _view.anchorMin = _view.anchorMax = _view.pivot = new Vector2(.5f, .5f);
-            var intercept = _view.gameObject.AddComponent<Image>(); intercept.color = Color.clear; intercept.raycastTarget = true;
+            var intercept = _view.gameObject.AddAccent<Image>(); intercept.color = Color.clear; intercept.raycastTarget = true;
             Panel(_view, "inventory", 136, 132, 1648, 720, "INVENTORY");
             Label(_view, "DAY", 1220, 145, 60, 32, 22, DialogueWidgets.Gold);
             MirrorText(Label(_view, "", 1286, 145, 70, 32, 22, White), "day/day number");
@@ -158,7 +158,7 @@ namespace WildWasteland.Modules.CleanHUD
                 if (slot.State != null) slot.Item = slot.State.FsmVariables.FindFsmGameObject("item");
                 if (slot.Take != null) foreach (var state in slot.Take.FsmStates) if (state.Name == "dropCurrent") slot.CanDrop = true;
             }
-            var hit = Rect(root, "drop", 0, 40, 208, 162).gameObject.AddComponent<Image>(); hit.color = Color.clear;
+            var hit = Rect(root, "drop", 0, 40, 208, 162).gameObject.AddAccent<Image>(); hit.color = Color.clear;
             slot.Button = hit.gameObject.AddComponent<MenuButton>(); slot.Button.transition = Selectable.Transition.None;
             slot.Button.targetGraphic = hit; slot.Button.navigation = new Navigation { mode = Navigation.Mode.None };
             slot.Button.OnVisual = hover => { hit.color = hover ? new Color(.886f, .749f, .424f, .14f) : Color.clear; slot.DropHint.gameObject.SetActive(hover); };
@@ -178,7 +178,7 @@ namespace WildWasteland.Modules.CleanHUD
                 Ammo.Add(new AmmoRow { Text = text, Count = ammo != null ? ammo.FsmVariables.FindFsmInt("ammo_" + keys[i]) : null,
                     Capacity = ammo != null ? ammo.FsmVariables.FindFsmInt("ammo_" + keys[i] + "_capacity") : null });
             }
-            var line = Rect(root, "divider", 24, 402, 392, 1).gameObject.AddComponent<Image>(); line.color = DialogueWidgets.Gold; line.raycastTarget = false;
+            var line = Rect(root, "divider", 24, 402, 392, 1).gameObject.AddAccent<Image>(); line.color = DialogueWidgets.Gold; line.raycastTarget = false;
         }
         private static void BuildWarlords()
         {

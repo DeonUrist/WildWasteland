@@ -31,12 +31,12 @@ namespace WildWasteland.Modules.CleanHUD
                 plate.anchorMin = _map.anchorMin; plate.anchorMax = _map.anchorMax; plate.pivot = _map.pivot;
                 plate.anchoredPosition = _map.anchoredPosition; plate.sizeDelta = _map.sizeDelta + new Vector2(80, 80);
                 plate.SetSiblingIndex(0);
-                var image = plate.gameObject.AddComponent<Image>(); image.sprite = Menu.PlateSprite(); image.type = Image.Type.Sliced; image.raycastTarget = false;
+                var image = plate.gameObject.AddAccent<Image>(); image.sprite = Menu.PlateSprite(); image.type = Image.Type.Sliced; image.raycastTarget = false;
                 _plate = plate.gameObject;
                 var hint = DialogueWidgets.Rect(root, "CleanHUD.MapHint", 0, 0, 0, 0);
                 hint.anchorMin = hint.anchorMax = hint.pivot = new Vector2(.5f, .5f);
                 hint.anchoredPosition = new Vector2(_map.anchoredPosition.x, _map.anchoredPosition.y - _map.sizeDelta.y * .5f - 72f); hint.sizeDelta = new Vector2(1000, 40);
-                _hint = hint.gameObject.AddComponent<GlyphText>(); _hint.Size = 26; _hint.color = DialogueWidgets.Gold; _hint.raycastTarget = false; _hint.Align = TextAnchor.MiddleCenter;
+                _hint = hint.gameObject.AddAccent<GlyphText>(); _hint.Size = 26; _hint.color = DialogueWidgets.Gold; _hint.raycastTarget = false; _hint.Align = TextAnchor.MiddleCenter;
             }
             _hint.Set(_text != null && !string.IsNullOrEmpty(_text.text) ? _text.text.ToUpperInvariant() : "");
             _plate.SetActive(true); _hint.gameObject.SetActive(true);

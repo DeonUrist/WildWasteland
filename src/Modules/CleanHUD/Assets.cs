@@ -93,6 +93,7 @@ namespace WildWasteland.Modules.CleanHUD
                 t.hideFlags = HideFlags.DontUnloadUnusedAsset;
             }
             Embedded[name] = t;
+            if (name.StartsWith("panel_", StringComparison.Ordinal)) AccentTheme.RegisterPanel(t);
             return t;
         }
 

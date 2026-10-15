@@ -15,12 +15,12 @@ namespace WildWasteland.Modules.CleanHUD
         }
         internal static GlyphText Text(Transform parent, string name, float x, float y, float w, float h, float size, Color color, string text)
         {
-            var t = Rect(parent, name, x, y, w, h).gameObject.AddComponent<GlyphText>();
+            var t = Rect(parent, name, x, y, w, h).gameObject.AddAccent<GlyphText>();
             t.Size = size; t.color = color; t.raycastTarget = false; t.Set(text); return t;
         }
         internal static MenuButton Button(Transform parent, float x, float y, float w, float h, string label, Action action)
         {
-            var r = Rect(parent, "choice", x, y, w, h); var image = r.gameObject.AddComponent<Image>(); image.color = Color.clear;
+            var r = Rect(parent, "choice", x, y, w, h); var image = r.gameObject.AddAccent<Image>(); image.color = Color.clear;
             var t = Text(r, "label", 20, 0, w - 30, h, 26, Color.white, label);
             var b = r.gameObject.AddComponent<MenuButton>(); b.transition = Selectable.Transition.None; b.targetGraphic = image;
             b.OnVisual = selected => { t.color = !b.interactable ? Color.gray : selected ? Gold : Color.white; };
@@ -28,7 +28,7 @@ namespace WildWasteland.Modules.CleanHUD
         }
         internal static ScrollRect Scroll(Transform parent, string name, float x, float y, float w, float h, out RectTransform content)
         {
-            var r = Rect(parent, name, x, y, w, h); var background = r.gameObject.AddComponent<Image>(); background.color = new Color(0, 0, 0, .1f);
+            var r = Rect(parent, name, x, y, w, h); var background = r.gameObject.AddAccent<Image>(); background.color = new Color(0, 0, 0, .1f);
             r.gameObject.AddComponent<RectMask2D>(); var s = r.gameObject.AddComponent<ScrollRect>();
             content = Rect(r, "content", 0, 0, w, h); s.viewport = r; s.content = content; s.horizontal = false; s.vertical = true;
             s.movementType = ScrollRect.MovementType.Clamped; s.scrollSensitivity = 40; return s;

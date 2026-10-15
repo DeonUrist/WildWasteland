@@ -67,7 +67,7 @@ namespace WildWasteland.Modules.CleanHUD
                 GUI.color = Color.white; GUI.backgroundColor = Color.white;
                 GUI.Box(new Rect(-420, -170, 840, 340), "", _namePlate);
                 NameText(new Rect(-340, -112, 680, 50), "SAVE NAME", 34, Color.white);
-                GUI.color = DialogueWidgets.Gold; GUI.DrawTexture(new Rect(-340, -40, 680, 60), Texture2D.whiteTexture); GUI.color = Color.white;
+                GUI.color = AccentTheme.Resolve(DialogueWidgets.Gold); GUI.DrawTexture(new Rect(-340, -40, 680, 60), Texture2D.whiteTexture); GUI.color = Color.white;
                 GUI.backgroundColor = new Color(.08f, .07f, .05f);
                 GUI.SetNextControlName("apocasaver_savename");
                 ____text = GUI.TextField(new Rect(-338, -38, 676, 56), ____text, 24, _nameField);
@@ -94,7 +94,7 @@ namespace WildWasteland.Modules.CleanHUD
             var font = GlyphFont.Get(); float scale = size / font.Size;
             float x = rect.center.x - font.Measure(text, size, 0) / 2f;
             float baseline = rect.center.y + (font.Ascent - font.Descent) * scale / 2f;
-            var previous = GUI.color; GUI.color = color;
+            var previous = GUI.color; GUI.color = AccentTheme.Resolve(color);
             foreach (char ch in text)
             {
                 GlyphFont.G glyph;

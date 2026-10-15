@@ -69,6 +69,7 @@ namespace WildWasteland.Modules.CleanHUD
             FogOpacity = cfg.Player("Map", "FogOpacity", 1f, "1 hides unexplored areas completely; lower values leave them faintly visible.", new AcceptableValueRange<float>(0f, 1f));
             cfg.Migrate(FogOpacity, "local.immersivemap.cfg", "Fog", "FogOpacity");
             MenuEnabled = Bind(cfg, "Menu", "Enabled", true, "Replace the title and pause menus with CleanHUD's menus.");
+            AccentTheme.Setting = cfg.Player("Menu", "Accent", "Yellow", "CleanHUD text and border accent; also selectable at the bottom of the title and pause menus.", new AcceptableValueList<string>(AccentTheme.Names));
             EnableCheats = Bind(cfg, "Menu", "EnableCheats", false, "Add the game's cheat controls to the menu settings.");
             bool saved = Legacy.Get(cfg.Main.ConfigFilePath, cfg.Section("HUD"), "Scale") != null;
             Scale = cfg.Player("HUD", "Scale", 1f, "HUD scale; each panel grows away from its screen edge.", new AcceptableValueRange<float>(0.5f, 1.5f));
@@ -99,6 +100,7 @@ namespace WildWasteland.Modules.CleanHUD
         public override void Init()
         {
             Running = true; _retry = 0; _throttle.Clear();
+            AccentTheme.Init();
             ChaseCameraHud.Clear(); ChaseCameraHud.Install(this);
             ApocapocketInventory.Install(this);
             MessageHook.Clear(); Bindings.Clear(); Menu.BlockCancelFrame = -1;
@@ -130,6 +132,7 @@ namespace WildWasteland.Modules.CleanHUD
             Hooks.GetButtonDownUpdate.Prefix(this, CancelHook.Prefix);
             Scheduler.Sliced(this, "Scene key discovery", 500, SceneCache.Step);
             Scheduler.Sliced(this, "Weapon icons", 500, Assets.RenderStep);
+            Scheduler.Sliced(this, "Accent panels", 500, AccentTheme.Step);
             Scheduler.Interval(this, "Layout reload", 2f, PollLayout);
             Scheduler.EveryFrame(this, "Inventory window", InventoryStyle.Tick, Phase.LateUpdateLast);
             Scheduler.Interval(this, "Location markers", .5f, LocationMarkers.Tick);
@@ -224,6 +227,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (_loadingScreen != null) { SaveBus.StateChanged -= _loadingScreen.StateChanged; _loadingScreen.Dispose(); _loadingScreen = null; }
             MessageHook.Clear(); Bindings.Clear(); Menu.BlockCancelFrame = -1;
             SceneCache.Clear(); Assets.Dispose(); Menu.DisposeAssets(); GlyphFont.Reset();
+            AccentTheme.Clear();
             Api.Compass.Entries.Clear(); Api.Compass.CustomIcons.Clear(); Api.Compass.IconRevision++; _attach = null;
         }
         public override IEnumerable<ToolPage> ToolPages()

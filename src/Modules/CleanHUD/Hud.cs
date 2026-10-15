@@ -201,14 +201,14 @@ namespace WildWasteland.Modules.CleanHUD
         }
 
         private static Image Img(Transform p, string n, float x, float y, float w, float h, Color c)
-        { var g = R(p, n, x, y, w, h).gameObject.AddComponent<Image>(); g.color = c; g.raycastTarget = false; return g; }
+        { var g = R(p, n, x, y, w, h).gameObject.AddAccent<Image>(); g.color = c; g.raycastTarget = false; return g; }
 
         private static RawImage Raw(Transform p, string n, float x, float y, float w, float h, Texture tex, Color c)
-        { var g = R(p, n, x, y, w, h).gameObject.AddComponent<RawImage>(); g.texture = tex; g.color = c; g.raycastTarget = false; return g; }
+        { var g = R(p, n, x, y, w, h).gameObject.AddAccent<RawImage>(); g.texture = tex; g.color = c; g.raycastTarget = false; return g; }
 
         private Text Txt(Transform p, string n, float x, float y, float w, float h, int size, TextAnchor a, Color c)
         {
-            var t = R(p, n, x, y, w, h).gameObject.AddComponent<Text>();
+            var t = R(p, n, x, y, w, h).gameObject.AddAccent<Text>();
             t.font = _font; t.fontSize = size; t.alignment = a; t.color = c; t.supportRichText = false;
             t.horizontalOverflow = HorizontalWrapMode.Overflow; t.verticalOverflow = VerticalWrapMode.Overflow; t.raycastTarget = false;
             return t;
@@ -233,7 +233,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (boltTexture != null) bolt = Raw(g, "bolts icon", 22, -36, 26, 26, boltTexture, Gold);
             else
             {
-                var fallback = R(g, "bolts icon", 22, -36, 52, 52).gameObject.AddComponent<VehicleStatusIcon>();
+                var fallback = R(g, "bolts icon", 22, -36, 52, 52).gameObject.AddAccent<VehicleStatusIcon>();
                 fallback.Kind = 3; fallback.color = Gold; fallback.raycastTarget = false; fallback.rectTransform.localScale = new Vector3(.5f, .5f, 1); bolt = fallback;
             }
             var bo = bolt.gameObject.AddComponent<Outline>(); bo.effectColor = Color.black; bo.effectDistance = boltTexture != null ? new Vector2(1, -1) : new Vector2(2, -2);
@@ -290,7 +290,7 @@ namespace WildWasteland.Modules.CleanHUD
             _vehicle = R(_root.transform, "vehicle status", 0, 0, 180, 60);
             for (int i = 0; i < 3; i++)
             {
-                var icon = R(_vehicle, i == 0 ? "ignition" : i == 1 ? "handbrake" : "cassette", 0, 4, 52, 52).gameObject.AddComponent<VehicleStatusIcon>();
+                var icon = R(_vehicle, i == 0 ? "ignition" : i == 1 ? "handbrake" : "cassette", 0, 4, 52, 52).gameObject.AddAccent<VehicleStatusIcon>();
                 icon.Kind = i; icon.color = Gold; icon.raycastTarget = false; Drop(icon, .9f);
                 _vehicleIcons[i] = icon;
             }

@@ -312,6 +312,8 @@ namespace WildWasteland.Modules.CleanHUD
         private Button _modsButton;
         private Button _languageButton;
         private bool _languageShown;
+        private float _languageY;
+        private readonly List<MenuButton> _accentButtons = new List<MenuButton>();
         private float _nextModsScan;
         private static readonly string[] TitleHidden = { "Canvas_MM/MainMenu", "Canvas_MM/Game Name", "Canvas_MM/EnterSeedText", "Canvas_MM/MusicText", "Canvas_MM/Version_text", "Canvas_MM/row_bg", "Canvas_MM/LoadingText" };
         private static readonly string[] PauseHidden = { "MainMenu_Canvas/MainMenu", "MainMenu_Canvas/row_bg" };
@@ -558,10 +560,10 @@ namespace WildWasteland.Modules.CleanHUD
             return t;
         }
         private static Image Img(Transform p, string n, float x, float y, float w, float h, Color c, bool ray = false)
-        { var i = R(p, n, x, y, w, h).gameObject.AddComponent<Image>(); i.color = c; i.raycastTarget = ray; return i; }
+        { var i = R(p, n, x, y, w, h).gameObject.AddAccent<Image>(); i.color = c; i.raycastTarget = ray; return i; }
         private static GlyphText T(Transform p, string n, float x, float y, float w, float h, float size, TextAnchor a, Color c, string text)
         {
-            var g = R(p, n, x, y, w, h).gameObject.AddComponent<GlyphText>();
+            var g = R(p, n, x, y, w, h).gameObject.AddAccent<GlyphText>();
             g.Size = size; g.Align = a; g.color = c; g.raycastTarget = false; g.Set(text);
             return g;
         }
@@ -616,7 +618,7 @@ namespace WildWasteland.Modules.CleanHUD
         private MenuButton Row(Transform p, float x, float y, float w, float h, string label, float size, Action click, out GlyphText txt)
         {
             var rt = R(p, label, x, y, w, h);
-            var hit = rt.gameObject.AddComponent<Image>(); hit.color = new Color(1, 1, 1, 0); hit.raycastTarget = true;
+            var hit = rt.gameObject.AddAccent<Image>(); hit.color = new Color(1, 1, 1, 0); hit.raycastTarget = true;
             var bar = Img(rt, "bar", 0, (h - size * .9f) / 2f, 7, size * .9f, Gold); bar.enabled = false;
             var t = T(rt, "label", 22, 0, w - 22, h, size, TextAnchor.MiddleLeft, White, label);
             Shade(t, .6f);
@@ -661,7 +663,7 @@ namespace WildWasteland.Modules.CleanHUD
             var background = MenuBackground();
             if (background != null)
             {
-                _background = R(_rootRt, "background", 0, 0, 0, 0).gameObject.AddComponent<RawImage>();
+                _background = R(_rootRt, "background", 0, 0, 0, 0).gameObject.AddAccent<RawImage>();
                 var rt = _background.rectTransform; rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; rt.anchoredPosition = rt.sizeDelta = Vector2.zero;
                 _background.texture = background; _background.raycastTarget = false;
             }
@@ -676,7 +678,7 @@ namespace WildWasteland.Modules.CleanHUD
                 _updateButton = CenteredRow(_rootRt, 0, 0, 390, 64, "UPDATE AVAILABLE", 30, () => Application.OpenURL(_updateUrl));
                 var rt = (RectTransform)_updateButton.transform; rt.anchorMin = rt.anchorMax = rt.pivot = Vector2.one; rt.anchoredPosition = new Vector2(-60, -60);
                 rt.sizeDelta = new Vector2(390, 100);
-                var plate = R(rt, "plate", -40, -40, 470, 180).gameObject.AddComponent<RawImage>();
+                var plate = R(rt, "plate", -40, -40, 470, 180).gameObject.AddAccent<RawImage>();
                 plate.texture = Assets.Tex("panel_weapon"); plate.raycastTarget = false; plate.transform.SetAsFirstSibling();
                 T(rt, "mod", 0, 62, 390, 30, 20, TextAnchor.MiddleCenter, Gold, "WILD WASTELAND");
                 _updateButton.gameObject.SetActive(false);
@@ -710,6 +712,7 @@ namespace WildWasteland.Modules.CleanHUD
 
         private void BuildMain()
         {
+            _accentButtons.Clear();
             _main = R(_rootRt, "main", 0, 0, 1920, 1080);
             const float X = 120, Y = 320, W = 500, RH = 64;
             var rows = new List<KeyValuePair<string, Action>>();
@@ -746,6 +749,7 @@ namespace WildWasteland.Modules.CleanHUD
                 if (r.Key == "MODS" && !mods) continue;
                 GlyphText t;
                 var b = Row(_main, X + 8, y, W - 16, RH, r.Key, 34, r.Value, out t);
+                if (r.Key == "LANGUAGE") _languageY = y;
                 if (r.Key == "CONTINUE" && _ctx == Ctx.Title)
                 {
                     _continueBtn = b;
@@ -759,6 +763,19 @@ namespace WildWasteland.Modules.CleanHUD
                     _seedText = T(box, "seed", 0, 0, 158, RH - 24, 26, TextAnchor.MiddleRight, White, _seed);
                 }
                 y += RH;
+            }
+            Plate(_main, X, 1020, 228, 44);
+            for (int i = 0; i < AccentTheme.Names.Length; i++)
+            {
+                int choice = i;
+                var rt = R(_main, "accent " + AccentTheme.Names[i], X + 16 + i * 40, 1028, 36, 28);
+                var hit = rt.gameObject.AddComponent<Image>(); hit.color = Color.clear;
+                var square = R(rt, "square", 6, 2, 24, 24).gameObject.AddComponent<Image>(); square.color = AccentTheme.Colors[i]; square.raycastTarget = false;
+                var frame = Frame(rt, 3, -1, 30, 30, 1.5f, Gold);
+                var button = rt.gameObject.AddComponent<MenuButton>(); button.targetGraphic = hit; button.transition = Selectable.Transition.None;
+                button.OnVisual = hover => { foreach (var line in frame) line.enabled = hover || AccentTheme.Index == choice; };
+                button.onClick.AddListener(() => { Sound(); AccentTheme.Setting.Value = AccentTheme.Names[choice]; foreach (var swatch in _accentButtons) swatch.Refresh(); });
+                _accentButtons.Add(button); button.Refresh();
             }
             RefreshLabels();
         }
@@ -826,18 +843,32 @@ namespace WildWasteland.Modules.CleanHUD
 
         private void OpenLanguage()
         {
-            var b = FindLanguageButton();
-            if (b == null) return;
-            b.onClick.Invoke();
-            // Keep the source's fonts and selection callbacks, above our menu background.
-            for (int i = 0; i < _van.transform.childCount; i++)
+            var entries = ApocaLanguageMenu.Read(); if (entries.Count == 0) return;
+            CloseModal();
+            _modal = R(_rootRt, "languages", 0, 0, 1920, 1080);
+            var blocker = _modal.gameObject.AddComponent<Image>(); blocker.color = Color.clear;
+            _modal.gameObject.AddComponent<ClickZone>().OnClick = CloseModal;
+            float height = Mathf.Min(660, entries.Count * 40 + 84), x = 660, y = Mathf.Min(_languageY, 1000 - height);
+            Plate(_modal, x, y, 480, height);
+            T(_modal, "heading", x + 28, y + 12, 350, 42, 30, TextAnchor.MiddleLeft, Gold, "LANGUAGE");
+            CenteredRow(_modal, x + 410, y + 12, 48, 42, "X", 28, CloseModal);
+            var view = R(_modal, "list", x + 8, y + 64, 464, height - 80);
+            view.gameObject.AddComponent<RectMask2D>();
+            var content = R(view, "content", 0, 0, 464, entries.Count * 40);
+            var scroll = view.gameObject.AddComponent<MenuScrollRect>(); scroll.viewport = view; scroll.content = content;
+            scroll.horizontal = false; scroll.vertical = true; scroll.inertia = false; scroll.scrollSensitivity = 40; scroll.movementType = ScrollRect.MovementType.Clamped;
+            for (int i = 0; i < entries.Count; i++)
             {
-                var t = _van.transform.GetChild(i);
-                if (t == b.transform || !t.name.StartsWith("ApocaLanguage_", StringComparison.Ordinal)) continue;
-                var c = t.GetComponent<Canvas>() ?? t.gameObject.AddComponent<Canvas>();
-                c.overrideSorting = true; c.sortingOrder = _root.GetComponent<Canvas>().sortingOrder + 1;
-                if (t.GetComponent<GraphicRaycaster>() == null) t.gameObject.AddComponent<GraphicRaycaster>();
+                var entry = entries[i]; GlyphText glyph;
+                var button = Row(content, 0, i * 40, 464, 40, "", 26, () => { entry.Choose(); CloseModal(); }, out glyph); glyph.enabled = false;
+                button.name = "language " + entry.Code;
+                var text = R(button.transform, "name", 22, 0, 430, 40).gameObject.AddAccent<Text>();
+                ApocaLanguageMenu.MarkOwn(text); text.font = entry.Font; text.text = entry.Name; text.fontSize = 26; text.alignment = TextAnchor.MiddleLeft;
+                text.raycastTarget = false; text.supportRichText = false; text.resizeTextForBestFit = true; text.resizeTextMinSize = 18; text.resizeTextMaxSize = 26;
+                var visual = button.OnVisual;
+                button.OnVisual = hover => { visual(hover); text.color = hover || entry.Selected ? Gold : White; }; button.Refresh();
             }
+            BlockCancelFrame = Time.frameCount + 1;
         }
 
         private void Resume()
@@ -962,7 +993,7 @@ namespace WildWasteland.Modules.CleanHUD
             CloseModal();
             _modal = R(_rootRt, "modal", 0, 0, 1920, 1080);
             _modal.anchorMin = Vector2.zero; _modal.anchorMax = Vector2.one; _modal.sizeDelta = Vector2.zero; _modal.anchoredPosition = Vector2.zero;
-            var dim = _modal.gameObject.AddComponent<Image>(); dim.color = new Color(0, 0, 0, .55f); dim.raycastTarget = true;
+            var dim = _modal.gameObject.AddAccent<Image>(); dim.color = new Color(0, 0, 0, .55f); dim.raycastTarget = true;
             var box = R(_modal, "box", 0, 0, 640, yes != null ? 236 : 172);
             box.anchorMin = box.anchorMax = new Vector2(.5f, .5f); box.pivot = new Vector2(.5f, .5f); box.anchoredPosition = Vector2.zero;
             Plate(box, 0, 0, 640, yes != null ? 236 : 172);
@@ -1108,8 +1139,8 @@ namespace WildWasteland.Modules.CleanHUD
                     float v = SettingsModel.Read(d);
                     b = Row(p, x, y, w, h, d.Label, 26, null, out lbl);
                     var bar = R(b.transform, "bar", cx, (h - 20) / 2f, 220, 20);
-                    var back = bar.gameObject.AddComponent<Image>(); back.color = new Color(0, 0, 0, .25f); back.raycastTarget = true;
-                    var fill = R(bar, "fill", 1.5f, 1.5f, 0, 17).gameObject.AddComponent<RawImage>();
+                    var back = bar.gameObject.AddAccent<Image>(); back.color = new Color(0, 0, 0, .25f); back.raycastTarget = true;
+                    var fill = R(bar, "fill", 1.5f, 1.5f, 0, 17).gameObject.AddAccent<RawImage>();
                     fill.texture = Assets.VGradient(.75f); fill.color = Gold; fill.raycastTarget = false;
                     Frame(bar, 0, 0, 220, 20, 1.5f, BarBorder);
                     var vt = T(b.transform, "value", cx + 232, 0, 70, h, 24, TextAnchor.MiddleRight, White, "");
@@ -1214,7 +1245,7 @@ namespace WildWasteland.Modules.CleanHUD
                 foreach (var b in _keys) if (b.Tab == tab && HasClash(b)) { clash = true; break; }
                 float w = font.Measure(tab, size, 0) + pad * 2 + 14;
                 var rt = R(p, "ktab " + tab, tx, ty, w, 40);
-                var hit = rt.gameObject.AddComponent<Image>(); hit.color = new Color(1, 1, 1, 0); hit.raycastTarget = true;
+                var hit = rt.gameObject.AddAccent<Image>(); hit.color = new Color(1, 1, 1, 0); hit.raycastTarget = true;
                 var lbl = T(rt, "label", pad, 0, w - pad * 2 - 14, 40, size, TextAnchor.MiddleLeft, White, tab);
                 var line = Img(rt, "line", pad, 37, w - pad * 2 - 14, 3, Gold);
                 if (clash) Img(rt, "dot", w - pad - 10, 15, 9, 9, Red);
@@ -1235,7 +1266,7 @@ namespace WildWasteland.Modules.CleanHUD
             // scrolling list
             float vy = Y + 154, vh = H - 154 - 66;
             _keyView = R(p, "view", X, vy, W, vh);
-            var vi = _keyView.gameObject.AddComponent<Image>(); vi.color = new Color(1, 1, 1, 0); vi.raycastTarget = true;
+            var vi = _keyView.gameObject.AddAccent<Image>(); vi.color = new Color(1, 1, 1, 0); vi.raycastTarget = true;
             _keyView.gameObject.AddComponent<RectMask2D>();
             _keyContent = R(_keyView, "content", 0, 0, W - 14, 10);
             float y = 0;
@@ -1284,7 +1315,7 @@ namespace WildWasteland.Modules.CleanHUD
         {
             var row = new KeyRow { B = kb };
             var rt = R(p, kb.Label, 0, y, W, KeyRH);
-            var hit = rt.gameObject.AddComponent<Image>(); hit.color = new Color(1, 1, 1, 0); hit.raycastTarget = true;
+            var hit = rt.gameObject.AddAccent<Image>(); hit.color = new Color(1, 1, 1, 0); hit.raycastTarget = true;
             var bar = Img(rt, "bar", 0, 10, 6, KeyRH - 20, Gold); bar.enabled = false;
             string clash = null;
             foreach (var s in kb.Slots)
@@ -1298,7 +1329,7 @@ namespace WildWasteland.Modules.CleanHUD
             {
                 var s = kb.Slots[i];
                 var box = R(rt, "slot" + i, i == 0 ? c1 : c2, (KeyRH - 34) / 2f, BoxW, 34);
-                var bg = box.gameObject.AddComponent<Image>(); bg.color = new Color(0, 0, 0, .28f); bg.raycastTarget = true;
+                var bg = box.gameObject.AddAccent<Image>(); bg.color = new Color(0, 0, 0, .28f); bg.raycastTarget = true;
                 row.Frames.Add(Frame(box, 0, 0, BoxW, 34, 1.5f, BarBorder));
                 var text = s.Text ?? KeyCatalog.KeyText(s.Key);
                 row.Txt.Add(T(box, "key", 4, 0, BoxW - 8, 34, Fit(text, 22, BoxW - 12, 14), TextAnchor.MiddleCenter, White, text));
@@ -1350,7 +1381,7 @@ namespace WildWasteland.Modules.CleanHUD
             // swallow clicks while waiting for the key
             var blk = R(_rootRt, "capture", 0, 0, 1920, 1080);
             blk.anchorMin = Vector2.zero; blk.anchorMax = Vector2.one; blk.sizeDelta = Vector2.zero; blk.anchoredPosition = Vector2.zero;
-            var bi = blk.gameObject.AddComponent<Image>(); bi.color = new Color(0, 0, 0, 0); bi.raycastTarget = true;
+            var bi = blk.gameObject.AddAccent<Image>(); bi.color = new Color(0, 0, 0, 0); bi.raycastTarget = true;
             _capBlock = blk.gameObject;
             if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
             _keyMsg = row.B.Label + ": PRESS A KEY    BACKSPACE: CLEAR    ESC: CANCEL" + (s.Shortcut ? "    HOLD CTRL / SHIFT / ALT FOR A COMBINATION" : "");

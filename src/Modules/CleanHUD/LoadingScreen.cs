@@ -115,7 +115,7 @@ namespace WildWasteland.Modules.CleanHUD
         }
         private static GlyphText Text(Transform parent, string name, Vector2 anchor, Vector2 position, Vector2 size, float fontSize, Color color)
         {
-            var text = Rect(parent, name, anchor, position, size).gameObject.AddComponent<GlyphText>();
+            var text = Rect(parent, name, anchor, position, size).gameObject.AddAccent<GlyphText>();
             text.Size = fontSize; text.Align = TextAnchor.UpperLeft; text.color = color; text.raycastTarget = false;
             var shadow = text.gameObject.AddComponent<Shadow>(); shadow.effectColor = new Color(0, 0, 0, .95f); shadow.effectDistance = new Vector2(0, -2);
             return text;
@@ -127,9 +127,9 @@ namespace WildWasteland.Modules.CleanHUD
             var canvas = _root.AddComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceOverlay; canvas.sortingOrder = 32000;
             var scaler = _root.AddComponent<CanvasScaler>(); scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize; scaler.referenceResolution = new Vector2(1920, 1080); scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
             _root.AddComponent<GraphicRaycaster>();
-            var black = Rect(_root.transform, "opaque background", Vector2.zero, Vector2.zero, Vector2.zero).gameObject.AddComponent<Image>();
+            var black = Rect(_root.transform, "opaque background", Vector2.zero, Vector2.zero, Vector2.zero).gameObject.AddAccent<Image>();
             Stretch(black.rectTransform); black.color = Color.black;
-            _background = Rect(_root.transform, "screen image", Vector2.zero, Vector2.zero, Vector2.zero).gameObject.AddComponent<RawImage>();
+            _background = Rect(_root.transform, "screen image", Vector2.zero, Vector2.zero, Vector2.zero).gameObject.AddAccent<RawImage>();
             Stretch(_background.rectTransform); _background.raycastTarget = false;
             _label = Text(_root.transform, "loading", Vector2.zero, new Vector2(64, 64), new Vector2(720, 80), 56, new Color(.886f, .749f, .424f, 1f));
             for (int i = 0; i < _tipLines.Length; i++)

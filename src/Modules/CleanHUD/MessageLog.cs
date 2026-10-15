@@ -97,11 +97,11 @@ namespace WildWasteland.Modules.CleanHUD
             rt.anchorMin = rt.anchorMax = new Vector2(0, 1); rt.pivot = new Vector2(0, 1); rt.sizeDelta = new Vector2(Width, LineH);
             var l = new Line { Rt = rt, G = go.AddComponent<CanvasGroup>() };
             l.G.blocksRaycasts = false; l.G.interactable = false;
-            var bar = new GameObject("bar", typeof(RectTransform)).AddComponent<Image>();
+            var bar = new GameObject("bar", typeof(RectTransform)).AddAccent<Image>();
             bar.transform.SetParent(rt, false);
             var br = bar.rectTransform; br.anchorMin = br.anchorMax = new Vector2(0, 1); br.pivot = new Vector2(0, 1);
             br.anchoredPosition = new Vector2(0, -6); br.sizeDelta = new Vector2(6, 20); bar.color = _gold; bar.raycastTarget = false;
-            var t = new GameObject("text", typeof(RectTransform)).AddComponent<Text>();
+            var t = new GameObject("text", typeof(RectTransform)).AddAccent<Text>();
             t.transform.SetParent(rt, false);
             var tr = t.rectTransform; tr.anchorMin = tr.anchorMax = new Vector2(0, 1); tr.pivot = new Vector2(0, 1);
             tr.anchoredPosition = new Vector2(16, 0); tr.sizeDelta = new Vector2(Width - 16, LineH);

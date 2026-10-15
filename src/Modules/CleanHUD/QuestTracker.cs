@@ -97,11 +97,11 @@ namespace WildWasteland.Modules.CleanHUD
             {
                 if (i == _rows.Count)
                 {
-                    var text = DialogueWidgets.Rect(_root, "quest", 0, 0, 620, 32).gameObject.AddComponent<Text>();
+                    var text = DialogueWidgets.Rect(_root, "quest", 0, 0, 620, 32).gameObject.AddAccent<Text>();
                     text.font = _font; text.fontSize = 22; text.color = _white; text.alignment = TextAnchor.UpperRight;
                     text.supportRichText = false; text.raycastTarget = false; text.horizontalOverflow = HorizontalWrapMode.Wrap; text.verticalOverflow = VerticalWrapMode.Overflow;
                     var shadow = text.gameObject.AddComponent<Shadow>(); shadow.effectColor = new Color(0, 0, 0, .95f); shadow.effectDistance = new Vector2(0, -1.5f);
-                    var bar = DialogueWidgets.Rect(text.transform, "bar", 634, 4, 6, 20).gameObject.AddComponent<Image>(); bar.color = _gold; bar.raycastTarget = false;
+                    var bar = DialogueWidgets.Rect(text.transform, "bar", 634, 4, 6, 20).gameObject.AddAccent<Image>(); bar.color = _gold; bar.raycastTarget = false;
                     _rows.Add(text); _bars.Add(bar);
                 }
                 var row = _rows[i]; if (!row.gameObject.activeSelf) row.gameObject.SetActive(true);
