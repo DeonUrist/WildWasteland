@@ -1,6 +1,6 @@
 # Engine Sim compatibility — #127 — 0.1.13 RC10 — Testing
 
-Source: Engine Sim 1.3.0, tag v1.3.0 / ca2fd63, https://github.com/Wad67/Apocalypter-enginesim. This is a bridge for the separately installed plugin, not a port. Native assets and engine/exhaust/induction config files remain owned by Engine Sim. No source binaries are shipped or altered.
+Source: Engine Sim 1.7.0, tag v1.7.0 / 12d196d (originally written against 1.3.0 / ca2fd63 by mistake), https://github.com/Wad67/Apocalypter-enginesim. This is a bridge for the separately installed plugin, not a port. Native assets and engine/exhaust/induction config files remain owned by Engine Sim. No source binaries are shipped or altered.
 
 ## Cause and implementation
 
@@ -14,12 +14,16 @@ Patrols checks the service at its existing startup/running/start/stop entry poin
 
 Source native simulation threads, OnAudioFilterRead, torque/driveline patches, WheelCoupling's post-physics coroutine, Windage, RimFriction and Belt timing are unchanged. Settings remain on Engine Sim's own page; the only new WW config entry is the module master `[EngineSimCompat] Enabled=true` in settings.cfg. No save formats or keys change.
 
+## 1.3.0 -> 1.7.0 upgrade (2026-10-15)
+
+Diff v1.3.0..v1.7.0 checked against every member the bridge binds: EngineManager Update/FixedUpdate/Scan/FindListener, Listener.Current, DriveCoupling Active/_switch/PartGone/KeyOn/Release, Plugin._runner and all of IgnitionSwitch (file unchanged) keep their names and signatures; Scan still has exactly one `FindObjectsOfTypeAll<RealisticEngineSound>` and IgnitionSwitch.Pointed one `Camera.main`. Only the exact-version gate and log string changed. New in the source and left to it: EngineManager.KeepUp (1 s, AutoQuality) and its notice OnGUI run inside the scheduled Update/own OnGUI; the Engine Tuning Toolkit (`TuningKit` component on the same runner, own Update/OnGUI, not scheduled by WW) can hold an engine's key/starter through `DriveCoupling.Held`, which overrides the switch (and so WW's ignition key / Patrols requests) only while its window is open on that engine; tuned idle offsets shift the source's own idle, while the running threshold stays the source's Release rule (RPM > half the game's idleRPM).
+
 ## Denis's in-game checks
 
-1. Install the complete Engine Sim 1.3.0 release separately. Start with its simulated drivetrain off. Load a save with an engine fitted. Confirm the usual sound, throttle, distance fade, engine/exhaust swaps, and selected-engine limit; then enable the experimental drivetrain in Engine Sim's own settings.
+1. Install the complete Engine Sim 1.7.0 release separately. Start with its simulated drivetrain off. Load a save with an engine fitted. Confirm the usual sound, throttle, distance fade, engine/exhaust swaps, and selected-engine limit; then enable the experimental drivetrain in Engine Sim's own settings.
 2. Enter a car. Click the existing Ignition key briefly: key on; hold it past 0.25 s: starter cranks; release: starter releases. A short click while key on turns it off. Repeat using the actual dashboard switch, primary/alternate key bindings, and both first/third person. Hints and the existing CleanHUD engine-off icon should follow the simulated state. Pause, open settings, and alt-tab while holding: no unwanted new ignition press; release is observed when play resumes.
 3. Spawn/reload a patrol or merchant. Its crew should start and drive. A stalled engine should get a normal physical restart attempt. Park a merchant and destroy a patrol vehicle: key turns off rather than remaining powered. Take over a crew car while it is cranking: the AI request ends.
 4. Drive out of range and return, change fitted engine/exhaust, save/load, return to title, and toggle Engine Sim compatibility off/on twice. No duplicate sessions, muted engine left behind, exceptions or disabled jobs. With the bridge off, Engine Sim's own callbacks resume. With Engine Sim absent, WW logs compatibility idle and vanilla engine controls still work.
 5. For performance, turn Engine Sim VerboseLog off (it also writes a complete FSM dump 20 s after scene load), use the same MaxEngines/quality and save, and compare ModProfiler plus WW Modules/Performance over the same 30 s drive/convoy scene. Named jobs: Engine Sim frame, Engine Sim physics, Engine Sim world cache. Native worker CPU/audio work is outside scheduler measurements; no measured speedup is claimed.
 
-Expected startup line: `[EngineSimCompat] Engine Sim 1.3.0 scheduled; 500 us world cache, player/crew ignition bridge ready; native simulation and audio threads retained`. Source logs still include `Simulating ...`. No `Engine Sim hook failed`, `FAILED`, `PATCH CONFLICTS`, callback/cache fallback warnings or disabled jobs should appear. Engine Sim was not installed during local build verification; runtime/performance results remain pending with Denis.
+Expected startup line: `[EngineSimCompat] Engine Sim 1.7.0 scheduled; 500 us world cache, player/crew ignition bridge ready; native simulation and audio threads retained`. Source logs still include `Simulating ...`. No `Engine Sim hook failed`, `FAILED`, `PATCH CONFLICTS`, callback/cache fallback warnings or disabled jobs should appear. Engine Sim was not installed during local build verification; runtime/performance results remain pending with Denis.

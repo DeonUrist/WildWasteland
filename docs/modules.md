@@ -19,7 +19,7 @@ Init order = config display order = the order below (providers before consumers)
 
 | `POI` | Points of interest | `in` (Testing, #81) | New native MapMagic integration | `src/Modules/POI/` = `WildWasteland.Modules.POI` | - |
 | `QuestsCompat` | Talk & Quests compatibility | `in` (Testing) | Optional Apocatalker 2.0.0 / Quests 1.8.0 bridge; DLL md5 `518f44ad8318d62bdcb1aff739291e93` / `589c5185d0825ae0a7dd1601b55d6054` | `src/Modules/QuestsCompat/` = `WildWasteland.Modules.QuestsCompat` | None: the two standalone mods must remain installed |
-| `EngineSimCompat` | Engine Sim compatibility | `in` (Testing, #127) | Optional Engine Sim 1.3.0 (`ca2fd63`); standalone DLL/native assets remain installed | `src/Modules/EngineSimCompat/` = `WildWasteland.Modules.EngineSimCompat` | None: Engine Sim remains standalone |
+| `EngineSimCompat` | Engine Sim compatibility | `in` (Testing, #127) | Optional Engine Sim 1.7.0 (`12d196d`); standalone DLL/native assets remain installed | `src/Modules/EngineSimCompat/` = `WildWasteland.Modules.EngineSimCompat` | None: Engine Sim remains standalone |
 
 Not separable inside a module (no toggle): motorcycles (bike templates + ES3 prefab resolution) inside Patrols; simple convoy bandits inside NPC (driven by Patrols through the service). War Rig remains a **feature** of Patrols (`WarRig/` folder, two F6 toggles); its new world sites are registered through the POI module.
 

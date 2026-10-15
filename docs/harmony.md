@@ -138,7 +138,7 @@ No Harmony patches and no scheduler jobs. Subscribes to native TerrainTile.OnBef
 
 ### Optional Engine Sim compatibility (0.1.13 RC10, #127, Testing)
 
-Only Engine Sim 1.3.0 is adapted. Hook/delegate setup is transactional; an unsupported interface restores standalone behavior. No source DLL/native asset is modified or redistributed.
+Only Engine Sim 1.7.0 is adapted. Hook/delegate setup is transactional; an unsupported interface restores standalone behavior. No source DLL/native asset is modified or redistributed.
 
 | Owner | Target | Kind / handler | Frequency / filter |
 |---|---|---|---|

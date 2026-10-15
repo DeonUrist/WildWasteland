@@ -53,7 +53,7 @@ namespace WildWasteland.Modules.EngineSimCompat
             _attempted = true;
             try
             {
-                if (info.Metadata.Version != new Version(1, 3, 0)) throw new NotSupportedException("Expected Engine Sim 1.3.0, found " + info.Metadata.Version);
+                if (info.Metadata.Version != new Version(1, 7, 0)) throw new NotSupportedException("Expected Engine Sim 1.7.0, found " + info.Metadata.Version);
                 var plugin = info.Instance.GetType(); var asm = plugin.Assembly;
                 var manager = asm.GetType("EngineSim.EngineManager", true);
                 var runner = AccessTools.Field(plugin, "_runner").GetValue(null) as GameObject;
@@ -81,7 +81,7 @@ namespace WildWasteland.Modules.EngineSimCompat
                 Scheduler.EveryFrame(_owner, "Engine Sim physics", PhysicsFrame, Phase.FixedUpdate);
                 Scheduler.Sliced(_owner, "Engine Sim world cache", 500, CacheStep);
                 Services.VehicleIgnition = _owner; _ready = true;
-                Log.Always("[EngineSimCompat] Engine Sim 1.3.0 scheduled; 500 us world cache, player/crew ignition bridge ready; native simulation and audio threads retained");
+                Log.Always("[EngineSimCompat] Engine Sim 1.7.0 scheduled; 500 us world cache, player/crew ignition bridge ready; native simulation and audio threads retained");
             }
             catch
             {
