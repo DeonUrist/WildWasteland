@@ -113,6 +113,7 @@ namespace WildWasteland.Modules.CleanHUD
             TalkDialogue.Install(this);
             QuestNotifications.Install(this);
             QuestTracker.Install(this);
+            QuestJournal.Install(this);
             Core.Patches.Patch(this, AccessTools.Method(typeof(UiTextSetText), "OnEnter"), postfix: AccessTools.Method(typeof(MessageHook), "Postfix"));
             Hooks.GetButtonDownUpdate.Prefix(this, CancelHook.Prefix);
             Scheduler.Sliced(this, "Scene key discovery", 500, SceneCache.Step);
@@ -122,6 +123,7 @@ namespace WildWasteland.Modules.CleanHUD
             Scheduler.Interval(this, "Quest map lookup", 1f, _questMap.FindMap);
             Scheduler.EveryFrame(this, "Quest map markers", _questMap.Tick, Phase.LateUpdateLast);
             Scheduler.EveryFrame(this, "Dialogue window", TalkDialogue.Tick, Phase.LateUpdateLast);
+            Scheduler.EveryFrame(this, "Quest journal", QuestJournal.Tick, Phase.LateUpdateLast);
             _attach = Scheduler.Interval(this, "HUD attachment", 1f, AttachHud, Phase.LateUpdateLast);
             _attach.RunNow();
             Scheduler.EveryFrame(this, "HUD", TickHud, Phase.LateUpdateLast);
@@ -175,12 +177,12 @@ namespace WildWasteland.Modules.CleanHUD
         public override void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             LocationMarkers.Clear();
-            if (_questMap != null) _questMap.SceneLoaded(); TalkDialogue.Hide();
+            if (_questMap != null) _questMap.SceneLoaded(); TalkDialogue.Hide(); QuestJournal.Hide();
             Release(); _menu.Teardown(); SceneCache.Reset(); MessageHook.Clear(); Bindings.Clear(); Assets.SceneLoaded();
             _loadingScreen.SceneLoaded();
             _retry = 0; _attach.RunNow();
         }
-        public override void OnLoadBegin(string slot) { _loadingScreen.Begin(); Release(); Bindings.Clear(); MessageHook.Clear(); Assets.SceneLoaded(); }
+        public override void OnLoadBegin(string slot) { QuestJournal.Hide(); _loadingScreen.Begin(); Release(); Bindings.Clear(); MessageHook.Clear(); Assets.SceneLoaded(); }
         public override void OnWorldReady() { SceneCache.Reset(); SceneCache.BeginKeys(); _attach.RunNow(); }
         public override void Shutdown()
         {
@@ -189,6 +191,7 @@ namespace WildWasteland.Modules.CleanHUD
             ChaseCameraHud.Clear();
             TalkDialogue.Dispose();
             QuestTracker.Clear();
+            QuestJournal.Clear();
             if (ReferenceEquals(Services.Map, _questMap)) Services.Map = null;
             if (_questMap != null) _questMap.Dispose(); _questMap = null;
             if (ReferenceEquals(Services.VehicleStatus, this)) Services.VehicleStatus = null;

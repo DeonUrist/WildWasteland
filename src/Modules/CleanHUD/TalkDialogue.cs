@@ -125,7 +125,7 @@ namespace WildWasteland.Modules.CleanHUD
             }
             for (int i = 0; i < Buttons.Count; i++) { Buttons[i].interactable = Sources[i] != null && Sources[i].interactable; Buttons[i].Refresh(); }
         }
-        private static List<string> Wrap(string text, float width, float size = 26)
+        internal static List<string> Wrap(string text, float width, float size = 26)
         {
             var lines = new List<string>(); var font = GlyphFont.Get();
             foreach (var paragraph in text.Replace("\r", "").Split('\n'))
