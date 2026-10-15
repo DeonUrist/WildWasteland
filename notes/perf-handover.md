@@ -2,7 +2,15 @@
 
 Written 2026-10-15 at the end of the #133 first-pass session. Read this file, `AGENTS.md`, `notes/plan-Performance.md` and `notes/perf-ww-lag.md` before changing anything.
 
-## 0. State of the tree (verify first)
+## 0. Current state (updated after the Patrols prefab-cache follow-up)
+
+- Claude's first pass is `a8f189f`. The approved follow-up is recorded as `Fix #133: cache Patrols prefab lookups by registration generation`, including the documentation cleanup and four Patrols files (109 changed lines); no other module/Core source changed. Check git status/log for any later work. The older file inventory below describes the first-pass commit.
+- Installed DLL is the prefab-cache follow-up (staging label 0.1.26i), MD5 `D9E505A3132D042514522C21C84752A4`. Windows Release build with Deploy=true passed with zero errors and ten warnings in unchanged code. No config entries changed. The previous h MD5 was `612B2F7B3288311D1AE6C5BF49156152`.
+- Existing interactive logs show 42/42 features started and FS4 compiled 1,471 constructors / 8,489 setters in 2,584 ms. This establishes compiler readiness, not field parity or a completed gameplay checklist.
+- Both the h baseline and the installed prefab-cache follow-up reached title-menu attachment in bounded 30-second headless runs. The follow-up reports Patrols on with seven patches and 42/42 Performance features active; no managed exception, failed patch/feature, conflict or native crash signature was found. Its logs are in ignored `verification/runtime-perf/20261015-225823-prefab-cache/`. Null graphics produced shader errors. The runner stopped its own process at the bound; no world load, clean-exit, gameplay or graphics pass is claimed.
+- Next work and exact remaining gates: `notes/perf-preparation.md`. Denis requested headless runs without monitor automation. Issue #133 is already closed; no board status was changed here.
+
+## 0.1 Original handover snapshot (historical)
 
 - **Repo:** `V:\Repos\Apocalypter\WildWasteland`, branch `main`, HEAD `f262cd5` (0.1.25 RC22).
 - **Nothing from this work is committed.** The working tree holds all of it uncommitted, including the version bump to `0.1.26` in `src/Core/Plugin.cs`.
@@ -87,10 +95,7 @@ Written 2026-10-15 at the end of the #133 first-pass session. Read this file, `A
    - PlaySound pooling (1,070 uses).
    - GetChild without allocations (3,479 uses).
    - Item culling via FSM, renderer and collider off instead of SetActive (needs a saves analysis).
-6. **Docs:**
-   - `docs/harmony.md` Performance section: add `ActionData.LoadActionField` prefix (FS4); remove the FS4 transpilers and the `CreateAction`/`LoadActions` entries; add `Hooks.EnterState` (CleanHUD PauseCursorFix) and the Patrols `SetFsmFloatDo`/`SendEventEnter` prefixes (`Ram.BeforeSetFsmFloat/BeforeSendEvent`).
-   - `docs/perf-log.md`: append the 0.1.26c–h fixes.
-   - `AGENTS.md` §7.2: add the runtime facts in §1 (no Emit, interpreted Expression, FieldRefAccess, no transpiling ActionData).
+6. **Docs:** completed during preparation: FS4 and shared-hook inventory corrected in `docs/harmony.md`, c–h history/evidence appended to `docs/perf-log.md`, runtime constraints recorded in `AGENTS.md` §7.3. Verification remains partial as recorded above.
 
 ## 5. Wild Wasteland lag work (from `notes/perf-ww-lag.md`)
 

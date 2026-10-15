@@ -1,6 +1,6 @@
 # Plan — `Performance` module: make vanilla Apocalypter run much faster
 
-Status: **plan, nothing implemented** (2026-10-15, on top of 0.1.24 RC21 `a3b44a9`). Owner: Denis decides scope/order; agents implement one batch per issue (AGENTS.md §0.1), Denis measures in game (§0.3).
+Status: **first pass implemented, verification incomplete** (`a8f189f`, 0.1.26, 2026-10-15). This document retains the original design/estimates from 0.1.24 RC21 `a3b44a9`; it is not an implementation checklist. Current mechanisms, runtime restrictions and evidence are in `notes/perf-handover.md` and `notes/perf-preparation.md`. Owner: Denis decides scope/order; agents implement one batch per issue (AGENTS.md §0.1).
 Scope: the **vanilla game** (PlayMaker runtime, game FSMs, rendering, physics, MapMagic, NWH, GC). WW's own code was already audited in `notes/perf-audit-2026-10-15.md` and implemented (docs/perf-log.md "Perf pass 2026-10-15") — not repeated here.
 Evidence: static analysis of the full offline decompile `V:\Repos\Apocalypter\Sources\` (code + all 8129 FSMs + scene/prefab data). Detailed research with file:line citations:
 - `notes/perf-research/A-playmaker-runtime.md` — PlayMaker runtime (event dispatch, lifecycle, reflection, idle FSM cost, FSM sleep design).

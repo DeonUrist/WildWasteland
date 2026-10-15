@@ -78,6 +78,7 @@ namespace WildWasteland.Modules.Patrols
             Try("Camp status", () => TrafficCamps.Install(this));
             Try("Seated LOS guard", () => SeatedLosGuard.Install(this));
             Try("Suspension", () => Suspension.Install(this));
+            Prefabs.Install(this);
             Core.Hooks.SetFsmFloatEnter.Postfix(this, Ram.AfterSetFsmFloat);
             Core.Hooks.SetFsmFloatDo.Prefix(this, Ram.BeforeSetFsmFloat);   // a car never rams its own (trigger-only) crew
             Core.Hooks.SendEventEnter.Prefix(this, Ram.BeforeSendEvent);
@@ -122,6 +123,7 @@ namespace WildWasteland.Modules.Patrols
             _host = null; _patrol = null; _menu = null; _exporter = null; _spotter = null; _busPose = null; _convoy = null; _traffic = null; _cleanup = null; _merchantEditor = null;
             BusPassengerPoseEditor.Target = null;
             ModVehicles.Clear();
+            Prefabs.Invalidate();
             Instance = null;
         }
 
@@ -134,7 +136,7 @@ namespace WildWasteland.Modules.Patrols
 
         // Core.Origin (NWH FloatingOrigin.Jump): legacy physics caches of the pilots and PlayerRef move with the world
         public override void OnOriginShift(Vector3 delta) { TrafficSpace.OriginShift(delta); }
-        public override void OnWorldReady() { WarRig.PoiEncounter.Prepare(); }
+        public override void OnWorldReady() { Prefabs.Refresh(); WarRig.PoiEncounter.Prepare(); }
         internal void SpawnPoi(CarTemplate template, Vector3 position, Quaternion rotation, Action<GameObject> onDone)
         { if (_patrol != null && Running) _patrol.SpawnAt(template, position, rotation, true, onDone); else onDone(null); }
 
@@ -163,6 +165,7 @@ namespace WildWasteland.Modules.Patrols
         // WorldTraffic, Cleanup (then the absorbed MerchantSpotter editor). Each job re-reads the component (recreated after a scene load).
         void RegisterJobs()
         {
+            Scheduler.Interval(this, "Patrols.Prefab cache", .5f, Prefabs.Refresh).RunNow();
             TrafficCompass.Clear();
             Scheduler.Interval(this, "Compass markers", .5f, TrafficCompass.Tick);
             Scheduler.EveryFrame(this, "Patrol.Tick", () => { if (_patrol != null) _patrol.Tick(); });

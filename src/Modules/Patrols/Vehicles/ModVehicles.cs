@@ -16,8 +16,9 @@ namespace WildWasteland.Modules.Patrols
         private static Dictionary<string, MethodInfo> _byName;
         private static int _assemblyCount;
 
-        internal static void Register(string name, Func<GameObject> template) { if (!string.IsNullOrEmpty(name) && template != null) _registered[name] = template; }
+        internal static void Register(string name, Func<GameObject> template) { if (!string.IsNullOrEmpty(name) && template != null) { _registered[name] = template; Prefabs.Invalidate(); } }
         internal static void Clear() { _registered.Clear(); _byName = null; _assemblyCount = 0; }
+        internal static void Refresh() { if (_byName == null || _assemblyCount != AppDomain.CurrentDomain.GetAssemblies().Length) Scan(); }
 
         internal static GameObject Template(string name)
         {
@@ -28,7 +29,7 @@ namespace WildWasteland.Modules.Patrols
                 try { return own(); }
                 catch (Exception e) { Core.Log.Warn("[Patrols] " + "Mod vehicle " + name + ": " + e.Message); return null; }
             }
-            if (_byName == null || _assemblyCount != AppDomain.CurrentDomain.GetAssemblies().Length) Scan();
+            Refresh();
             MethodInfo m;
             if (!_byName.TryGetValue(name.Trim(), out m)) return null;
             try { return m.Invoke(null, null) as GameObject; }
@@ -37,6 +38,7 @@ namespace WildWasteland.Modules.Patrols
 
         private static void Scan()
         {
+            var previous = _byName;
             _byName = new Dictionary<string, MethodInfo>(StringComparer.OrdinalIgnoreCase);
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
             _assemblyCount = assemblies.Length;
@@ -60,6 +62,11 @@ namespace WildWasteland.Modules.Patrols
                     Core.Log.Info("[Patrols] " + "Mod vehicle available for templates: " + n + " (" + an + ")");
                 }
             }
+            bool changed = previous == null ? _byName.Count > 0 : previous.Count != _byName.Count;
+            if (!changed && previous != null)
+                foreach (var pair in _byName)
+                { MethodInfo old; if (!previous.TryGetValue(pair.Key, out old) || old != pair.Value) { changed = true; break; } }
+            if (changed) Prefabs.Invalidate();
         }
     }
 }

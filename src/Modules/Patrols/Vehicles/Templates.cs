@@ -59,18 +59,20 @@ namespace WildWasteland.Modules.Patrols
 
         private string _missingPrefab = "";
         private int _availabilityScene = -1;
+        private int _availabilityGeneration = -1;
         private float _nextAvailability;
         internal bool Available { get { return MissingPrefab.Length == 0; } }
         internal string MissingPrefab
         {
             get
             {
-                if (_availabilityScene != Patrol.SceneGen || Time.unscaledTime >= _nextAvailability)
+                if (_availabilityScene != Patrol.SceneGen || _availabilityGeneration != Prefabs.Generation || Time.unscaledTime >= _nextAvailability)
                 {
                     _availabilityScene = Patrol.SceneGen;
                     _nextAvailability = Time.unscaledTime + 5f;
                     try { _missingPrefab = FindMissingPrefab(); }
                     catch (Exception e) { _missingPrefab = Body; PatrolsModule.Verbose("Template " + Name + " unavailable: " + e.Message); }
+                    _availabilityGeneration = Prefabs.Generation;
                 }
                 return _missingPrefab;
             }
