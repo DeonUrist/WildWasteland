@@ -11,9 +11,22 @@ namespace WildWasteland.Core.UI
     public static class Ledger
     {
         public const float Width = 1028, Height = 755;
-        public static readonly Color Background = C("1B1610"), Surface = C("282119"), Raised = C("332C21"),
-            Field = C("17130D"), Text = C("EEE4CF"), Muted = C("B8AD99"), Line = C("514835"),
-            Accent = C("E4CB69"), Selected = C("3B3321"), Danger = C("F09578");
+        private static readonly Color[] Palette = { C("1B1610"), C("282119"), C("332C21"), C("17130D"), C("EEE4CF"), C("B8AD99"), C("514835"), C("E4CB69"), C("3B3321"), C("F09578") };
+        private static readonly Color[] CleanPalette = { C("10100F"), C("171715"), C("20201D"), C("111110"), C("F3EFE4"), new Color(243 / 255f, 239 / 255f, 228 / 255f, .5f), C("FF6152") };
+        private static bool _settings, _skinSettings;
+        private static Color _settingsAccent, _skinAccent;
+        private static GUIStyle _settingsPlate;
+        private static Action<Rect, string, float, Color, TextAnchor> _settingsText;
+        public static Color Background { get { return _settings ? CleanPalette[0] : Palette[0]; } }
+        public static Color Surface { get { return _settings ? CleanPalette[1] : Palette[1]; } }
+        public static Color Raised { get { return _settings ? CleanPalette[2] : Palette[2]; } }
+        public static Color Field { get { return _settings ? CleanPalette[3] : Palette[3]; } }
+        public static Color Text { get { return _settings ? CleanPalette[4] : Palette[4]; } }
+        public static Color Muted { get { return _settings ? CleanPalette[5] : Palette[5]; } }
+        public static Color Line { get { return _settings ? new Color(_settingsAccent.r, _settingsAccent.g, _settingsAccent.b, .35f) : Palette[6]; } }
+        public static Color Accent { get { return _settings ? _settingsAccent : Palette[7]; } }
+        public static Color Selected { get { return _settings ? Color.Lerp(CleanPalette[1], _settingsAccent, .16f) : Palette[8]; } }
+        public static Color Danger { get { return _settings ? CleanPalette[6] : Palette[9]; } }
         public static GUIStyle Body, Small, Heading, Brand, GameButton, DialogTitle, Input, Scrollbar;
         private static GUIStyle CloseText, InputRight;
         private static GUISkin _skin;
@@ -35,29 +48,49 @@ namespace WildWasteland.Core.UI
             }
             return _scannedFont;
         }
-        public static GUISkin Begin()
+        internal static GUISkin BeginSettings(Color accent, Texture2D plate, Action<Rect, string, float, Color, TextAnchor> text)
         {
+            _settingsAccent = accent; _settingsText = text;
+            if (_settingsPlate == null) _settingsPlate = new GUIStyle(GUIStyle.none) { border = new RectOffset(110, 110, 110, 110) };
+            _settingsPlate.normal.background = plate;
+            return Begin(true);
+        }
+        internal static void EndSettings() { _settings = false; _settingsText = null; }
+        public static GUISkin Begin() { return Begin(false); }
+        private static GUISkin Begin(bool settings)
+        {
+            _settings = settings;
             var old = GUI.skin; Skin.Ensure(1);
             var font = Skin.GameFont ?? ScannedGameFont();
-            if (_skin == null || (_game != font && font != null))
+            if (_skin == null || (_game != font && font != null) || _skinSettings != settings || (settings && _skinAccent != _settingsAccent))
             {
+                if (_skin != null) UnityEngine.Object.Destroy(_skin);
+                _skinSettings = settings; _skinAccent = _settingsAccent;
                 if (_body == null) _body = Font.CreateDynamicFontFromOSFont("Segoe UI", 14);
                 if (_bold == null) _bold = Font.CreateDynamicFontFromOSFont(new[] { "Segoe UI Semibold", "Segoe UI" }, 14);
                 _game = font;
-                Body = Style(_body, 14); Small = Style(_body, 12); Heading = Style(_bold, 14); Heading.fontStyle = FontStyle.Bold;
-                DialogTitle = Style(_bold, 18); DialogTitle.fontStyle = FontStyle.Bold; Brand = Style(_game ?? _bold, 26); GameButton = Style(_game ?? _bold, 15); CloseText = Style(_game ?? _bold, 13);
-                Input = Style(_body, 14); Input.padding = new RectOffset(9, 9, 6, 6); Input.border = new RectOffset(1, 1, 1, 1);
-                Input.normal.background = Box("17130D", "514835"); Input.hover.background = Input.normal.background;
-                Input.focused.background = Box("17130D", "E4CB69"); Input.active.background = Input.focused.background;
+                Body = Style(_body, settings ? 16 : 14); Small = Style(_body, settings ? 13 : 12); Heading = Style(_bold, settings ? 22 : 14); Heading.fontStyle = FontStyle.Bold;
+                DialogTitle = Style(_bold, settings ? 32 : 18); DialogTitle.fontStyle = FontStyle.Bold; Brand = Style(_game ?? _bold, settings ? 46 : 26); GameButton = Style(_game ?? _bold, settings ? 22 : 15); CloseText = Style(_game ?? _bold, settings ? 22 : 13);
+                string field = settings ? "111110" : "17130D", line = settings ? ColorUtility.ToHtmlStringRGBA(Line) : "514835", accent = settings ? ColorUtility.ToHtmlStringRGBA(Accent) : "E4CB69";
+                Input = Style(_body, settings ? 16 : 14); Input.padding = new RectOffset(9, 9, settings ? 3 : 6, settings ? 3 : 6); Input.border = new RectOffset(1, 1, 1, 1);
+                Input.normal.background = Box(field, line); Input.hover.background = Input.normal.background;
+                Input.focused.background = Box(field, accent); Input.active.background = Input.focused.background;
                 InputRight = new GUIStyle(Input) { alignment = TextAnchor.MiddleRight };
                 _skin = UnityEngine.Object.Instantiate(old); _skin.label = Body; _skin.textField = Input;
                 Scrollbar = new GUIStyle(old.verticalScrollbar) { fixedWidth = 7, padding = new RectOffset(), margin = new RectOffset(), border = new RectOffset() };
-                Scrollbar.normal.background = Box("17130D", "17130D");
+                Scrollbar.normal.background = Box(field, field);
                 _skin.verticalScrollbar = Scrollbar;
                 var thumb = new GUIStyle(old.verticalScrollbarThumb) { fixedWidth = 7, padding = new RectOffset(), margin = new RectOffset(), border = new RectOffset(), fixedHeight = 0 };
-                thumb.normal.background = thumb.hover.background = thumb.active.background = Box("514835", "514835");
+                thumb.normal.background = thumb.hover.background = thumb.active.background = Box(settings ? accent : "514835", settings ? accent : "514835");
                 _skin.verticalScrollbarThumb = thumb;
                 _skin.verticalScrollbarUpButton = _skin.verticalScrollbarDownButton = new GUIStyle(GUIStyle.none) { fixedHeight = 0, fixedWidth = 0 };
+                if (settings)
+                {
+                    var track = new GUIStyle(old.horizontalSlider) { fixedHeight = 5, border = new RectOffset(1, 1, 1, 1), margin = new RectOffset() };
+                    track.normal.background = track.hover.background = track.active.background = Box(field, line); _skin.horizontalSlider = track;
+                    var knob = new GUIStyle(old.horizontalSliderThumb) { fixedWidth = 10, fixedHeight = 16, border = new RectOffset(1, 1, 1, 1), margin = new RectOffset(0, 0, -5, 0) };
+                    knob.normal.background = knob.hover.background = knob.active.background = Box(accent, accent); _skin.horizontalSliderThumb = knob;
+                }
             }
             GUI.skin = _skin; return old;
         }
@@ -83,6 +116,8 @@ namespace WildWasteland.Core.UI
         public static void Label(Rect r, string text, GUIStyle font = null, Color? color = null, TextAnchor align = TextAnchor.MiddleLeft)
         {
             var style = font ?? Body; var previous = style.alignment; style.alignment = align;
+            if (_settings && _settingsText != null && (style == Brand || style == Heading || style == DialogTitle || style == GameButton || style == CloseText))
+            { _settingsText(r, text, style.fontSize, color ?? Text, align); style.alignment = previous; return; }
             Skin.Label(r, text, style, color ?? Text); style.alignment = previous;
         }
         public static bool Button(Rect r, string text, bool enabled = true, bool primary = false, bool gameFont = false, Color? color = null, bool transparent = false)
@@ -90,6 +125,12 @@ namespace WildWasteland.Core.UI
             bool previous = GUI.enabled; GUI.enabled = previous && enabled;
             bool hover = GUI.enabled && r.Contains(Event.current.mousePosition);
             bool hit = GUI.Button(r, GUIContent.none, GUIStyle.none);
+            if (_settings)
+            {
+                Panel(r, primary || hover ? Selected : transparent ? Color.clear : Field, primary || hover ? Accent : Line);
+                Label(r, text, GameButton, color ?? (!GUI.enabled ? Muted : primary || hover ? Accent : Text), TextAnchor.MiddleCenter);
+                GUI.enabled = previous; return hit;
+            }
             var fill = primary ? Accent : hover ? Selected : transparent ? Color.clear : Raised; var border = primary || hover ? Accent : Line;
             if (!enabled) { fill = Color.Lerp(Background, fill, .4f); border = Color.Lerp(Background, border, .4f); }
             Panel(r, fill, border);
@@ -196,6 +237,12 @@ namespace WildWasteland.Core.UI
         public static void Rule(float x, float y, float width) { Fill(new Rect(x, y, width, 1), Line); }
         public static void Window(Rect r)
         {
+            if (_settings)
+            {
+                if (_settingsPlate.normal.background != null) GUI.Box(new Rect(r.x - 40, r.y - 40, r.width + 80, r.height + 80), GUIContent.none, _settingsPlate);
+                else Panel(r, Background, Accent);
+                return;
+            }
             Skin.RustBack(r); Fill(r, new Color(16 / 255f, 13 / 255f, 9 / 255f, .5f));
             // Stretch each edge independently exactly like the prototype's native game frame.
             if (Skin.RebarH != null)
@@ -216,6 +263,15 @@ namespace WildWasteland.Core.UI
         }
         public static bool Toggle(Rect r, bool value, string label)
         {
+            if (_settings)
+            {
+                bool clicked = GUI.Button(r, GUIContent.none, GUIStyle.none);
+                bool hover = GUI.enabled && r.Contains(Event.current.mousePosition);
+                Panel(new Rect(r.x, r.center.y - 9, 18, 18), Field, hover || value ? Accent : Line);
+                if (value) Fill(new Rect(r.x + 4, r.center.y - 5, 10, 10), Accent);
+                Label(new Rect(r.x + 30, r.y, r.width - 30, r.height), label, Body, !GUI.enabled ? Muted : hover ? Accent : Text);
+                return clicked ? !value : value;
+            }
             bool hit = GUI.Button(r, GUIContent.none, GUIStyle.none); Panel(new Rect(r.x, r.center.y - 8, 16, 16), value ? Accent : Field);
             if (value) IconImage(new Rect(r.x + 1, r.center.y - 7, 14, 14), "check", Background);
             Label(new Rect(r.x + 24, r.y, r.width - 24, r.height), label); return hit ? !value : value;

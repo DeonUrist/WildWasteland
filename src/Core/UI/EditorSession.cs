@@ -24,8 +24,10 @@ namespace WildWasteland.Core.UI
         public bool Acquire()
         { return Acquire(true); }
         public bool Acquire(bool pause)
+        { return Acquire(pause, false); }
+        internal bool Acquire(bool pause, bool allowPaused)
         {
-            if (Busy || Time.timeScale <= 0 || ApocasetterBridge.InputBlocked) return false;
+            if (Busy || (!allowPaused && Time.timeScale <= 0) || ApocasetterBridge.InputBlocked) return false;
             _owner = this; Open = true; _time = Time.timeScale; _lock = Cursor.lockState; _visible = Cursor.visible;
             _pause = pause;
             _blocked = ApocasetterBridge.SetInputBlock(true);
@@ -47,7 +49,7 @@ namespace WildWasteland.Core.UI
         void Release()
         {
             if (_blocked) ApocasetterBridge.SetInputBlock(false);
-            _blocked = false; _releaseFrame = -1; Time.timeScale = _time > 0 ? _time : 1f; Cursor.lockState = _lock; Cursor.visible = _visible; _owner = null;
+            _blocked = false; _releaseFrame = -1; Time.timeScale = _time; Cursor.lockState = _lock; Cursor.visible = _visible; _owner = null;
         }
     }
 }

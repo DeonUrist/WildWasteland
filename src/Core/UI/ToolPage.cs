@@ -107,7 +107,7 @@ namespace WildWasteland.Core.UI
         internal bool DeduplicateEntries;
         readonly HashSet<ConfigEntryBase> _drawn = new HashSet<ConfigEntryBase>();
         static ConfigEntryBase _rebinding;
-        static GUIStyle _wrap; static Font _wrapFont;
+        static GUIStyle _wrap, _wrapSource;
 
         internal void Begin(float width, string prefix) { X = 0; Y = 4; Width = width; Prefix = prefix; EntryFilter = null; DeduplicateEntries = false; _drawn.Clear(); }
         internal bool CanShowEntry(ConfigEntryBase e) { return e != null && (EntryFilter == null || EntryFilter(e)) && (!DeduplicateEntries || !_drawn.Contains(e)); }
@@ -125,7 +125,7 @@ namespace WildWasteland.Core.UI
 
         public void Text(string text, Color? color = null)
         {
-            if (_wrap == null || _wrapFont != Ledger.Small.font) { _wrap = new GUIStyle(Ledger.Small) { wordWrap = true }; _wrapFont = Ledger.Small.font; }
+            if (_wrap == null || _wrapSource != Ledger.Small) { _wrap = new GUIStyle(Ledger.Small) { wordWrap = true }; _wrapSource = Ledger.Small; }
             var st = _wrap;
             float h = Mathf.Max(20, st.CalcHeight(new GUIContent(text), Width - 16));
             Ledger.Label(new Rect(X + 8, Y, Width - 16, h), text, st, color ?? Ledger.Muted, TextAnchor.UpperLeft);

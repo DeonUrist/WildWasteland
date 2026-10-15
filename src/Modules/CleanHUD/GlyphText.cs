@@ -53,6 +53,30 @@ namespace WildWasteland.Modules.CleanHUD
             }
             return w;
         }
+
+        // The same atlas in IMGUI windows, sharing the menu's text metrics and assets.
+        internal static void Draw(Rect rect, string text, float size, Color color, TextAnchor align)
+        {
+            if (Event.current.type != EventType.Repaint || string.IsNullOrEmpty(text)) return;
+            var font = Get(); if (font == null || font.Atlas == null) return;
+            float width = font.Measure(text, size, 0);
+            if (width > rect.width && width > 0) { size *= rect.width / width; width = rect.width; }
+            float scale = size / font.Size, x = rect.x;
+            if (align == TextAnchor.MiddleCenter || align == TextAnchor.UpperCenter || align == TextAnchor.LowerCenter) x = rect.center.x - width / 2;
+            else if (align == TextAnchor.MiddleRight || align == TextAnchor.UpperRight || align == TextAnchor.LowerRight) x = rect.xMax - width;
+            float baseline = rect.center.y + (font.Ascent - font.Descent) * scale / 2;
+            var previous = GUI.color; GUI.color = color;
+            foreach (char ch in text)
+            {
+                G glyph;
+                if (!font.Map.TryGetValue(ch, out glyph) && !font.Map.TryGetValue('?', out glyph)) continue;
+                if (ch != ' ' && glyph.W > 1 && glyph.H > 1)
+                    GUI.DrawTextureWithTexCoords(new Rect(x + glyph.Ox * scale, baseline - glyph.Top * scale, glyph.W * scale, glyph.H * scale), font.Atlas,
+                        new Rect(glyph.X / font.AtlasW, 1f - (glyph.Y + glyph.H) / font.AtlasH, glyph.W / font.AtlasW, glyph.H / font.AtlasH));
+                x += glyph.Adv * scale;
+            }
+            GUI.color = previous;
+        }
     }
 
     // Single-line text drawn from the GlyphFont atlas. Works with Shadow/Outline (they modify the mesh).

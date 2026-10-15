@@ -367,6 +367,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (!CleanHudModule.Running) return;
             if (WildWasteland.Core.UI.EditorSession.Busy || WildWasteland.Core.ApocasetterBridge.InputBlocked)
             {
+                if (WildWasteland.Core.UI.EditorSession.Busy) BlockCancelFrame = Time.frameCount + 1;
                 if (_root != null && _root.activeSelf) _root.SetActive(false);
                 return;
             }
@@ -732,7 +733,7 @@ namespace WildWasteland.Modules.CleanHUD
             _accentButtons.Clear();
             _main = R(_rootRt, "main", 0, 0, 1920, 1080);
             _main.anchorMin = Vector2.zero; _main.anchorMax = Vector2.one; _main.sizeDelta = Vector2.zero;
-            const float X = 120, Y = 320, W = 500, RH = 64;
+            const float X = 120, Y = 320, W = 500, RH = 60;
             var rows = new List<KeyValuePair<string, Action>>();
             _languageShown = FindLanguageButton() != null;
             if (_ctx == Ctx.Title)
@@ -741,6 +742,7 @@ namespace WildWasteland.Modules.CleanHUD
                 rows.Add(new KeyValuePair<string, Action>("NEW GAME", NewGame));
                 rows.Add(new KeyValuePair<string, Action>("MAP SEED", BeginSeedEdit));
                 rows.Add(new KeyValuePair<string, Action>("LOAD GAME", () => ShowSlots(true)));
+                rows.Add(new KeyValuePair<string, Action>("WILD WASTELAND", WildWasteland.Core.UI.ToolWindow.OpenFromMenu));
                 rows.Add(new KeyValuePair<string, Action>("SETTINGS", ShowSettings));
                 rows.Add(new KeyValuePair<string, Action>("MODS", OpenMods));
                 if (_languageShown) rows.Add(new KeyValuePair<string, Action>("LANGUAGE", OpenLanguage));
@@ -750,6 +752,7 @@ namespace WildWasteland.Modules.CleanHUD
             {
                 rows.Add(new KeyValuePair<string, Action>("CONTINUE", Resume));
                 rows.Add(new KeyValuePair<string, Action>("SAVE GAME", OpenSave));
+                rows.Add(new KeyValuePair<string, Action>("WILD WASTELAND", WildWasteland.Core.UI.ToolWindow.OpenFromMenu));
                 rows.Add(new KeyValuePair<string, Action>("SETTINGS", ShowSettings));
                 rows.Add(new KeyValuePair<string, Action>("CODEX", () => Click("MainMenu_Canvas/MainMenu/Codex")));
                 rows.Add(new KeyValuePair<string, Action>("TUTORIAL", () => Click("MainMenu_Canvas/MainMenu/Tutorial")));
@@ -767,6 +770,14 @@ namespace WildWasteland.Modules.CleanHUD
                 if (r.Key == "MODS" && !mods) continue;
                 GlyphText t;
                 var b = Row(_main, X + 8, y, W - 16, RH, r.Key, 34, r.Value, out t);
+                if (r.Key == "WILD WASTELAND")
+                {
+                    t.GetComponent<AccentTint>().enabled = false;
+                    var label = t;
+                    var visual = b.OnVisual;
+                    b.OnVisual = on => { visual(on); label.color = b.interactable ? Gold : Dim; };
+                    b.Refresh();
+                }
                 if (r.Key == "CONTINUE" && _ctx == Ctx.Title)
                 {
                     _continueBtn = b;
