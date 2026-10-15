@@ -196,7 +196,7 @@ namespace WildWasteland.Modules.CleanHUD
             _retry = 0; _attach.RunNow();
         }
         public override void OnLoadBegin(string slot) { LocationMarkers.Begin(false); MapFog.Reset(); QuestJournal.Hide(); _loadingScreen.Begin(); Release(); Bindings.Clear(); MessageHook.Clear(); Assets.SceneLoaded(); }
-        public override void OnSaveEnd(string slot) { LocationMarkers.SaveEnded(slot); MapFog.SaveEnded(slot); }
+        public override void OnSaveEnd(string slot) { LocationMarkers.SaveEnded(slot); }
         public override void OnOriginShift(Vector3 delta) { MapFog.OriginShifted(); }
         public override void OnWorldReady() { LocationMarkers.WorldReady(SaveBus.Slot); MapFog.WorldReady(SaveBus.Slot); SceneCache.Reset(); SceneCache.BeginKeys(); _attach.RunNow(); }
         public override void Shutdown()

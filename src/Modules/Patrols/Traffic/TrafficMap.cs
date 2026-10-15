@@ -87,16 +87,16 @@ namespace WildWasteland.Modules.Patrols
                 var canvas=new Rect(0,0,Mathf.Min(512f,rect.width),Mathf.Min(512f,rect.height));
                 _gameInk.Begin(Mathf.RoundToInt(canvas.width),Mathf.RoundToInt(canvas.height));
                 foreach(var journey in _journeys)for(int i=1;i<journey.route.Length;i++)
-                    _gameInk.Segment(MapPoint(journey.route[i-1],canvas),MapPoint(journey.route[i],canvas),RouteColor(journey));
+                    InkSegment(mapApi,journey.route[i-1],journey.route[i],canvas,RouteColor(journey));
                 _gameInk.End();
                 _mapLabels.Clear();_mapBattles.Clear();
-                foreach(var journey in _journeys)
+                foreach(var journey in _journeys)if(!Fogged(mapApi,journey.position))
                 CacheMapLabel(journey.position,rect,RouteColor(journey),MapName(journey));
                 foreach(var camp in TrafficLocations.Known.Values)if(camp.cleared&&mapApi==null)
                 CacheMapLabel(camp.center,rect,Color.gray,camp.name+" [Cleared]");
                 foreach(var battle in _battles)
-                {var p=MapPoint(battle.position,rect);_mapBattles.Add(new Rect(p.x-9f,p.y-9f,18f,18f));}
-                foreach(var merchant in MerchantHost.All)if(merchant!=null&&!Owns(merchant.GetComponent<PatrolMarker>()))
+                {if(Fogged(mapApi,battle.position))continue;var p=MapPoint(battle.position,rect);_mapBattles.Add(new Rect(p.x-9f,p.y-9f,18f,18f));}
+                foreach(var merchant in MerchantHost.All)if(merchant!=null&&!Owns(merchant.GetComponent<PatrolMarker>())&&(mapApi==null||!mapApi.Hidden(merchant.transform.position)))
                 CacheMapLabel(TrafficSpace.World(merchant.transform.position),rect,_inkHide?Color.gray:Color.yellow,_inkHide?"Unknown":_inkNames?merchant.Data?.group??"Coyote merchant":"Merchant");
             }
             if(traffic)
@@ -116,6 +116,20 @@ namespace WildWasteland.Modules.Patrols
                 GUI.color=Color.white;GUI.Label(new Rect(p.x*rect.width-12f,(1f-p.y)*rect.height-12f,24f,24f),unknown?"?":"X",_rigXStyle);
             }
             GUI.EndGroup();GUI.color=old;
+        }
+        // With CleanHUD's fog of war on, routes are inked only across explored ground (50 m pieces, judged at their midpoints).
+        private static bool Fogged(Core.IMapMarkers map,Vector3 world){return map!=null&&map.Hidden(TrafficSpace.Scene(world));}
+        private void InkSegment(Core.IMapMarkers map,Vector3 a,Vector3 b,Rect canvas,Color32 color)
+        {
+            if(map==null){_gameInk.Segment(MapPoint(a,canvas),MapPoint(b,canvas),color);return;}
+            int pieces=Mathf.Clamp(Mathf.CeilToInt(TrafficLocations.FlatDistance(a,b)/50f),1,400);
+            int start=-1;
+            for(int k=0;k<=pieces;k++)
+            {
+                bool shown=k<pieces&&!Fogged(map,Vector3.Lerp(a,b,(k+.5f)/pieces));
+                if(shown&&start<0)start=k;
+                else if(!shown&&start>=0){_gameInk.Segment(MapPoint(Vector3.Lerp(a,b,(float)start/pieces),canvas),MapPoint(Vector3.Lerp(a,b,(float)k/pieces),canvas),color);start=-1;}
+            }
         }
         private RectTransform FindMapImage()
         {

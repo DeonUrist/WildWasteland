@@ -237,6 +237,8 @@ namespace WildWasteland.Core
         bool Exists(int id);
         void Remove(int id);
         void RemoveAll(string owner);
+        /// <summary>True while the map's fog of war covers this scene position (always false with the fog off).</summary>
+        bool Hidden(Vector3 scene);
     }
 
     public interface IFollowerVehicles

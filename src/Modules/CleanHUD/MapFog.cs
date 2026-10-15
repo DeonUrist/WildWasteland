@@ -45,6 +45,7 @@ namespace WildWasteland.Modules.CleanHUD
             _standDown = Chainloader.PluginInfos.TryGetValue(SourceGuid, out info) && !ReferenceEquals(info.Instance, null);
             if (_standDown) CleanHudModule.Warn("Immersive Map is loaded; Wild Wasteland fog of war stays off. Remove ImmersiveMap.dll to use it.");
             _saves = Path.Combine(Core.Assets.ModuleConfigDir("CleanHUD"), "Saves");
+            SaveBus.StateChanged -= SaveState; SaveBus.StateChanged += SaveState;
         }
 
         internal static void Reset()
@@ -58,6 +59,7 @@ namespace WildWasteland.Modules.CleanHUD
 
         internal static void Shutdown()
         {
+            SaveBus.StateChanged -= SaveState;
             Reset();
             if (_texture != null) UnityEngine.Object.Destroy(_texture); _texture = null; _buffer = null;
             if (_material != null) UnityEngine.Object.Destroy(_material); _material = null;
@@ -228,15 +230,23 @@ namespace WildWasteland.Modules.CleanHUD
             if (!_loaded || _standDown || string.IsNullOrEmpty(slot)) return;
             int seed = Seed();
             if (seed == int.MinValue || seed != _seed) { CleanHudModule.Warn("Fog of war not saved: world seed " + seed + " differs from " + _seed); return; }
-            var data = Write(seed); string dir = _saves;
-            SaveBus.AfterSave(() =>
+            // Plain sidecar, not ES3: written at once. Save-and-quit leaves for the title during the save, before isPlay/AfterSave.
+            try
             {
-                Directory.CreateDirectory(dir);
-                string path = Path.Combine(dir, Path.GetFileName(slot) + ".fog.bin");
+                var data = Write(seed);
+                Directory.CreateDirectory(_saves);
+                string path = Path.Combine(_saves, Path.GetFileName(slot) + ".fog.bin");
                 File.WriteAllBytes(path + ".tmp", data);
                 if (File.Exists(path)) File.Replace(path + ".tmp", path, null); else File.Move(path + ".tmp", path);
-                if (Core.Log.Verbose) Core.Log.Info("[CleanHUD] Fog of war saved: " + path + " (" + data.Length + " bytes)");
-            });
+                CleanHudModule.Log("Fog of war saved: " + Path.GetFileName(path) + " (" + Chunks.Count + " chunks, " + data.Length + " bytes)");
+            }
+            catch (Exception e) { CleanHudModule.Warn("Fog of war could not be saved: " + e.Message); }
+        }
+
+        // SaveGame (global event) -> wait -> SaveGame -> isPlay. Write when the save starts and again at SaveAll.
+        private static void SaveState(string previous, string now)
+        {
+            if (now == "wait" || now == "SaveGame") SaveEnded(SaveBus.Slot);
         }
 
         private static byte[] Write(int seed)

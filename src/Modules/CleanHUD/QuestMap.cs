@@ -26,6 +26,7 @@ namespace WildWasteland.Modules.CleanHUD
         public int Add(string owner, Func<Vector3> position, string icon, Color color, string label)
         { var e = new Entry { Id = ++_next, Owner = owner, Position = position, Icon = icon, Color = color }; _entries.Add(e); _ids.Add(e.Id); return e.Id; }
         public bool Exists(int id) { return _ids.Contains(id); }
+        public bool Hidden(Vector3 scene) { return MapFog.Hides(scene); }
         public void Remove(int id)
         { for (int i = _entries.Count - 1; i >= 0; i--) if (_entries[i].Id == id) { Destroy(_entries[i]); _ids.Remove(id); _entries.RemoveAt(i); } }
         public void RemoveAll(string owner)
