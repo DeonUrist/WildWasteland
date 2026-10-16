@@ -2,7 +2,7 @@
 
 A BepInEx 5 mod for **Apocalypter** that combines gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
 
-Version **0.1.27 RC24** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
+Version **0.1.28 RC25** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
 
 | Module | What it is | Replaces (remove these from `BepInEx\plugins`) |
 |---|---|---|
@@ -18,6 +18,8 @@ Version **0.1.27 RC24** (plugin GUID `com.denis.apocalypter.wildwasteland`). Sta
 | Optional compatibility (`QuestsCompat`, `EngineSimCompat`) | Scheduling and integration for separately installed Talk/Quests and Engine Sim | None; keep these dependencies installed |
 
 With Apocasetter and its installer available, WW queues replaced standalones for disable and shows a title-menu restart notice. Restart before playing so the installer can move their files into its recoverable disabled cache; configs remain intact. WW waits for that restart before taking over the conflicting features. Without the installer, follow the notice to disable the named mods manually. This also covers Immersive Map, WomenOfWasteland, HealthStacks and iTweenGuard; optional Talk, Quests, Engine Sim, ChaseCamera and Apocapocket remain installed. Apocaraider (the old monolith) is not detected: remove it by hand.
+
+RC25: fixes car-panel switches (headlights, cassette Play/Stop) flipping twice per click when Burner's Utilities `[PlayMaker] FastEvents` is installed together with Performance. PM2 Targeted events no longer patches event dispatch another mod already patches, and never sends an event a second time. See [RC25 notes](notes/release-0.1.28-RC25.md).
 
 RC24: F3 settings use CleanHUD's panel, atlas text throughout, larger rows, right-side toggles, text choices, filled slider bars and eight live accent colors. A gold WILD WASTELAND entry above SETTINGS opens the config from both title and ESC menus; closing returns to the paused menu. Performance keeps the module switch, preset, measurements and counter buttons; individual optimization modes, feature statistics, shadow diagnostics and tuning overrides move to Developer (Enable Debug plus Developer mode). Includes explicit Apply Display and a shared Apocaspawner catalog hook for Stew Pot/War Rig. See [RC24 notes and checks](notes/release-0.1.27-RC24.md).
 
@@ -39,7 +41,7 @@ RC24: F3 settings use CleanHUD's panel, atlas text throughout, larger rows, righ
    ```
    If an asset is missing, WW falls back to the old plugin folder (`plugins\Apocaplayer\`, `plugins\NPCAI\Models\`, `plugins\Gunplay\Sounds\`, `plugins\GunplayHUD\Sounds\`, `plugins\Apocapatrol\`, `plugins\WarRig\`) or to a copy built into the DLL, and warns in the log. Patrols copies its old data into its new folder on the first run.
    Preserve your customized `CleanHUD\Icons\` files when updating; copy only missing defaults from the archive.
-4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.27]` and a summary `Wild Wasteland 0.1.27 modules:`. Resolve any restart notice before testing the affected modules.
+4. Start the game. `BepInEx\LogOutput.log` shows `Loading [Wild Wasteland 0.1.28]` and a summary `Wild Wasteland 0.1.28 modules:`. Resolve any restart notice before testing the affected modules.
 
 Engine Sim compatibility (#127, Testing): **Engine Sim is optional; WW works normally without it and the bridge stays idle.** If you want its features, install [Engine Sim 1.7.0](https://github.com/Wad67/Apocalypter-enginesim/releases/tag/v1.7.0) separately, including its native library and impulse responses. WW schedules its manager and supplies a 500 microsecond scene-discovery cache; the original native simulation/audio threads, engine selection, settings and vehicle-part physics remain with Engine Sim. With its experimental simulated drivetrain enabled, the existing Ignition key supports click to toggle and hold to crank; vehicle hints and CleanHUD's existing engine-status icon follow the coupled engine. Patrols start/stop requests use the simulated switch. Turn off the Engine Sim compatibility module to restore the standalone callbacks. Engine Sim is not included in this archive. Its settings remain in its own Apocasetter page and cfg files; only `[EngineSimCompat] Enabled` is added to WW settings.cfg. Performance and in-game verification remain pending.
 

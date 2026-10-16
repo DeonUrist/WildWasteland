@@ -26,16 +26,48 @@ namespace WildWasteland.Modules.Performance
         public override string Help { get { return "Events sent to an object no longer search every FSM in the game (stalls on POI entry, save and load)."; } }
 
         internal static bool On, Shadow;
+        static bool _acquired;
+        static string _foreign;   // another mod's Harmony id already patching a dispatch method (PM2 then stays out)
         protected override void OnEnable(FeatureMode mode)
         {
-            FsmRegistry.Acquire(Module);
+            Instance = this;
+            _foreign = ForeignPatcher();
+            if (_foreign != null)
+            {
+                WildWasteland.Core.Log.Always("[Performance] PM2: Fsm event dispatch is already patched by " + _foreign + " (e.g. Burner's Utilities FastEvents); PM2 not patched");
+                return;
+            }
+            FsmRegistry.Acquire(Module); _acquired = true;
             if (!EnsurePatched(typeof(Patch))) throw new Exception("Fsm event dispatch patch failed");
-            Instance = this; Shadow = mode == FeatureMode.Shadow; On = mode == FeatureMode.On;
+            Shadow = mode == FeatureMode.Shadow; On = mode == FeatureMode.On;
         }
-        protected override void OnDisable() { On = Shadow = false; FsmRegistry.Release(); }
+        protected override void OnDisable() { On = Shadow = false; if (_acquired) { _acquired = false; FsmRegistry.Release(); } }
         public override void SubscribeHooks() { FsmRegistry.Subscribe(Module); }
         public override void OnSceneLoaded() { FsmRegistry.Rebuild(); }
-        public override void DrawStats(ToolLayout l) { l.Value("Indexed FSMs", FsmRegistry.Count.ToString()); }
+        public override void DrawStats(ToolLayout l)
+        {
+            if (_foreign != null) l.Text("Not active: event dispatch is already patched by " + _foreign + ".");
+            l.Value("Indexed FSMs", FsmRegistry.Count.ToString());
+        }
+
+        /// <summary>Harmony id of another mod with a prefix/transpiler on either dispatch method; null = none (WW's own ids ignored).</summary>
+        static string ForeignPatcher()
+        {
+            var targets = new[]
+            {
+                AccessTools.Method(typeof(Fsm), "SendEventToFsmOnGameObject", new[] { typeof(GameObject), typeof(string), typeof(FsmEvent) }),
+                AccessTools.Method(typeof(Fsm), "BroadcastEventToGameObject", new[] { typeof(GameObject), typeof(FsmEvent), typeof(FsmEventData), typeof(bool), typeof(bool) }),
+            };
+            foreach (var m in targets)
+            {
+                if (m == null) continue;
+                var info = Harmony.GetPatchInfo(m);
+                if (info == null) continue;
+                foreach (var p in info.Prefixes) if (!p.owner.StartsWith(Plugin.GUID, StringComparison.Ordinal)) return p.owner;
+                foreach (var p in info.Transpilers) if (!p.owner.StartsWith(Plugin.GUID, StringComparison.Ordinal)) return p.owner;
+            }
+            return null;
+        }
         internal static TargetedEventsFeature Instance;
 
         // ---- pooled, re-entrant buffers ----
@@ -95,13 +127,24 @@ namespace WildWasteland.Modules.Performance
             if (!same && Instance != null) Instance.Mismatch(what + ": vanilla " + a.Count + " receivers, optimized " + b.Count);
         }
 
+        static bool _stoodDown;
+        static void StandDown()
+        {
+            if (_stoodDown || (!On && !Shadow)) return;
+            _stoodDown = true;
+            WildWasteland.Core.Log.Always("[Performance] PM2: another mod already dispatches events sent to objects (e.g. Burner's Utilities FastEvents); PM2 leaves those to it");
+        }
+
         [HarmonyPatch]
         static class Patch
         {
             // Fsm.SendEventToFsmOnGameObject(GameObject, string, FsmEvent)
-            [HarmonyPatch(typeof(Fsm), "SendEventToFsmOnGameObject", typeof(GameObject), typeof(string), typeof(FsmEvent)), HarmonyPrefix]
-            static bool SendToFsm(GameObject gameObject, string fsmName, FsmEvent fsmEvent)
+            // Last + __runOriginal: backstop for a mod that patches after PM2 started (ForeignPatcher only sees earlier ones). Its prefix
+            // already dispatched and skipped the original; dispatching again would deliver the event twice (toggle FSM pairs flip back).
+            [HarmonyPatch(typeof(Fsm), "SendEventToFsmOnGameObject", typeof(GameObject), typeof(string), typeof(FsmEvent)), HarmonyPrefix, HarmonyPriority(Priority.Last)]
+            static bool SendToFsm(GameObject gameObject, string fsmName, FsmEvent fsmEvent, bool __runOriginal)
             {
+                if (!__runOriginal) { StandDown(); return false; }
                 if (!On && !Shadow) return true;
                 Telemetry.SendGoFsm++;
                 if (Shadow)
@@ -142,9 +185,10 @@ namespace WildWasteland.Modules.Performance
             }
 
             // Fsm.BroadcastEventToGameObject(GameObject, FsmEvent, FsmEventData, bool sendToChildren, bool excludeSelf)
-            [HarmonyPatch(typeof(Fsm), "BroadcastEventToGameObject", typeof(GameObject), typeof(FsmEvent), typeof(FsmEventData), typeof(bool), typeof(bool)), HarmonyPrefix]
-            static bool SendToObject(Fsm __instance, GameObject go, FsmEvent fsmEvent, FsmEventData eventData, bool sendToChildren, bool excludeSelf)
+            [HarmonyPatch(typeof(Fsm), "BroadcastEventToGameObject", typeof(GameObject), typeof(FsmEvent), typeof(FsmEventData), typeof(bool), typeof(bool)), HarmonyPrefix, HarmonyPriority(Priority.Last)]
+            static bool SendToObject(Fsm __instance, GameObject go, FsmEvent fsmEvent, FsmEventData eventData, bool sendToChildren, bool excludeSelf, bool __runOriginal)
             {
+                if (!__runOriginal) { StandDown(); return false; }
                 if (!On && !Shadow) return true;
                 if (sendToChildren) Telemetry.SendGoChildren++; else Telemetry.SendGo++;
                 if (Shadow)
