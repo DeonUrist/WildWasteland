@@ -73,7 +73,7 @@ namespace WildWasteland.Modules.Patrols
             bool inGame=Core.GameRefs.InGame;float now=Time.unscaledTime;
             if(inGame&&now<WarRig.WorldSpawning.NaturalNoticeUntil)return true;
             var mapApi=Core.Services.Map;
-            bool traffic=PatrolsModule.WorldTrafficEnabled.Value&&(RoutesOn||MarkersOn);
+            bool traffic=PatrolsModule.ConvoyEnabled.Value&&(RoutesOn||MarkersOn);
             bool reset=_gameInkAt!=0f||_mapWasOpen;
             if((!traffic&&WarRig.WorldSpawning.NaturalRigs.Count==0)||!inGame)return reset;
             bool mapOpen=_mapCheat!=null&&_mapCheat.isActiveAndEnabled&&_mapCheat.ActiveStateName=="on";
@@ -92,7 +92,7 @@ namespace WildWasteland.Modules.Patrols
             var rigs=WarRig.WorldSpawning.NaturalRigs;
             for(int i=rigs.Count-1;i>=0;i--)if(rigs[i]==null)rigs.RemoveAt(i);
             var mapApi=Core.Services.Map;
-            bool traffic=PatrolsModule.WorldTrafficEnabled.Value&&(RoutesOn||MarkersOn);
+            bool traffic=PatrolsModule.ConvoyEnabled.Value&&(RoutesOn||MarkersOn);
             if((!traffic&&rigs.Count==0)||!Core.GameRefs.InGame)
             {_gameInkAt=0f;_mapWasOpen=false;return;}
             bool mapOpen=_mapCheat!=null&&_mapCheat.isActiveAndEnabled&&_mapCheat.ActiveStateName=="on";

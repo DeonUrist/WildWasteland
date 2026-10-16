@@ -18,7 +18,7 @@ namespace WildWasteland.Modules.Patrols
             return day!=null&&hour!=null?day.Value*24f+hour.Value:-1f;
         }
         internal static void CallPatrol(TrafficBase camp)
-        {if(_instance!=null&&PatrolsModule.WorldTrafficEnabled.Value&&PatrolsModule.ConvoyEnabled.Value)_instance.QueuePatrolCall(camp);}
+        {if(_instance!=null&&PatrolsModule.ConvoyEnabled.Value)_instance.QueuePatrolCall(camp);}
         private void QueuePatrolCall(TrafficBase camp)
         {
             float hour=CallHour();

@@ -37,7 +37,7 @@ namespace WildWasteland.Modules.Patrols
         // [Debug] AiOverlay with no raider car driving: the world traffic's state
         internal static string OverlayLine()
         {
-            if (PatrolsModule.WorldTrafficEnabled.Value && PatrolsModule.ConvoyEnabled.Value) return WorldTraffic.OverlayLine();
+            if (PatrolsModule.ConvoyEnabled.Value) return WorldTraffic.OverlayLine();
             return "Raiders: automatic spawns off";
         }
 

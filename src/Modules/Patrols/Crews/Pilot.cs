@@ -339,7 +339,7 @@ namespace WildWasteland.Modules.Patrols
                 if (leadVec.magnitude > 25f) leadVec = leadVec.normalized * 25f;
                 _aim = tpos + leadVec;
                 _campRouting = false;
-                if (PatrolsModule.WorldTrafficEnabled.Value && PatrolsModule.TacticalDriving.Value && _dist > 35f)
+                if (PatrolsModule.ConvoyEnabled.Value && PatrolsModule.TacticalDriving.Value && _dist > 35f)
                 {
                     // Alternate intercept, wide left and wide right runs. Slot offsets distribute a group around the target.
                     int slot = _traffic != null ? _traffic.Slot : GetInstanceID();
@@ -358,7 +358,7 @@ namespace WildWasteland.Modules.Patrols
                     var lateral = toT.sqrMagnitude > 1e-3f ? Vector3.Cross(Vector3.up, toT.normalized) : _tf.right;   // right of the line to it
                     _aim -= lateral * _passSide * PatrolsModule.AiDriveByOffset.Value;
                 }
-                if (PatrolsModule.WorldTrafficEnabled.Value && PatrolsModule.TacticalDriving.Value)
+                if (PatrolsModule.ConvoyEnabled.Value && PatrolsModule.TacticalDriving.Value)
                 {
                     bool hold;
                     _campRouting = TrafficLocations.CampApproach(_car, tpos, out var approach, out hold);

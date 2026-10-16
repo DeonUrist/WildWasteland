@@ -37,7 +37,7 @@ namespace WildWasteland.Modules.Patrols
             if (!PatrolsModule.Running || !Core.GameRefs.InPlay) return;
             Seen.Clear(); Journeys.Clear(); Dead.Clear();
             var journeys = WorldTraffic.CompassJourneys;
-            if (PatrolsModule.WorldTrafficEnabled.Value && journeys != null)
+            if (PatrolsModule.ConvoyEnabled.Value && journeys != null)
                 foreach (var journey in journeys)
                 {
                     bool alive = journey.foot;

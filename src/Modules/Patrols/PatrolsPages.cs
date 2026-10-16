@@ -59,7 +59,7 @@ namespace WildWasteland.Modules.Patrols
         {
             l.Text("The patrol / convoy / merchant / loot editor (the \"ledger\"): patrol and convoy groups with their minimum distance, boss kills, chance, faction and roster; the car and truck templates (driver, passenger, turrets, loot, explode chance); merchant shop types; car and truck loot profiles. It pauses the game while open and saves PatrolsAndLoot.json and the template files.");
             l.Heading("Spawn controls");
-            l.Text("With AllowDebugSpawns on, the editor shows: \"Spawn template\" (the selected template parked 8 m ahead of you, setup only), an \"S\" button per group and SPAWN in the footer (a real departure of that group from a nearby camp - these two need World traffic on in F6).");
+            l.Text("With AllowDebugSpawns on, the editor shows: \"Spawn template\" (the selected template parked 8 m ahead of you, setup only), an \"S\" button per group and SPAWN in the footer (a real departure of that group from a nearby camp - these two need New arrival or Fury road in Game > World > Enemy Vehicles).");
             l.Toggle(AllowDebugSpawns, "Show spawn controls (AllowDebugSpawns)");
             l.Heading("Templates");
             l.Value("Loaded", CarTemplates.Summary);
@@ -86,8 +86,7 @@ namespace WildWasteland.Modules.Patrols
         void WorldTrafficPage(ToolLayout l)
         {
             l.Text("Persistent world traffic: patrols, convoys, Coyote roamers, merchants and faction battles travel between known camps on road-influenced routes and become real cars near you. The game's debug map can show the routes.");
-            l.Toggle(WorldTrafficEnabled, "World traffic");
-            if (Running) l.Value("Status", WorldTrafficEnabled.Value ? WorldTraffic.OverlayLine() : "off - no automatic raiders");
+            if (Running) l.Value("Status", ConvoyEnabled.Value ? WorldTraffic.OverlayLine() : "off - Loner (Game > World > Enemy Vehicles)");
             l.Value("Road cache", TrafficRoads.Status);
             l.Heading("Debug map");
             l.Text("Open the game's debug map: routes, group labels, cleared camps, battle skulls and merchants are drawn on it.");
@@ -227,7 +226,7 @@ namespace WildWasteland.Modules.Patrols
         {
             l.Text("Coyote trader buses (General / Mechanic / Organic shops) of the world traffic: parked setup buses and travelling traders with stock, prices and wanted lists that are saved. Stop a loaded merchant near you with Alt+Q (30 m) or the car horn (100 m). Shop types and rosters are edited in the patrol editor's MERCHANTS tab.");
             l.Toggle(Merchants, "Merchants");
-            if (!WorldTrafficEnabled.Value) l.Text("World traffic is off (Game > World > Enemy Vehicles): automatic merchants need it.", Ledger.Danger);
+            if (!ConvoyEnabled.Value) l.Text("Loner disables automatic merchants. Select New arrival or Fury road in Game > World > Enemy Vehicles.", Ledger.Danger);
             Section(l, Cfg.Main, Cfg.Section("Merchants"));
             if (Running) l.Value("Merchant buses loaded", MerchantHost.All.Count.ToString());
         }

@@ -16,7 +16,7 @@ namespace WildWasteland.Modules.Patrols
         internal static bool MerchantTypeInUse(string type)
         {return MerchantHost.All.Any(h=>h!=null&&h.Data!=null&&MerchantCatalog.Selected(h.Data.types)==type)||(_instance!=null&&(_instance._journeys.Any(j=>j.merchant&&j.vehicles.Any(v=>MerchantCatalog.Selected(v.merchantTypes)==type))||_instance._nearDepartures.Any(d=>d.Role==2&&d.Type==type)));}
         internal static bool DebugDeparture(SpawnGroup group,int role)
-        {if(_instance==null||group==null||role<0||role>2||!PatrolsModule.WorldTrafficEnabled.Value){Core.Log.Warn("[Patrols] " + "Enable world traffic and select a group before creating a route.");return false;}return _instance.QueueNearby(group,role);}
+        {if(_instance==null||group==null||role<0||role>2||!PatrolsModule.ConvoyEnabled.Value){Core.Log.Warn("[Patrols] " + "Select New arrival or Fury road in Game > World > Enemy Vehicles and select a group before creating a route.");return false;}return _instance.QueueNearby(group,role);}
         private bool QueueNearby(SpawnGroup group,int role)
         {
             if(role==2&&PatrolsModule.MerchantSpawnChance.Value<=0f){Core.Log.Warn("[Patrols] " + "Route not created: merchant spawn chance is zero.");return false;}

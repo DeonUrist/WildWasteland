@@ -67,13 +67,12 @@ namespace WildWasteland.Core.UI
             if (!ModuleHost.IsRunning(Player.Instance)) l.Text("Enable Player body & animation in Modules to use these player settings.");
 
             l.Heading("World");
-            int vehicles = !Patrols.ConvoyEnabled.Value && !Patrols.WorldTrafficEnabled.Value ? 0 : Patrols.FuryRoad.Value ? 2 : 1;
+            int vehicles = !Patrols.ConvoyEnabled.Value ? 0 : Patrols.FuryRoad.Value ? 2 : 1;
             next = l.Choices("Enemy Vehicles", vehicles, "Loner", "New arrival", "Fury road");
             if (next != vehicles)
             {
                 Patrols.ConvoyEnabled.Value = next != 0;
                 Patrols.FuryRoad.Value = next == 2;
-                Patrols.WorldTrafficEnabled.Value = next != 0;
             }
             l.Text("Loner: no automatic patrols. New arrival: groups unlock with distance and boss kills. Fury road: all patrol types are available from the start.");
             Switch(l, "Foot patrols", Patrols.FootPatrols);
@@ -190,7 +189,7 @@ namespace WildWasteland.Core.UI
                 || ReferenceEquals(e, Player.VehicleHotkeyHint) || ReferenceEquals(e, Player.VehicleStatusHint)
                 || ReferenceEquals(e, Player.EmptyHandArms) || ReferenceEquals(e, Player.FirstPersonArmsOnlyOnFoot) || ReferenceEquals(e, Player.OcclusionPrototype)
                 || ReferenceEquals(e, Player.ThirdPersonOnFoot) || ReferenceEquals(e, Player.ClimbingOn) || ReferenceEquals(e, Patrols.FuryRoad)
-                || ReferenceEquals(e, Patrols.ConvoyEnabled) || ReferenceEquals(e, Patrols.WorldTrafficEnabled) || ReferenceEquals(e, Patrols.FootPatrols) || ReferenceEquals(e, HudSettings.SelectionDot)
+                || ReferenceEquals(e, Patrols.ConvoyEnabled) || ReferenceEquals(e, Patrols.FootPatrols) || ReferenceEquals(e, HudSettings.SelectionDot)
                 || ReferenceEquals(e, HudSettings.Crosshair) || ReferenceEquals(e, HudSettings.HitMarker) || ReferenceEquals(e, HudSettings.HeadshotSound)
                 || ReferenceEquals(e, HudSettings.DamageNumbers) || ReferenceEquals(e, WildWasteland.Modules.Guns.GunsModule.ToggleIronsights)
                 || ReferenceEquals(e, WildWasteland.Modules.NPC.NpcModule.ShoutKey) || ReferenceEquals(e, WildWasteland.Modules.NPC.NpcModule.ShoutModifier)) return false;

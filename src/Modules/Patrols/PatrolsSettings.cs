@@ -63,7 +63,7 @@ namespace WildWasteland.Modules.Patrols
         internal static ConfigEntry<bool> BusPassengerPoseEditorEnabled, MerchantEditorEnabled;
         internal static ConfigEntry<float> ExitSpeedKmh;
         // persistent world traffic
-        internal static ConfigEntry<bool> WorldTrafficEnabled, TrafficDebugMap, TacticalDriving, FactionBattles, Merchants;
+        internal static ConfigEntry<bool> TrafficDebugMap, TacticalDriving, FactionBattles, Merchants;
         internal static ConfigEntry<float> TrafficLoadRange, TrafficUnloadRange,
             TrafficDestinationGrace, TrafficPatrolSpeed, TrafficConvoySpeed, ConvoyGuardRange,
             PatrolMemorySeconds;
@@ -127,9 +127,6 @@ namespace WildWasteland.Modules.Patrols
             ConvoyEnabled = cfg.Player(null, "Automatic spawns", true,
                 "Raider patrols and convoys spawn on their own while you play. Off = no automatic spawns at all (the editor's test spawns still work)");
             Migrate(cfg, ConvoyEnabled, "Convoy spawner", "Enabled"); Migrate(cfg, ConvoyEnabled, "General", "Enabled");
-            WorldTrafficEnabled = cfg.Player(null, "World traffic", true,
-                "Persistent patrols and convoys travelling between known camps; replaces the automatic spawn timer. Experimental, opt in");
-            Migrate(cfg, WorldTrafficEnabled, "World traffic prototype", "Enabled");
             FactionBattles = cfg.Player(null, "Faction battles", true,
                 "World traffic: Scrapyard and Coyote groups that meet fight each other (resolved off-screen when you are far away; wrecks, corpses and a skull on the debug map). Off = no new battles");
             Merchants = cfg.Player(null, "Merchants", true,

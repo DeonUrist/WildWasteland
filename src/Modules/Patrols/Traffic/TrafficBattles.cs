@@ -226,7 +226,7 @@ namespace WildWasteland.Modules.Patrols
                 try
                 {
                     if(car==null){PatrolsModule.Verbose("Battle: failed car "+side+":"+index);return;}
-                    if(generation!=Patrol.SceneGen||!PatrolsModule.WorldTrafficEnabled.Value||!_battles.Contains(battle)){Cleanup.Remove(car.GetComponent<PatrolMarker>(),"cancelled battle build");return;}
+                    if(generation!=Patrol.SceneGen||!PatrolsModule.ConvoyEnabled.Value||!_battles.Contains(battle)){Cleanup.Remove(car.GetComponent<PatrolMarker>(),"cancelled battle build");return;}
                     live.Cars[side+":"+index]=car;BattleAttach(car,battle,side,index);
                     var record=(side==0?battle.sideA:battle.sideB)[index];ApplyState(car,record);
                     if(battle.resolved){Nwh.StopEngine(car);Nwh.SetHandbrake(car,1f);Patrol.Handbrake(car,true);if((side==0?battle.wreckA:battle.wreckB)[index])Explode.BattleWreck(car);SpawnBattleCorpses(original??template,car,live);}

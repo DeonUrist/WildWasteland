@@ -23,7 +23,7 @@ namespace WildWasteland.Modules.Patrols
             goal = transform.position; cruise = 0f; stop = true; hunt = false;
             var battle=GetComponent<BattleCar>();if(battle!=null)return battle.Goal(out goal,out cruise,out stop,out hunt);
             var journey = WorldTraffic.Find(Journey);
-            if (journey == null || !PatrolsModule.WorldTrafficEnabled.Value) return false;
+            if (journey == null || !PatrolsModule.ConvoyEnabled.Value) return false;
             if(journey.merchant)
             {goal=TrafficSpace.Scene(journey.arrived?journey.route[journey.route.Length-1]:RoadPath.Target(journey.route,journey.leg,TrafficSpace.World(transform.position),journey.speed));cruise=journey.speed;stop=journey.arrived||journey.waitSeconds>0f;return true;}
             Vector3 player, velocity; GameObject car;
@@ -159,7 +159,7 @@ namespace WildWasteland.Modules.Patrols
         internal static TrafficJourney Find(string id)
         {if(_instance==null)return null;foreach(var journey in _instance._journeys)if(journey.id==id)return journey;return null;}
         internal static bool Owns(PatrolMarker marker)
-        { return marker != null && marker.GetComponent<TrafficAgent>() != null && PatrolsModule.WorldTrafficEnabled.Value; }
+        { return marker != null && marker.GetComponent<TrafficAgent>() != null && PatrolsModule.ConvoyEnabled.Value; }
         internal static bool CombatAllowed(GameObject car)
         {if(car!=null&&car.GetComponent<PatrolMarker>()?.SetupOnly==true)return false;var a = AgentOf(car); return a == null || a.CanFight; }
         internal static TrafficAgent AgentOf(GameObject car)
@@ -202,7 +202,7 @@ namespace WildWasteland.Modules.Patrols
             if (_patrol == null) _patrol = GetComponent<Patrol>();
             if (_patrol == null || !_patrol.InGame() || PatrolPersistence.Restoring) return;
             MerchantSignals();
-            if (!PatrolsModule.WorldTrafficEnabled.Value)
+            if (!PatrolsModule.ConvoyEnabled.Value)
             {
                 // Toggle off: detach existing physical cars into ordinary patrol cleanup; no hidden representations respawn.
                 foreach (var live in _live.Values) foreach (var car in live.Cars.Values)
@@ -301,11 +301,10 @@ namespace WildWasteland.Modules.Patrols
             _tickJourneys.Clear();
             PumpNearbyRoutes();PopulateMerchants();
             if (Time.time >= _nextFootSecond) { _nextFootSecond = Time.time + 1f; StrandedTick(1f); }
-            if (!TrafficLocations.DiscoveryReady || !PatrolsModule.ConvoyEnabled.Value)
+            if (!TrafficLocations.DiscoveryReady)
             {
-                int why = !PatrolsModule.ConvoyEnabled.Value ? 1 : 2;
-                if (why != _populationWait && Core.Log.Verbose) PatrolsModule.Verbose(why == 1 ? "Traffic: no new groups (Automatic spawns off)" : "Traffic: no new groups until camp discovery finishes (" + TrafficLocations.DiscoveryLeft + " transforms queued)");
-                _populationWait = why; return;
+                if (_populationWait != 2 && Core.Log.Verbose) PatrolsModule.Verbose("Traffic: no new groups until camp discovery finishes (" + TrafficLocations.DiscoveryLeft + " transforms queued)");
+                _populationWait = 2; return;
             }
             if (_populationWait != 0 && Core.Log.Verbose) PatrolsModule.Verbose("Traffic: camp discovery done (" + TrafficLocations.Known.Count + " camps known), new groups may leave");
             _populationWait = 0;
@@ -513,7 +512,7 @@ namespace WildWasteland.Modules.Patrols
                 _patrol.SpawnAt(t, ground + Vector3.up, Quaternion.LookRotation(slotHeading), true, car =>
                 {
                     pending--; live.Reserved--;
-                    if (generation != Patrol.SceneGen || !PatrolsModule.WorldTrafficEnabled.Value || Find(journey.id) == null)
+                    if (generation != Patrol.SceneGen || !PatrolsModule.ConvoyEnabled.Value || Find(journey.id) == null)
                     { if (car != null) Cleanup.Remove(car.GetComponent<PatrolMarker>(), "cancelled traffic build"); return; }
                     if (car == null) { if(EventBudget.Available(journey.id)<=0)capped.Add(index);return; }
                     live.Cars[index] = car;
@@ -593,7 +592,7 @@ namespace WildWasteland.Modules.Patrols
         // CrewReturn: the crew is back aboard; the car rejoins its journey when that is still physically represented
         internal static void Reattach(GameObject car, string id, int slot)
         {
-            if (_instance == null || car == null || car.GetComponent<TrafficAgent>() != null || !PatrolsModule.WorldTrafficEnabled.Value) return;
+            if (_instance == null || car == null || car.GetComponent<TrafficAgent>() != null || !PatrolsModule.ConvoyEnabled.Value) return;
             var journey = Find(id);
             if (journey == null || journey.foot || slot < 0 || slot >= journey.vehicles.Length || !_instance._live.TryGetValue(id, out var live) || live.Building) return;
             if (live.Cars.TryGetValue(slot, out var other) && other != null && other != car) return;

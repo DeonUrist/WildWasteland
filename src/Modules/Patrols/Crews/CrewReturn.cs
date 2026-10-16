@@ -364,7 +364,7 @@ namespace WildWasteland.Modules.Patrols
 
         private static void Strand(GameObject body, string identity, string faction, string name)
         {
-            if (body == null || !PatrolsModule.WorldTrafficEnabled.Value || !PatrolsModule.FootPatrols.Value || Core.Services.Npc == null) return;
+            if (body == null || !PatrolsModule.ConvoyEnabled.Value || !PatrolsModule.FootPatrols.Value || Core.Services.Npc == null) return;
             for (int i = 0; i < Stranded.Count; i++) if (ReferenceEquals(Stranded[i].Body, body)) return;
             Stranded.Add(new StrandedCrew { Body = body, Health = HealthVar(body), Identity = identity, Faction = TrafficFactions.Normalize(faction), Name = name });
         }
