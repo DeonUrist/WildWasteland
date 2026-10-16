@@ -158,6 +158,7 @@ FS4 is an exception to the Off fast path: once installed, its prefix always runs
 | FS2 | `FsmProperty.GetValue`, `FsmProperty.SetValue` | prefix (replaces, falls back to vanilla) |
 | FS3 | `CallMethod.DoMethodCall` | transpiler (MethodBase.Invoke -> compiled invoker) |
 | FS4 | `ActionData.LoadActionField` | prefix (always replaces with ActionDataPort; generated setters/constructors when ready and On, reflection otherwise) |
+| SigmaMod compatibility | `PlayMakerFSM.get_FsmStates` | postfix; while SigmaMod's GUID is loaded, calls native `InitStates` for uninitialized FSMs before callers read actions; installed at module Init independently of FS4, no SigmaMod version/private API dependency |
 | Content (FsmEdits) | `PlayMakerFSM.Awake` | postfix (applies verified FSM edits; clears copied ManualUpdate) |
 | CT2 | `SetIsKinematic.OnEnter` | prefix |
 | CT9 | `AddComponent.OnEnter` | prefix (duplicate Rigidbody) |
@@ -235,3 +236,15 @@ Installed by `QuestsCompat/QuestsPerf.cs` through `QuestsPerf.Optional`: a faile
 | QuestsCompat | Plugin.Aim | Prefix: at most one directions recompute per frame; others keep their cached AimInfo | Per RefreshLines |
 | QuestsCompat | TalkBridge.get_TalkingNow; TalkBridge.NeedsSync | Compiled-accessor prefix; Signature cache transpiler (same TalkBtn references) | Per frame |
 | QuestsCompat | Talk DialogueUI.ShowPrompt | Prefix/postfix skip when name/key/hint unchanged | Every 0.25 s near an NPC |
+
+
+### Weather native fog scope — 2026-10-16 (Testing)
+
+| Owner | Target | Kind / handler | Frequency / filter |
+|---|---|---|---|
+| Weather | UnityEngine.AzureSky.AzureFogScattering.OnRenderImage | WeatherSky.NativeFogBefore prefix + NativeFogAfter finalizer; temporary palette/pale-fog density overrides, restored even on exception; original rendering always runs | Native camera image effect; only selected gameplay camera during active WW storms, no scene search or extra blit |
+| Weather | HutongGames.PlayMaker.Actions.Explosion.DoExplosion | WeatherNative.ExplosionBefore prefix suppresses the original centre-sphere force for native SandStorm actions only; WW nonalloc annular queries use the native parameters/pulse state and patched ShouldApplyForce | Native Tornado OnEnter/FixedUpdate; Fsm name then cached prefab-identity classification; other explosions unchanged |
+| Weather | HutongGames.PlayMaker.Actions.TriggerEventByLayer.DoTriggerEnter | WeatherNative.TriggerBefore prefix suppresses original native centre-trigger damage; annular entry forwards next/next2 to the original TornadoDamage FSM | Trigger contact; TornadoDamage name then cached native SandStorm identity; other triggers unchanged |
+| Weather | Shared Hooks.FsmEnable | WeatherNative.Enabled postfix tracks SandPlayer roots; disables native DisableSandstorm deletion FSM while replacement owns encounters, restores its original enabled state on shutdown | Enable plus 500 us sliced existing-FSM discovery; name filter before native identity lookup |
+| Weather | Shared Hooks.ProcessEvent | WeatherNative.EventBefore observes SaveGame and restores borrowed native component state before native serialization; event always continues; OnSaveEnd suppresses again | Event name filter; no ES3 target patched, no new save key/component |
+| Weather | Shared Hooks.SetVelocityDo | WeatherNative.VelocityBefore prevents native motion for owned manual previews and stops natural anchors during diagnostic freeze/non-gameplay; original natural movement otherwise runs | Move name then cached root ID; unrelated SetVelocity calls unchanged |

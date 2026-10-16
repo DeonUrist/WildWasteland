@@ -77,6 +77,14 @@ namespace WildWasteland.Core.UI
             l.Text("Loner: no automatic patrols. New arrival: groups unlock with distance and boss kills. Fury road: all patrol types are available from the start.");
             Switch(l, "Foot patrols", Patrols.FootPatrols);
             if (_poi != null) Switch(l, "New POI", _poi);
+            var weather = Services.Weather;
+            if (weather != null)
+            {
+                weather.MapAreas = l.Choices("Weather storm areas on map", weather.MapAreas ? 1 : 0, "Off", "On") == 1;
+                weather.HurricaneDensity = l.Slider("Hurricanes per km²", "Weather.Density", weather.HurricaneDensity, 0, 1);
+                weather.FrontWidthKm = l.Slider("Sand front width (km)", "Weather.Width", weather.FrontWidthKm, 6, 20);
+                weather.DepthKm = l.Slider("Storm depth (km)", "Weather.Depth", weather.DepthKm, 1, 4);
+            }
 
             l.Heading("HUD");
             CrosshairSelection(l);
@@ -153,7 +161,8 @@ namespace WildWasteland.Core.UI
                 var card = new Rect(r.x + i * (width + 8), r.y, width, r.height);
                 bool selected = HudSettings.Crosshair.Value == i;
                 Ledger.Panel(card, selected ? Ledger.Selected : Ledger.Field, selected ? Ledger.Accent : Ledger.Line);
-                WildWasteland.Modules.HUD.CrosshairController.DrawPreview(new Rect(card.center.x - 18, card.y + 5, 36, 36), i);
+                float previewSize = i == 3 ? 27 : 36;
+                WildWasteland.Modules.HUD.CrosshairController.DrawPreview(new Rect(card.center.x - previewSize / 2, card.y + 23 - previewSize / 2, previewSize, previewSize), i);
                 Ledger.Label(new Rect(card.x, card.yMax - 29, card.width, 26), _crosshairs[i], Ledger.Body, selected ? Ledger.Accent : Ledger.Text, TextAnchor.MiddleCenter);
                 if (GUI.Button(card, GUIContent.none, GUIStyle.none) && !selected) HudSettings.Crosshair.Value = i;
             }
@@ -216,12 +225,12 @@ namespace WildWasteland.Core.UI
             return key.IndexOf("Verbose", System.StringComparison.OrdinalIgnoreCase) >= 0 || key == "Log" || key.EndsWith("Log", System.StringComparison.OrdinalIgnoreCase);
         }
 
-        static void Logging(ToolLayout l, ConfigFile file)
+        static void Logging(ToolLayout l, ConfigFile file, IModule owner)
         {
             foreach (var key in file.Keys)
             {
                 var e = file[key];
-                if (!ReferenceEquals(e, Plugin.VerboseLog) && VerboseSetting(e))
+                if (BelongsTo(e, owner) && !ReferenceEquals(e, Plugin.VerboseLog) && VerboseSetting(e))
                     l.Toggle((ConfigEntry<bool>)e, ReferenceEquals(e, WildWasteland.Modules.NPC.NpcModule.ShowNav)
                         ? "Show navigation, ghosts and NPC states in the world" : key.Section + " / " + key.Key);
             }
@@ -236,39 +245,82 @@ namespace WildWasteland.Core.UI
 
         static bool DeveloperSetting(ConfigEntryBase e) { return DebugSetting(e) && !RetainedDebugSetting(e); }
 
+        static IModule _categoryOwner;
+        static bool BelongsTo(ConfigEntryBase e, IModule owner)
+        {
+            if (ReferenceEquals(e, Patrols.MenuKey) || ReferenceEquals(e, Patrols.TemplateDumpKey)) return owner != null && owner.Id == "Patrols";
+            string section = e.Definition.Section; int cut = section.IndexOf(" / ", System.StringComparison.Ordinal);
+            foreach (var m in ModuleHost.Entries)
+                if (section == m.Module.Id || (cut == m.Module.Id.Length && string.CompareOrdinal(section, 0, m.Module.Id, 0, cut) == 0)) return ReferenceEquals(owner, m.Module);
+            return owner == null;
+        }
+        static bool RemainingDeveloperSetting(ConfigEntryBase e) { return DeveloperSetting(e) && BelongsTo(e, _categoryOwner); }
+        static bool HasDebugSettings(ConfigFile file, IModule owner)
+        {
+            foreach (var key in file.Keys) if (BelongsTo(file[key], owner) && RetainedDebugSetting(file[key])) return true;
+            return false;
+        }
+
         static void Debug(ToolLayout l)
         {
             l.DeduplicateEntries = true;
-            l.Heading("Patrol editor");
-            l.Entry(Patrols.MenuKey); l.Entry(Patrols.TemplateDumpKey);
-            if (l.Button("Open the patrol editor", Patrols.Running && GameRefs.InPlay, true, 320))
-                ToolWindow.CloseThen(() => { if (Patrols.Instance != null && !Patrols.Instance.OpenEditor()) Log.Warn("[Patrols] the patrol editor opens only in play (not in a menu or while another editor is open)"); });
-            l.Heading("Logging");
-            l.Toggle(Plugin.VerboseLog, "VerboseLog");
-            l.Text("General verbose logging. The module log switches below retain their own behavior; NPC traces also work with general logging off.");
-            Logging(l, Plugin.Settings); Logging(l, Plugin.Tools);
-            l.EntryFilter = RetainedDebugSetting;
-            Switches(l);
-            l.EntryFilter = null;
-            l.Space(12);
-            l.Toggle(Plugin.DeveloperMode, "Developer mode");
+            EnsureSwitches();
+            for (int i = -1; i < ModuleHost.Entries.Count; i++)
+            {
+                var owner = i < 0 ? null : ModuleHost.Entries[i].Module;
+                if (owner != null && !HasDebugSettings(Plugin.Settings, owner) && !HasDebugSettings(Plugin.Tools, owner)) continue;
+                if (!l.Category("Debug/" + (owner != null ? owner.Id : "Core"), CategoryTitle(owner))) continue;
+                if (owner != null && owner.Id == "Patrols")
+                {
+                    l.Heading("Patrol editor");
+                    l.Entry(Patrols.MenuKey); l.Entry(Patrols.TemplateDumpKey);
+                    if (l.Button("Open the patrol editor", Patrols.Running && GameRefs.InPlay, true, 320))
+                        ToolWindow.CloseThen(() => { if (Patrols.Instance != null && !Patrols.Instance.OpenEditor()) Log.Warn("[Patrols] the patrol editor opens only in play (not in a menu or while another editor is open)"); });
+                }
+                l.Heading("Logging");
+                if (owner == null)
+                {
+                    l.Toggle(Plugin.VerboseLog, "VerboseLog");
+                    l.Text("General verbose logging. Module log switches retain their own behavior; NPC traces also work with general logging off.");
+                }
+                Logging(l, Plugin.Settings, owner); Logging(l, Plugin.Tools, owner);
+                l.EntryFilter = RetainedDebugSetting;
+                l.Heading("Switches");
+                if (owner != null && owner.Id == "Patrols") l.Toggle(WildWasteland.Modules.Patrols.WarRig.S.GroundRecoveryEnabled, "Ground recovery");
+                foreach (var s in _switches) if (ReferenceEquals(s.Module, owner)) l.Toggle(s.Entry, l.PageLabel(s.Entry) ?? s.Label);
+                l.EntryFilter = null;
+                if (owner == null) l.Toggle(Plugin.DeveloperMode, "Developer mode");
+            }
         }
+
+        static string CategoryTitle(IModule owner) { return owner == null ? "Core" : owner.Id + " / " + owner.DisplayName + (ModuleHost.IsRunning(owner) ? "" : " (module off)"); }
 
         static void Developer(ToolLayout l)
         {
-            l.Text("Editors, debug switches, gameplay values and diagnostics. Changes are saved immediately unless an editor has its own Save button. Fine tuning (offsets, poses, AI constants) is kept in config/WildWasteland/tools.cfg.");
-            l.Heading("Performance");
-            WildWasteland.Modules.Performance.PerformancePage.Instance.DrawDeveloper(l);
-            l.EntryFilter = DeveloperSetting; l.DeduplicateEntries = true;
-            l.Heading("Tools");
-            foreach (var p in _debugPages) if (p.IsTool && IsPatrolsTool(p)) DrawDebugPage(l, p);   // patrol / convoy / merchant editors first
-            foreach (var p in _debugPages) if (p.IsTool && !IsPatrolsTool(p)) DrawDebugPage(l, p);
-            l.Space(12); l.Heading("Settings and diagnostics");
-            foreach (var p in _debugPages) if (!p.IsTool) DrawDebugPage(l, p);
-            l.Prefix = "Developer/";
-            _settings.Draw(l);
-            l.Heading("Harmony patches"); Harmony(l);
-            if (l.Button("Write startup summary to the log", true, false, 360)) Log.Always(ModuleHost.Summary());
+            l.DeduplicateEntries = true;
+            for (int i = -1; i < ModuleHost.Entries.Count; i++)
+            {
+                var owner = i < 0 ? null : ModuleHost.Entries[i].Module;
+                if (!l.Category("Developer/" + (owner != null ? owner.Id : "Core"), CategoryTitle(owner))) continue;
+                if (owner != null && owner.Id == "Performance")
+                {
+                    l.EntryFilter = null;
+                    WildWasteland.Modules.Performance.PerformancePage.Instance.DrawDeveloper(l);
+                }
+                l.EntryFilter = DeveloperSetting;
+                foreach (var p in _debugPages) if (ReferenceEquals(p.Owner, owner) && p.IsTool) DrawDebugPage(l, p);
+                foreach (var p in _debugPages) if (ReferenceEquals(p.Owner, owner) && !p.IsTool) DrawDebugPage(l, p);
+                _categoryOwner = owner; l.EntryFilter = RemainingDeveloperSetting;
+                l.SearchSection("Other settings"); l.Prefix = "Developer/";
+                _settings.Draw(l);
+                l.EntryFilter = null;
+                if (owner == null)
+                {
+                    l.SearchSection("Core diagnostics");
+                    if (l.Button("Write startup summary to the log", true, false, 360)) Log.Always(ModuleHost.Summary());
+                }
+                l.SearchSection("Harmony patches"); Harmony(l, owner);
+            }
         }
 
         // Switches block (RC12): every bool the Debug page shows further down, grouped by module, drawn once here (deduplication hides
@@ -338,27 +390,15 @@ namespace WildWasteland.Core.UI
             return sb.ToString();
         }
 
-        static void Switches(ToolLayout l)
+        static void EnsureSwitches()
         {
             int count = (Plugin.Settings != null ? Plugin.Settings.Count : 0) + (Plugin.Tools != null ? Plugin.Tools.Count : 0);
             if (count != _switchCount) { _switchCount = count; BuildSwitches(); }
-            if (_switches.Count == 0) return;
-            l.Heading("Switches");
-            l.Toggle(WildWasteland.Modules.Patrols.WarRig.S.GroundRecoveryEnabled, "Ground recovery");
-            int group = int.MinValue;
-            for (int i = 0; i < _switches.Count; i++)
-            {
-                var s = _switches[i];
-                if (!l.CanShowEntry(s.Entry)) continue;
-                if (s.Order != group) { group = s.Order; l.Text(s.Module != null && !ModuleHost.IsRunning(s.Module) ? s.HeadingOff : s.Heading, Ledger.Accent); }
-                l.Toggle(s.Entry, l.PageLabel(s.Entry) ?? s.Label);   // editable even while the module is off
-            }
         }
-
-        static bool IsPatrolsTool(ToolPage p) { return p.Owner != null && p.Owner.Id == "Patrols"; }
 
         static void DrawDebugPage(ToolLayout l, ToolPage p)
         {
+            l.SearchSection(p.Group + " / " + p.Title);
             l.Heading(p.Group + " / " + p.Title);
             l.Prefix = p.Group + "/" + p.Title + "/";
             bool enabled = GUI.enabled;
@@ -392,15 +432,19 @@ namespace WildWasteland.Core.UI
                 l.Value(j.ToString(), F(j.TotalMs / frames) + "  " + F(j.LastMs) + "  " + F(j.MaxMs) + "  " + j.Calls + (j.Exceptions > 0 ? "  ERR " + j.Exceptions : "") + (j.Enabled ? "" : "  (off)"));
         }
 
-        static void Harmony(ToolLayout l)
+        static void Harmony(ToolLayout l, IModule module)
         {
-            l.Text("Every method Wild Wasteland patches. Shared PlayMaker targets go through one Core dispatcher each (Core rows); module rows are targets only that module uses.");
-            l.Value("Conflicts", Patches.Conflicts.ToString(CultureInfo.InvariantCulture));
-            l.Text(Hooks.Summary());
-            string owner = null;
+            string owner = module != null ? module.Id : "Core";
+            l.Heading("Harmony patches");
+            if (module == null)
+            {
+                l.Text("Shared PlayMaker targets go through Core dispatchers; module patches are listed inside their module category.");
+                l.Value("Conflicts", Patches.Conflicts.ToString(CultureInfo.InvariantCulture));
+                l.Text(Hooks.Summary());
+            }
             foreach (var r in Patches.Records)
             {
-                if (r.Owner != owner) { owner = r.Owner; l.Heading(owner); }
+                if (r.Owner != owner) continue;
                 l.Text((r.Ok ? "" : "FAILED ") + r.Kind + "  " + r.Target + (r.Ok ? "" : "  - " + r.Error), r.Ok ? (Color?)null : Ledger.Danger);
             }
         }

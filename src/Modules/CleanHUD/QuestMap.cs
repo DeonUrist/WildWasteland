@@ -54,6 +54,8 @@ namespace WildWasteland.Modules.CleanHUD
         public bool Exists(int id) { return _ids.Contains(id); }
         public bool Hidden(Vector3 scene) { return MapFog.Hides(scene); }
         public bool Open { get { return _open; } }
+        internal bool TryWeatherView(out Camera camera, out RectTransform map)
+        { camera = _camera; map = _map; return _open && camera != null && map != null && CleanHudModule.Enabled.Value && GameRefs.InPlay && !Core.UI.ToolWindow.IsOpen; }
         public MapDetail TrafficMarkers { get { return CleanHudModule.MapTrafficMarkers.Value; } }
         public float Zoom { get { return _zoom; } }
         public bool Observe(Transform target, string name, Color color) { return Binoculars.Observe(target, name, color); }

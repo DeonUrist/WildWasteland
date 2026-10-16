@@ -43,7 +43,7 @@ namespace WildWasteland
     {
         public const string GUID = "com.denis.apocalypter.wildwasteland";
         public const string NAME = "Wild Wasteland";
-        public const string VERSION = "0.1.28";
+        public const string VERSION = "0.1.29";
 
         public static Plugin Instance;
         public static ConfigFile Main, Settings, Tools;
@@ -125,6 +125,7 @@ namespace WildWasteland
             Core.ModuleHost.Add(new Modules.CleanHUD.CleanHudModule());
             Core.ModuleHost.Add(new Modules.Patrols.PatrolsModule());
             Core.ModuleHost.Add(new Modules.POI.PoiModule());
+            Core.ModuleHost.Add(new Modules.Weather.WeatherModule());
             Core.ModuleHost.Add(new Modules.QuestsCompat.QuestsCompatModule());
             Core.ModuleHost.Add(new Modules.EngineSimCompat.EngineSimCompatModule());
             Core.ModuleHost.Add(new Modules.Survival.SurvivalModule());

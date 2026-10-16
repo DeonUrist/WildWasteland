@@ -12,8 +12,6 @@ namespace WildWasteland.Modules.Patrols
     // Runner on the hidden plugin object: the car builder (template spawner + convoy), the in-game check, the persistence tick.
     internal class Patrol : MonoBehaviour
     {
-        private bool _busy;                 // the template spawner's own build (one at a time)
-
         internal static void ResetForScene() { BuildQueue.Reset(); Prefabs.Invalidate(); Register.Invalidate(); MeleeWheels.Reset(); DayLight.Reset(); _lightState = -1; SceneGen++; WorldTraffic.ResetForScene(); }
 
         // bumped on every scene load: a build or a convoy that waited through a load does not continue in the new world
@@ -111,9 +109,7 @@ namespace WildWasteland.Modules.Patrols
         // builds a template (from the F8 menu); one at a time
         internal void Spawn(CarTemplate t)
         {
-            if (_busy) { PatrolsModule.Verbose("Spawn: a build is still running"); return; }
             if (!InGame()) return;
-            _busy = true;
             BuildQueue.Add(this, t, null, Quaternion.identity, true, false, null);
         }
 
@@ -124,7 +120,7 @@ namespace WildWasteland.Modules.Patrols
             if (!InGame()) { if (onDone != null) onDone(null); return; }
             BuildQueue.Add(this, t, pos, rot, false, hold, onDone);
         }
-        internal void CancelBuild(bool menu, Action<GameObject> done) { if (menu) _busy = false; if (done != null) done(null); }
+        internal void CancelBuild(bool menu, Action<GameObject> done) { if (done != null) done(null); }
 
         // WW: Core.GameRefs.InGame (Menu "play" && SaveLoadGame "isPlay" && timeScale > 0, evaluated once per frame, Fsm.Initialized checked)
         internal bool InGame() { return Core.GameRefs.InGame; }
@@ -147,8 +143,8 @@ namespace WildWasteland.Modules.Patrols
                 yield return WaitForSave(gen, saveOk);   // the game is saving: spawn after it, never half-built into the save
                 if(!CrewFactions.Compatible(tpl,tpl.Faction)){Core.Log.Warn("[Patrols] " + "Template "+tpl.Name+" has crew from different factions; correct its driver, passenger or turret choices");yield break;}
                 if (!saveOk[0]) { PatrolsModule.Verbose("Build of " + tpl.Name + " dropped: the game loaded or changed scene meanwhile"); yield break; }
-                if(tpl.Origin!="POI"&&!EventBudget.Reserve(eventId))yield break;
-                reserved=tpl.Origin!="POI";
+                if(!menu&&tpl.Origin!="POI"&&!EventBudget.Reserve(eventId))yield break;
+                reserved=!menu&&tpl.Origin!="POI";
                 string missing = tpl.MissingPrefab;
                 if (missing.Length > 0) { Core.Log.Warn("[Patrols] " + "Template " + tpl.Name + " unavailable: prefab not loaded: " + missing); yield break; }
                 Vector3 pos;
@@ -183,7 +179,7 @@ namespace WildWasteland.Modules.Patrols
                 }
 
                 car = UnityEngine.Object.Instantiate(body, pos, rot);
-                if(tpl.Origin!="POI")EncounterCar.Attach(car,eventId,tpl.ConvoyMember,true);
+                if(!menu&&tpl.Origin!="POI")EncounterCar.Attach(car,eventId,tpl.ConvoyMember,true);
                 car.SetActive(true);
                 Paint.Apply(car, body.name,tpl.Faction);
                 // The car, its parts and its cargo go into the game's save lists only once the car is complete (Register.Commit below):
@@ -368,7 +364,6 @@ namespace WildWasteland.Modules.Patrols
                     else { Register.Discard(trailer); Register.RemoveTree(trailer); UnityEngine.Object.Destroy(trailer); }
                 }
                 else Register.Discard(trailer);
-                if (menu) _busy = false;
                 if (onDone != null) onDone(car);
             }
         }

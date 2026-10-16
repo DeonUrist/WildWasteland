@@ -19,7 +19,7 @@ namespace WildWasteland.Modules.Performance
     /// Off / On (/ Shadow) switch in tools.cfg ("Performance / ..." sections), edited in Developer. The Performance tab retains
     /// the module switch, preset and measurements. Preset-driven features follow [Performance / Preset] Preset.
     /// </summary>
-    public sealed class PerformanceModule : ModuleBase
+    public sealed class PerformanceModule : ModuleBase, IWeatherVisualPolicy
     {
         public override string Id { get { return "Performance"; } }
         public override string DisplayName { get { return "Performance & optimization"; } }
@@ -34,6 +34,7 @@ namespace WildWasteland.Modules.Performance
         readonly HashSet<string> _patched = new HashSet<string>();
         bool _running;
         public bool Running { get { return _running; } }
+        public WeatherVisualDetail WeatherDetail { get { return Preset == PerfPreset.Low ? WeatherVisualDetail.Low : Preset == PerfPreset.Max ? WeatherVisualDetail.Max : WeatherVisualDetail.Balanced; } }
 
         public PerformanceModule() { Instance = this; }
 
@@ -76,6 +77,8 @@ namespace WildWasteland.Modules.Performance
         public override void Init()
         {
             _running = true;
+            SigmaFsmStates.Install(this);
+            Services.WeatherVisualPolicy = this;
             Telemetry.Init(this);
             TerrainTile.OnTileApplied -= TileApplied;
             TerrainTile.OnTileApplied += TileApplied;
@@ -102,6 +105,7 @@ namespace WildWasteland.Modules.Performance
         public override void Shutdown()
         {
             _running = false;
+            if (ReferenceEquals(Services.WeatherVisualPolicy, this)) Services.WeatherVisualPolicy = null;
             _deferred = false;
             TerrainTile.OnTileApplied -= TileApplied;
             for (int i = _features.Count - 1; i >= 0; i--) _features[i].Stop();

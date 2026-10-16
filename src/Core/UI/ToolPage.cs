@@ -105,20 +105,45 @@ namespace WildWasteland.Core.UI
         internal string Prefix;            // unique key prefix per page for number buffers
         internal Func<ConfigEntryBase, bool> EntryFilter;
         internal bool DeduplicateEntries;
+        internal string SearchContext;
+        internal bool Searching { get { return _search.Length != 0; } }
+        internal bool SearchResults;
+        string _search = "", _category, _categoryHeading, _heading, _pendingHeading;
+        bool _insideEntry;
+        readonly HashSet<string> _expanded = new HashSet<string>();
         readonly HashSet<ConfigEntryBase> _drawn = new HashSet<ConfigEntryBase>();
         static ConfigEntryBase _rebinding;
         static GUIStyle _wrap, _wrapSource;
 
-        internal void Begin(float width, string prefix) { X = 0; Y = 4; Width = width; Prefix = prefix; EntryFilter = null; DeduplicateEntries = false; _drawn.Clear(); }
-        internal bool CanShowEntry(ConfigEntryBase e) { return e != null && (EntryFilter == null || EntryFilter(e)) && (!DeduplicateEntries || !_drawn.Contains(e)); }
-        bool BeginEntry(ConfigEntryBase e) { if (!CanShowEntry(e)) return false; if (DeduplicateEntries && GUI.enabled) _drawn.Add(e); return true; }
+        internal void Begin(float width, string prefix, string search = null) { X = 0; Y = 4; Width = width; Prefix = prefix; EntryFilter = null; DeduplicateEntries = false; _drawn.Clear(); _search = (search ?? "").Trim(); SearchContext = _category = _categoryHeading = _heading = _pendingHeading = null; _insideEntry = SearchResults = false; }
+        internal bool Matches(string text) { return !Searching || _insideEntry || Contains(text) || Contains(_category) || Contains(SearchContext) || Contains(_heading); }
+        bool Contains(string text) { return text != null && text.IndexOf(_search, StringComparison.OrdinalIgnoreCase) >= 0; }
+        internal void SearchSection(string text) { SearchContext = text; _heading = _pendingHeading = null; _insideEntry = false; }
+        internal bool Category(string key, string title)
+        {
+            SearchSection(null); _category = title; _categoryHeading = null;
+            if (Searching) { _categoryHeading = title; return true; }
+            bool expanded = _expanded.Contains(key);
+            if (Button((expanded ? "[-]  " : "[+]  ") + title)) { expanded = !expanded; if (expanded) _expanded.Add(key); else _expanded.Remove(key); }
+            return expanded;
+        }
+        bool ShowRow(string text)
+        {
+            if (!Matches(text)) return false;
+            SearchResults = true;
+            if (_categoryHeading != null) { DrawHeading(_categoryHeading); _categoryHeading = null; }
+            if (_pendingHeading != null) { DrawHeading(_pendingHeading); _pendingHeading = null; }
+            return true;
+        }
+        internal bool CanShowEntry(ConfigEntryBase e) { return e != null && (EntryFilter == null || EntryFilter(e)) && (!DeduplicateEntries || !_drawn.Contains(e)) && (Matches(e.Definition.Section) || Matches(e.Definition.Key) || Matches(PageLabel(e)) || Matches(e.Description != null ? e.Description.Description : null)); }
+        bool BeginEntry(ConfigEntryBase e) { if (!CanShowEntry(e)) return false; if (DeduplicateEntries && GUI.enabled) _drawn.Add(e); _insideEntry = true; ShowRow(null); return true; }
 
         public Rect Next(float h = Row)
         {
             if (Ledger.SettingsActive && h <= 40) h = h <= 22 ? 46 : 54;
             var r = new Rect(X + (Ledger.SettingsActive ? 0 : 8), Y, Width - (Ledger.SettingsActive ? 0 : 16), h); Y += h + 4; return r;
         }
-        public void Space(float h = 8) { Y += h; }
+        public void Space(float h = 8) { if (!Searching) Y += h; }
 
         void Caption(Rect row, string text, float fraction = LabelWidth, GUIStyle style = null, Color? color = null)
         {
@@ -129,6 +154,13 @@ namespace WildWasteland.Core.UI
         }
 
         public void Heading(string text)
+        {
+            _heading = text;
+            if (Searching) { _pendingHeading = text; return; }
+            DrawHeading(text);
+        }
+
+        void DrawHeading(string text)
         {
             if (Ledger.SettingsActive)
             {
@@ -142,6 +174,7 @@ namespace WildWasteland.Core.UI
 
         public void Text(string text, Color? color = null)
         {
+            if (!ShowRow(text)) return;
             if (_wrap == null || _wrapSource != Ledger.Small) { _wrap = new GUIStyle(Ledger.Small) { wordWrap = true }; _wrapSource = Ledger.Small; }
             var st = _wrap;
             float inset = Ledger.SettingsActive ? 22 : 8;
@@ -152,6 +185,7 @@ namespace WildWasteland.Core.UI
 
         public void Value(string label, string value)
         {
+            if (!ShowRow(label) && !ShowRow(value)) return;
             var r = Next(22);
             Caption(r, label, LabelWidth, Ledger.Small, Ledger.Muted);
             Ledger.Label(new Rect(r.x + r.width * LabelWidth, r.y, r.width * (1 - LabelWidth), r.height), value, Ledger.Body, Ledger.Text);
@@ -159,6 +193,7 @@ namespace WildWasteland.Core.UI
 
         public bool Button(string text, bool enabled = true, bool primary = false, float width = 0)
         {
+            if (!ShowRow(text)) return false;
             var r = Next(32); if (width > 0) r.width = Mathf.Min(r.width, width);
             return Ledger.Button(r, text, enabled, primary);
         }
@@ -166,6 +201,8 @@ namespace WildWasteland.Core.UI
         /// <summary>Two or more buttons on one row; returns the index clicked or -1.</summary>
         public int Buttons(params string[] labels)
         {
+            bool show = false; foreach (var label in labels) if (ShowRow(label)) { show = true; break; }
+            if (!show) return -1;
             var r = Next(32); float w = (r.width - (labels.Length - 1) * 8) / labels.Length; int hit = -1;
             for (int i = 0; i < labels.Length; i++) if (Ledger.Button(new Rect(r.x + i * (w + 8), r.y, w, r.height), labels[i])) hit = i;
             return hit;
@@ -173,6 +210,7 @@ namespace WildWasteland.Core.UI
 
         public bool Toggle(string label, bool value)
         {
+            if (!ShowRow(label)) return value;
             var r = Next(26);
             return Ledger.Toggle(r, value, label);
         }
@@ -187,10 +225,12 @@ namespace WildWasteland.Core.UI
             if (!BeginEntry(e)) return;
             bool v = Toggle(label ?? e.Definition.Key, e.Value);
             if (v != e.Value) e.Value = v;
+            _insideEntry = false;
         }
 
         public int Choices(string label, int selected, params string[] choices)
         {
+            if (!ShowRow(label)) return selected;
             if (Ledger.SettingsActive && choices.Length == 2 && choices[0] == "Off" && choices[1] == "On") return Toggle(label, selected == 1) ? 1 : 0;
             var r = Next(28);
             float fraction = Ledger.SettingsActive ? LabelWidth : .34f;
@@ -206,6 +246,7 @@ namespace WildWasteland.Core.UI
 
         public float Slider(string label, string key, float value, float min, float max)
         {
+            if (!ShowRow(label) && !ShowRow(key)) return value;
             var r = Next(26);
             Caption(r, label);
             float x = r.x + r.width * LabelWidth, w = r.width * (1 - LabelWidth);
@@ -219,6 +260,7 @@ namespace WildWasteland.Core.UI
         /// <summary>Two rebindable keys on one row: label, key button, second label, second key button.</summary>
         public void KeyPair(string label, ConfigEntryBase a, string label2, ConfigEntryBase b)
         {
+            if (!ShowRow(label) && !ShowRow(label2)) return;
             var r = Next(28);
             Caption(r, label, .34f);
             float x = r.x + r.width * 0.34f, w = r.width * 0.66f, bw = (w - 6) * 0.3f, lw = (w - 6) * 0.4f;
@@ -302,6 +344,7 @@ namespace WildWasteland.Core.UI
             }
             var desc = e.Description != null ? e.Description.Description : null;
             if (!string.IsNullOrEmpty(desc) && desc.Length < 400) { Y -= 2; Text(desc, new Color(Ledger.Muted.r, Ledger.Muted.g, Ledger.Muted.b, 0.75f)); }
+            _insideEntry = false;
         }
 
         static readonly Dictionary<string, string> _text = new Dictionary<string, string>();

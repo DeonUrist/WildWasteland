@@ -29,6 +29,8 @@ namespace WildWasteland.Modules.HUD
         private static readonly List<GameObject> _roots = new List<GameObject>(64);
         private static Sprite _previewSprite;
         private static Texture _previewTexture;
+        private static Texture2D _previewFallbackTexture;
+        private static Sprite _previewFallbackSprite;
         private static Rect _previewUv = new Rect(0, 0, 1, 1);
 
         internal static void PreparePreview()
@@ -46,6 +48,11 @@ namespace WildWasteland.Modules.HUD
             if (_previewSprite == null && _previewTexture == null)
                 foreach (var image in Resources.FindObjectsOfTypeAll<RawImage>())
                     if (image != null && image.gameObject.scene.IsValid() && image.name == "MouseCrosshair") { _previewTexture = image.texture; _previewUv = image.uvRect; break; }
+            if (_previewSprite == null && _previewTexture == null)
+            {
+                if (_previewFallbackTexture == null) Load("crosshair_vanilla.png", out _previewFallbackTexture, out _previewFallbackSprite);
+                _previewTexture = _previewFallbackTexture;
+            }
             LoadLines();
         }
 
@@ -172,6 +179,7 @@ namespace WildWasteland.Modules.HUD
             OnSceneLoaded();
             DestroyAsset(ref _linesSprite, ref _linesTexture);
             DestroyAsset(ref _dotSprite, ref _dotTexture);
+            DestroyAsset(ref _previewFallbackSprite, ref _previewFallbackTexture);
             _assetsAttempted = false; _unsupportedWarned = false;
         }
         private static void DestroyAsset(ref Sprite sprite, ref Texture2D texture)

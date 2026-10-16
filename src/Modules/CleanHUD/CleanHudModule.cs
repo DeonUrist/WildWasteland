@@ -149,6 +149,7 @@ namespace WildWasteland.Modules.CleanHUD
             Scheduler.Interval(this, "Location markers", .5f, LocationMarkers.Tick);
             Scheduler.Interval(this, "Quest map lookup", 1f, _questMap.FindMap);
             Scheduler.EveryFrame(this, "Quest map markers", _questMap.Tick, Phase.LateUpdateLast);
+            Scheduler.EveryFrame(this, "Weather map areas", TickWeatherMap, Phase.LateUpdateLast);
             Scheduler.Gui(this, "Player map marker", _questMap.DrawPlayer, _questMap.PlayerShown);
             Scheduler.Interval(this, "Map fog exploration", .2f, MapFog.Paint);
             Scheduler.EveryFrame(this, "Dialogue window", TalkDialogue.Tick, Phase.LateUpdateLast);
@@ -161,6 +162,8 @@ namespace WildWasteland.Modules.CleanHUD
             Core.Log.Always("[CleanHUD] CleanHUD 1.5.1 integrated; layout: " + Layout.Path);
         }
 
+        private readonly WeatherMap _weatherMap = new WeatherMap();
+        private void TickWeatherMap() { _weatherMap.Tick(_questMap); }
         private void PollLayout() { Layout.Poll(false); }
         private void MapChanged(object sender, EventArgs args) { if (Running && _questMap != null) _questMap.ApplyEnabled(); }
         private void AttachHud()
@@ -206,6 +209,7 @@ namespace WildWasteland.Modules.CleanHUD
         }
         public override void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
+            _weatherMap.Clear();
             Binoculars.Reset();
             InventoryStyle.Restore();
             LocationMarkers.Begin(false);
@@ -220,6 +224,7 @@ namespace WildWasteland.Modules.CleanHUD
         public override void OnWorldReady() { LocationMarkers.WorldReady(SaveBus.Slot); MapFog.WorldReady(SaveBus.Slot); SceneCache.Reset(); SceneCache.BeginKeys(); _attach.RunNow(); }
         public override void Shutdown()
         {
+            _weatherMap.Clear();
             Binoculars.Shutdown();
             InventoryStyle.Restore();
             Running = false; Release();

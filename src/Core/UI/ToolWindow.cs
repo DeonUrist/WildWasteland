@@ -18,12 +18,14 @@ namespace WildWasteland.Core.UI
         static ToolPage _current;
         static Vector2 _navScroll, _scroll;
         static float _contentHeight = 400, _navHeight = 400;
+        static string _debugSearch = "", _developerSearch = "";
         static Rect _rect;
         const float Width = 1920, Height = 1080;
         static readonly Action<Rect, string, float, Color, TextAnchor> SettingsText = CleanHud.GlyphFont.Draw;
         static readonly Action<Rect, string, float, Color, TextAnchor> SettingsWrap = CleanHud.GlyphFont.DrawWrapped;
         static readonly Func<string, float, float, float> SettingsHeight = CleanHud.GlyphFont.WrappedHeight;
         static bool _open;
+        static bool _fromMenu;
         static Action _deferred;
         public static bool IsOpen { get { return _open; } }
         /// <summary>The window is open or has a deferred action to run: the GUI runner must stay on.</summary>
@@ -67,6 +69,7 @@ namespace WildWasteland.Core.UI
             {
                 if (EditorSession.Busy || !_session.Acquire(true, fromMenu)) { Log.Info("Settings: another editor is open or the game is paused"); return; }
                 _open = true;
+                _fromMenu = fromMenu;
                 CollectModulePages();
                 Log.Always("[Core] Settings opened: CleanHUD atlas UI, 54-unit rows");
             }
@@ -141,6 +144,11 @@ namespace WildWasteland.Core.UI
             var border = new Color(214 / 255f, 203 / 255f, 176 / 255f, .55f);
             if (CleanHud.CleanHudModule.Running) border = CleanHud.AccentTheme.Resolve(border);
             var old = Ledger.BeginSettings(accent, border, CleanHud.Assets.Tex("panel_menu"), CleanHud.Assets.VGradient(.75f), SettingsText, SettingsWrap, SettingsHeight); var m = GUI.matrix;
+            if (_fromMenu && CleanHud.CleanHudModule.Running && CleanHud.CleanHudModule.MenuEnabled.Value)
+            {
+                var background = CleanHud.Menu.MenuBackground();
+                if (background != null) GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), background, ScaleMode.ScaleAndCrop);
+            }
             Ledger.Fill(new Rect(0, 0, Screen.width, Screen.height), new Color(0, 0, 0, .6f));
             GUI.matrix = Matrix4x4.TRS(new Vector3((Screen.width - Width * s) / 2, (Screen.height - Height * s) / 2, 0), Quaternion.identity, new Vector3(s, s, 1));
             _rect = new Rect(0, 0, Width, Height);
@@ -202,11 +210,26 @@ namespace WildWasteland.Core.UI
             Ledger.Fill(new Rect(438, 304, 1.5f, 656), new Color(Ledger.Accent.r, Ledger.Accent.g, Ledger.Accent.b, .35f));
             if (_current == null) return;
             Ledger.Label(new Rect(body.x + 22, body.y + 22, body.width - 44, 50), _current.Title, Ledger.DialogTitle, Ledger.Accent);
+            bool searchable = _current == CorePages.DebugPage || _current == CorePages.DeveloperPage;
+            string search = _current == CorePages.DeveloperPage ? _developerSearch : _debugSearch;
+            if (searchable)
+            {
+                Ledger.Label(new Rect(body.xMax - 642, body.y + 22, 122, 50), "SEARCH", Ledger.Small, Ledger.Muted);
+                var field = new Rect(body.xMax - 510, body.y + 22, 410, 50);
+                Ledger.Panel(field, Ledger.Field, Ledger.Line);
+                string next = Ledger.TextField(field, _current.Title + "/Search", search);
+                if (Ledger.Button(new Rect(body.xMax - 90, field.y, 68, field.height), "X", search.Length > 0)) { next = ""; GUI.FocusControl(null); }
+                if (next != search)
+                {
+                    if (_current == CorePages.DeveloperPage) _developerSearch = next; else _debugSearch = next;
+                    search = next; _scroll = Vector2.zero; Ledger.ClearNumbers(); ToolLayout.CancelRebind();
+                }
+            }
             var inner = new Rect(body.x, body.y + 92, body.width, body.height - 116);
             var page = _current;
             _scroll = Ledger.Scroll(inner, _scroll, _contentHeight, w =>
             {
-                _layout.Begin(w, page.Title + "/");
+                _layout.Begin(w, page.Title + "/", searchable ? search : null);
                 bool off = page.Owner != null && !ModuleHost.IsRunning(page.Owner);
                 if (off)
                 {
@@ -218,6 +241,11 @@ namespace WildWasteland.Core.UI
                 try { page.Draw(_layout); }
                 catch (Exception ex) { _layout.Text("Page error: " + ex.Message, Ledger.Danger); Log.Error("F7 page " + page.Title, ex); }
                 GUI.enabled = wasEnabled;
+                if (_layout.Searching && !_layout.SearchResults)
+                {
+                    Ledger.Label(new Rect(22, 4, w - 44, 54), "No matching controls.", Ledger.Body, Ledger.Muted);
+                    _layout.Y = 62;
+                }
                 _contentHeight = _layout.Y + 12;
             });
         }

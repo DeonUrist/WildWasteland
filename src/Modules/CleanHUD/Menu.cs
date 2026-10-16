@@ -595,7 +595,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (_plate != null) UnityEngine.Object.Destroy(_plate); _plate = null;
             if (_menuBackground != null) UnityEngine.Object.Destroy(_menuBackground); _menuBackground = null;
         }
-        private static Texture2D MenuBackground()
+        internal static Texture2D MenuBackground()
         {
             if (_menuBackground != null) return _menuBackground;
             Texture2D texture = null;

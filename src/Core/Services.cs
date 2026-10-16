@@ -24,6 +24,8 @@ namespace WildWasteland.Core
         public static IVehicleIgnition VehicleIgnition;
         public static ICompassMarkers Compass;
         public static IMapMarkers Map;
+        public static IWeatherRegions Weather;
+        public static IWeatherVisualPolicy WeatherVisualPolicy;
         public static IFollowerVehicles FollowerVehicles;
         public static ICampStatus Camps;
         private static IPoiApi _poi;
@@ -59,6 +61,56 @@ namespace WildWasteland.Core
         {
             CrewBailedOut = null; VehicleExploded = null;
         }
+    }
+
+    public enum WeatherVisualDetail { Low, Balanced, Max }
+
+    public interface IWeatherVisualPolicy
+    {
+        WeatherVisualDetail WeatherDetail { get; }
+    }
+
+    public struct WeatherRegion
+    {
+        public Vector3 WorldCenter;
+        public Vector2 Radii;
+        public Vector3 Velocity;
+        public float Heading;
+        public bool Hurricane;
+        public float AreaSquareKm
+        {
+            get
+            {
+                float area = 0; Vector2 a = Boundary(63);
+                for (int i = 0; i < 64; i++) { Vector2 b = Boundary(i); area += a.x*b.y-b.x*a.y; a = b; }
+                return Mathf.Abs(area)*.0000005f;
+            }
+        }
+        public static float EdgeWave(float x) { return .055f*Mathf.Sin(x*3.7f+.4f)+.025f*Mathf.Sin(x*10.3f+.9f); }
+        public static float EdgeDistance(float x, float z)
+        {
+            z -= EdgeWave(x);
+            float u = Mathf.Abs(x)/Mathf.Max(.1f,.875f-.125f*z), v = Mathf.Abs(z);
+            float u2 = u*u, v2 = v*v;
+            return 1-Mathf.Pow(u2*u2*u2+v2*v2*v2,1f/6);
+        }
+        public Vector2 Boundary(int point)
+        {
+            float angle = point*Mathf.PI*2/64, c = Mathf.Cos(angle), s = Mathf.Sin(angle);
+            float z = Mathf.Sign(s)*Mathf.Pow(Mathf.Abs(s),1f/3);
+            float x = Mathf.Sign(c)*Mathf.Pow(Mathf.Abs(c),1f/3)*(.875f-.125f*z);
+            return new Vector2(x*Radii.x,(z+EdgeWave(x))*Radii.y);
+        }
+    }
+
+    public interface IWeatherRegions
+    {
+        int Count { get; }
+        bool MapAreas { get; set; }
+        float HurricaneDensity { get; set; }
+        float FrontWidthKm { get; set; }
+        float DepthKm { get; set; }
+        bool TryGet(int index, out WeatherRegion region);
     }
 
     public interface IVehicleIgnition
