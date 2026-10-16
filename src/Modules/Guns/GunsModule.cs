@@ -214,6 +214,8 @@ namespace WildWasteland.Modules.Guns
             Patch(typeof(SetAudioClip), "OnEnter", "AfterSetAudioClip", false);
             Patch(typeof(TranslatePosition), "OnFixedUpdate", "BeforeTranslatePosition", true);
             Core.Patches.ApplyClass(this, typeof(AmmoCapacity_Patch));
+            ApocaspawnerDamage.Install(this);
+            Core.Patches.ApplyClass(this, typeof(WeaponDamageText));
             Core.Patches.ApplyClass(this, typeof(ArmorCapacityPatch));
             Core.Patches.ApplyClass(this, typeof(BackpackSlot_Patch));
             Core.Patches.ApplyClass(this, typeof(MagazineSavePatch));

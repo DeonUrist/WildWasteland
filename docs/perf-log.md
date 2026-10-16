@@ -8,6 +8,10 @@ Budget (initial targets, adjust in docs/decisions.md):
 - Load: WW work after a save load spread over >= 10 frames, no single frame > 8 ms.
 - Sliced background work (nav bakes, scene scans) stops for the frame once `[Core] Frame budget (ms)` (tools.cfg, default 2 ms) is used.
 
+### Crossbow damage displays — 2026-10-17 — NOT YET MEASURED
+
+RC27 (0.1.30): Apocaspawner damage adjustment runs only during parameter reads; reflection metadata is cached at module startup. Native pickup/shop text uses shared FsmString constants and restores the borrowed action field in a finalizer. No new scheduler job or per-frame scan. Windows Release build/deploy: zero errors, ten existing warnings; DLL MD5 007CFAE230614B4D4D4D3BD8ECDA89A9. In-game display and performance verification remain Testing.
+
 ### Moving weather visual preview — 2026-10-16 — NOT YET MEASURED
 
 Thin-density/lightning/thunder (6DB5B3C9A249C7FB36E3A9D078A7DA1F): density Y compensation and ray-footprint mip selection add arithmetic only; unchanged primary/lighting probe/read counts. World flashes reuse camera-scoped sun/ambient/sky capture, no new Light/GI/probe/fullscreen pass; enabling sun shadows during a flash can cost GPU work. One asynchronously decoded MP3, up to 32 pending events and 16 pooled AudioSources scanned in the existing Weather tick, no per-strike coroutine/job or steady-state allocation except optional verbose traces. Native audio mixing, MP3 loading and changed shading/lighting cost remain unmeasured. No new config; notes/weather-thin-thunder.md tracks Denis's required tests.

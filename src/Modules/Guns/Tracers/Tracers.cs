@@ -26,6 +26,7 @@ namespace WildWasteland.Modules.Guns
     internal static partial class Tracers
     {
         internal enum Kind { Pistol, Smg, Rifle, Sniper, Shotgun, Crossbow }
+        internal const float CrossbowDamageMultiplier = 2.5f;
 
         private struct Shot
         {
@@ -419,7 +420,7 @@ namespace WildWasteland.Modules.Guns
                 }
             }
             gun.Kind = shotgun ? Kind.Shotgun : Classify(go.name);
-            if (gun.Kind == Kind.Crossbow) gun.DamageMultiplier = 2.5f;
+            if (gun.Kind == Kind.Crossbow) gun.DamageMultiplier = CrossbowDamageMultiplier;
             else if (go.name.StartsWith("redmark_m11", StringComparison.OrdinalIgnoreCase)) gun.DamageMultiplier = 100f / 90f;
             if (gun.Kind == Kind.Crossbow) CacheBoltModel(go.transform);
             if (gun.Kind == Kind.Shotgun && !shotgun) gun.Kind = Kind.Rifle;      // a "rochester" without pellets is not a shotgun
