@@ -26,6 +26,7 @@ namespace WildWasteland.Modules.NPC
             public float SoleOffset, FadeSoleOffset;
             public Behaviour[] Ik; public bool[] IkEnabled;
             public AnimatorCullingMode Culling;
+            public SkinnedMeshRenderer[] Meshes; public bool[] MeshOffscreen; public Bounds[] MeshBounds;
             public Pose Pose; public string Playing; public float Time, Fade, NextBite;
             public float Reach = 1f, Drag, JumpSince; public bool Applied, Held, Prepared, Jumping, Committing, HitSent;
             public bool Boss, WasQuiet, Dashing;
@@ -68,6 +69,8 @@ namespace WildWasteland.Modules.NPC
         {
             if (!_loadTried) { _loadTried = true; LoadBundles(); }
             if (Clips.Count == 0) return;
+            Core.SaveBus.StateChanged -= OnSaveState;
+            Core.SaveBus.StateChanged += OnSaveState;
             Core.Hooks.ProcessEvent.Prefix(module, BeforeDamageEvent);
             Core.Hooks.SetVelocityDo.Prefix(module, BeforeSetVelocity);
             module.Patch(typeof(Wait), "OnEnter", typeof(DogAnimations), "BeforeDamageWait", true);
@@ -117,6 +120,7 @@ namespace WildWasteland.Modules.NPC
         // drag restored, the brain's hold lifted
         internal static void Shutdown()
         {
+            Core.SaveBus.StateChanged -= OnSaveState;
             foreach (var dog in Dogs.Values) { try { Release(dog); } catch (Exception e) { NpcModule.Warn("Dog animations shutdown: " + e.Message); } }
             Dogs.Clear();
             DogCompanionCompat.Shutdown();
@@ -142,7 +146,8 @@ namespace WildWasteland.Modules.NPC
             }
             var animator = agent.Owner.GetComponentInChildren<Animator>(true);
             var body = agent.Owner.GetComponent<Rigidbody>(); if (animator == null || (body == null && companion == null)) return;
-            var bones = agent.Owner.GetComponentsInChildren<SkinnedMeshRenderer>(true).SelectMany(r => r.bones).Where(t => t != null && t != animator.transform).Distinct().ToArray();
+            var meshes = agent.Owner.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            var bones = meshes.SelectMany(r => r.bones).Where(t => t != null && t != animator.transform).Distinct().ToArray();
             if (bones.Length < 10) return;
             var dog = new Dog { Agent = agent, Companion = companion, Animator = animator, Body = body, Clips = clips, Bones = bones,
                 NativePosition = new Vector3[bones.Length], NativeRotation = new Quaternion[bones.Length], FadePosition = new Vector3[bones.Length], FadeRotation = new Quaternion[bones.Length], Culling = animator.cullingMode,
@@ -156,6 +161,7 @@ namespace WildWasteland.Modules.NPC
             FrontLegs(dog);
             if (companion != null)
             {
+                dog.Meshes = meshes; dog.MeshOffscreen = new bool[meshes.Length]; dog.MeshBounds = new Bounds[meshes.Length];
                 dog.SupportPaws = bones.Where(t => t.name.EndsWith("_toe", StringComparison.OrdinalIgnoreCase)).ToArray();
                 var marker = animator.transform.Find("__NPCAI_PawSupport");
                 if (marker == null) { marker = new GameObject("__NPCAI_PawSupport").transform; marker.SetParent(animator.transform, false); }
@@ -196,6 +202,13 @@ namespace WildWasteland.Modules.NPC
         {
             if (d.Prepared) return;
             d.Animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            if (d.Meshes != null)
+            {
+                for (int i = 0; i < d.Meshes.Length; i++) if (d.Meshes[i] != null)
+                { d.MeshOffscreen[i] = d.Meshes[i].updateWhenOffscreen; d.MeshBounds[i] = d.Meshes[i].localBounds; }
+                MeshCulling(d, !Core.SaveBus.Busy);
+                if (NpcModule.DogLog.Value) NpcModule.Log.LogInfo("Dog animations: " + d.Agent.Owner.name + " companion mesh bounds updating (" + d.Meshes.Length + " renderers).");
+            }
             for (int i = 0; i < d.Ik.Length; i++) if (d.Ik[i] != null) { d.IkEnabled[i] = d.Ik[i].enabled; d.Ik[i].enabled = false; }
             d.Prepared = true;
         }
@@ -228,10 +241,23 @@ namespace WildWasteland.Modules.NPC
             foreach (var wait in d.OriginalWaits) if (wait.Key.time != null) wait.Key.time.Value = wait.Value;
             d.OriginalWaits.Clear();
             if (!d.Prepared) return;
+            MeshCulling(d, false);
             if (d.Animator != null) d.Animator.cullingMode = d.Culling;
             for (int i = 0; i < d.Ik.Length; i++) if (d.Ik[i] != null) d.Ik[i].enabled = d.IkEnabled[i];
             d.Prepared = false;
         }
+        // Retargeted clips and paw alignment can move the companion outside its imported animation bounds.
+        private static void MeshCulling(Dog d, bool posed)
+        {
+            if (d.Meshes == null) return;
+            for (int i = 0; i < d.Meshes.Length; i++) if (d.Meshes[i] != null)
+            {
+                d.Meshes[i].updateWhenOffscreen = posed || d.MeshOffscreen[i];
+                if (!posed) d.Meshes[i].localBounds = d.MeshBounds[i];
+            }
+        }
+        private static void OnSaveState(string previous, string current)
+        { foreach (var d in Dogs.Values) if (d.Prepared) MeshCulling(d, current == "isPlay"); }
         private static void Hold(Dog d, bool held)
         { if (d.Companion != null) d.Companion.Halt(held); else if (d.Agent != null && d.Agent.Owner != null) Brain.Halt(d.Agent.Owner, held); }
         private static float Speed(Dog d)

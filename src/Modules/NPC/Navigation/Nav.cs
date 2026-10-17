@@ -1100,7 +1100,7 @@ namespace WildWasteland.Modules.NPC
         // The candidates are taken cheapest first from a heap instead of a full sort (same order; equal costs: the lower cell first).
         private const int Pending = -2;
         private const float PickBudgetMs = 1f;
-        internal static bool PickInline;     // (offline equivalence harness) the whole pick at once, inside the call, as before
+        internal static bool PickInline = false;     // (offline equivalence harness) the whole pick at once, inside the call, as before
         private sealed class PickJob
         {
             public Structure S; public int From, Comp, GKey; public Vector3 Goal; public long Key, MemoKey; public bool Memo, Fresh;

@@ -17,7 +17,7 @@ namespace WildWasteland.Modules.NPC
     // Used by the spider nests (Nests.cs). (WW) The old test webs (a web where you look, on a key) were removed.
     internal static class Webs
     {
-        internal sealed class Web { public GameObject Go; public Mesh Mesh; public float Born; public bool Orb; public Vector3 Center, N; public float R; public Renderer Rend; public float Sky = 1f, Shown = -1f; }
+        internal sealed class Web { public GameObject Go; public Mesh Mesh; public bool Orb; public Vector3 Center, N; public float R; public Renderer Rend; public float Sky = 1f, Shown = -1f; }
 
         private static readonly List<Web> _all = new List<Web>();        // (1.7.3) every web (nests): lit each second / by the flashlight
         private static MaterialPropertyBlock _mpb; private static float _k = 0.88f; private static Light _flLight; private static Transform _flOf;

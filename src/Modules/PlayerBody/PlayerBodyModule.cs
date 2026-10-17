@@ -30,7 +30,7 @@ namespace WildWasteland.Modules.PlayerBody
         // ------------------------------------------------------------------ state shared with the ported code
         /// <summary>True between Init and Shutdown (replaces the old Plugin.Enabled.Value checks; Core removes the patches/jobs when off).</summary>
         internal static bool Running;
-        internal static string Dir;            // BepInEx\plugins\WildWasteland\PlayerBody\
+        internal new static string Dir;            // BepInEx\plugins\WildWasteland\PlayerBody\
         internal static string DataDir;        // BepInEx\config\WildWasteland\PlayerBody\
         internal static bool VerboseOn { get { return Core.Log.Verbose; } }
 

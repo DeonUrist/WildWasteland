@@ -31,7 +31,7 @@ namespace WildWasteland.Modules.Performance
         static int _count, _head;
         static int _spikes; static float _worst; static string _worstTag = "";
         static string _tag;   // what happened this frame (tile/save/load/origin/culling)
-        static int _gc0, _gcStartCount; static float _gcStartTime;
+        static int _gcStartCount; static float _gcStartTime;
         static readonly List<string> _spikeLog = new List<string>();
         static ProfilerRecorder _gcAlloc, _gcUsed, _drawCalls, _setPass, _shadowCasters, _tris;
         static bool _recorders;

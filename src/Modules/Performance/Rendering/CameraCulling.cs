@@ -7,8 +7,8 @@ namespace WildWasteland.Modules.Performance
 {
     /// <summary>
     /// RC3 (research C §2 Tier 1.4, §3). Spherical per-layer cull distances on the game's view cameras (PlayerCamera and the vehicles'
-    /// 3rdCamera/Camera): Item 9 150 m, Food 21 80 m, Weapon 12 150 m, Hinge 13 300 m, Actor 10 600 m, Car 8 2500 m, x preset scale;
-    /// other layers (Default = buildings/props, left to RC2) unchanged. Vanilla cameras have no layer distances (all 0 = far plane).
+    /// 3rdCamera/Camera): Hinge 13 300 m, Actor 10 600 m, Car 8 2500 m, x preset scale. Item, Food and Weapon retain their original
+    /// camera distances to protect vehicle cargo. Other layers (Default = buildings/props, left to RC2) unchanged.
     /// ES3 writes Camera.layerCullSpherical of vehicle cameras (ES3Type_Camera; layerCullDistances is not written): reverted while
     /// a save runs. Cameras of other mods / WW (CleanHUD map, occlusion) are not touched.
     /// </summary>
@@ -20,13 +20,13 @@ namespace WildWasteland.Modules.Performance
         public override string Category { get { return Categories.Rendering; } }
         public override int Order { get { return 9; } }
         public override bool UsesPreset { get { return true; } }
-        public override string Help { get { return "Items, food and weapons stop rendering beyond ~150 m, car parts beyond 300 m, NPCs beyond 600 m, cars beyond 2.5 km."; } }
+        public override string Help { get { return "Car parts stop rendering beyond 300 m, NPCs beyond 600 m, cars beyond 2.5 km. Items, food and weapons retain their original camera distances."; } }
 
         Knob _scale;
-        public override void Bind(ModuleConfig cfg) { _scale = NewKnob(cfg, "Scale", "Multiplier of the layer distances (Item 150, Food 80, Weapon 150, Hinge 300, Actor 600, Car 2500 m); 0 = off.", 0.6f, 1f, 1.5f, 0f); }
+        public override void Bind(ModuleConfig cfg) { _scale = NewKnob(cfg, "Scale", "Multiplier of the layer distances (Hinge 300, Actor 600, Car 2500 m); 0 = off. Items, food and weapons are unchanged.", 0.6f, 1f, 1.5f, 0f); }
 
-        static readonly int[] Layers = { 9, 21, 12, 13, 10, 8 };
-        static readonly float[] Dists = { 150f, 80f, 150f, 300f, 600f, 2500f };
+        static readonly int[] Layers = { 13, 10, 8 };
+        static readonly float[] Dists = { 300f, 600f, 2500f };
         sealed class Rec { public Camera C; public int Id; public float[] Orig; public bool OrigSpherical, Vehicle; }
         readonly Dictionary<int, Rec> _recs = new Dictionary<int, Rec>();
         readonly List<Rec> _list = new List<Rec>();

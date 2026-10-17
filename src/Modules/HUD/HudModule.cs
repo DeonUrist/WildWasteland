@@ -22,7 +22,7 @@ namespace WildWasteland.Modules.HUD
 
         internal static HudModule Instance;
         /// <summary>BepInEx\plugins\WildWasteland\HUD\ (Textures/, Sounds/).</summary>
-        internal static string Dir;
+        internal new static string Dir;
 
         // F6 (player-facing). HudEnabled = old [General] EnableHudEffects (numbers, marker and headshot sound; not the crosshair).
         internal static ConfigEntry<bool> HudEnabled, HitMarker, SelectionDot, HeadshotSound;

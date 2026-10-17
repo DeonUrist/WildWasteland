@@ -58,7 +58,7 @@ namespace WildWasteland.Modules.NPC
             public int ReloadRounds; public bool ReloadShown, Cocks, WasBurst;     // (1.2.0) one-round-at-a-time reloads, the reload shown on the body, pump / bolt guns, the last frame's burst
             public Transform Weapon; public string WeaponKey;                       // the gun model in its hand and the pose table's key for it
             public int Shots, Magazine; public bool Reloading; public float ReloadUntil, ReloadLen; public int ReloadSoundsPlayed;   // (1.1.2) the magazine: shots since the last reload, its size (0 = never reloads)
-            public bool WeaponDirty; public float SpeedCap; public bool LocoRun, LocoStrafe, LocoMoving;   // slot hysteresis: walk/run, forward/sideways, still/moving                         // the game toggled something of this NPC (its gun models) -> re-find the gun; max ground speed for the clip that plays (no sliding)
+            public bool WeaponDirty; public float SpeedCap;                         // the game toggled something of this NPC (its gun models) -> re-find the gun; max ground speed for the clip that plays (no sliding)
             public float StrafeDev;                                                  // (1.1.1) chasing with clips: the heading's angle off the facing when the body keeps facing the target and the legs strafe (0 = turn as usual)
             public bool Crouched; public float Drop;
             public CapsuleCollider Capsule; public float CapHeight; public Vector3 CapCenter;
@@ -76,7 +76,6 @@ namespace WildWasteland.Modules.NPC
             public int NavStucks; public float NavStuckSince, LastStep = -10f;
             public float CmdSpeed, BlkSince, BlkDriven, BlkLastThink; public Vector3 BlkPos;     // blocked check: driven vs covered distance    // map-route walking: stucks in a row, the last step-over
             public float LosLostAt = -1f; public bool Los; public float Dist;
-            public float LastLog;
             public int LosLooks;                       // consecutive thinks with line of sight (Hold needs 2: no flapping on a fence bar)
             public float CrouchRolledAt = -10f; public bool CrouchRoll;   // the kneel roll of this hold episode (kept 5 s across short Chase gaps)
             public float FaceTargetUntil;              // Aim wants a burst: face the target instead of the steered heading for a moment
