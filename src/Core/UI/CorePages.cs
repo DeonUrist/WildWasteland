@@ -391,7 +391,7 @@ namespace WildWasteland.Core.UI
                 if (e == null || !DebugSetting(e)) continue;
                 string sec = key.Section; int cut = sec.IndexOf(" / ", System.StringComparison.Ordinal);
                 string prefix = cut >= 0 ? sec.Substring(0, cut) : sec;
-                string label = ReferenceEquals(e, CleanHudSettings.Enabled) ? "Clean HUD" : ReferenceEquals(e, CleanHudSettings.MenuEnabled) ? "Clean menus" : Readable(key.Key);
+                string label = ReferenceEquals(e, CleanHudSettings.Enabled) ? "Clean HUD" : ReferenceEquals(e, CleanHudSettings.MenuEnabled) ? "Clean menus" : ReferenceEquals(e, CleanHudSettings.CleanFont) ? "CleanFont" : Readable(key.Key);
                 var item = new SwitchItem { Entry = e, Label = label, Section = sec, Order = -1, Index = index, Heading = "Core", HeadingOff = "Core" };
                 for (int m = 0; m < ModuleHost.Entries.Count; m++)
                 {

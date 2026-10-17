@@ -166,6 +166,27 @@ namespace WildWasteland.Modules.Patrols
             StartCoroutine(ReviveRoutine());
         }
 
+        // The native load already restored all parts/fluids. Prepare ownership while its loading screen still holds time at zero.
+        internal IEnumerator PrepareLoaded()
+        {
+            if (_done || _dead || Hold || MerchantWaiting || Marker?.SetupOnly == true || Explode.IsWreck(_car)) yield break;
+            _revived = true;
+            float until = Time.realtimeSinceStartup + 5f;
+            var start = Patrol.FindFsm(_car, "START", "Start");
+            while (_car != null && Time.realtimeSinceStartup < until &&
+                ((_handbrake != null && !_handbrake.Fsm.Initialized) || (start != null && !start.Fsm.Initialized))) yield return null;
+            if (_car == null || _done || MerchantWaiting || !DriverAlive()) yield break;
+            // A stripped/dry chassis stays stripped/dry; never refill or repair it in order to make it drive.
+            var engine = Patrol.FindChild(_car.transform, "hinge_engine");
+            var liquid = _tank != null ? _tank.FsmVariables.GetFsmFloat("Liquid") : null;
+            if (engine == null || engine.childCount == 0 || (liquid != null && liquid.Value <= .01f)) yield break;
+            Patrol.Handbrake(_car, false, _handbrake);
+            if (!Nwh.EngineRunning(_car)) yield return Patrol.StartUp(_car, true);
+            if (_car == null || _done || MerchantWaiting) yield break;
+            if (!_driving) StartDriving();
+            PatrolsModule.Verbose("Load AI prepared: " + _car.name + "; pilot attached, native parts/fluids unchanged");
+        }
+
         private IEnumerator ReviveRoutine()
         {
             float until = Time.realtimeSinceStartup + 5f;

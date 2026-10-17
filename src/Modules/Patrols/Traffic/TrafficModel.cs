@@ -33,6 +33,8 @@ namespace WildWasteland.Modules.Patrols
         public bool truck, retired;
         public string[] lootNames = new string[0];
         public int[] lootCounts = new int[0];
+        public string[] trailerLootNames;
+        public int[] trailerLootCounts;
         public string cargoKey;
         public PatrolCarData crew;
         public TrafficValue[] values = new TrafficValue[0];

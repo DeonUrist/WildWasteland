@@ -24,6 +24,9 @@ namespace WildWasteland.Modules.CleanHUD
         private GameObject _root;
         private RawImage _background;
         private GlyphText _label;
+        private GlyphText _stage;
+        private RectTransform _progressFill;
+        private float _nextProgress, _shownProgress;
         private Transform _nativeGame, _nativeTitle, _nativeSlots;
         private ScreenImage _current;
         private string _currentTip = "";
@@ -131,7 +134,16 @@ namespace WildWasteland.Modules.CleanHUD
             Stretch(black.rectTransform); black.color = Color.black;
             _background = Rect(_root.transform, "screen image", Vector2.zero, Vector2.zero, Vector2.zero).gameObject.AddAccent<RawImage>();
             Stretch(_background.rectTransform); _background.raycastTarget = false;
-            _label = Text(_root.transform, "loading", Vector2.zero, new Vector2(64, 64), new Vector2(720, 80), 56, new Color(.886f, .749f, .424f, 1f));
+            _label = Text(_root.transform, "loading", Vector2.zero, new Vector2(144, 140), new Vector2(720, 80), 56, new Color(.886f, .749f, .424f, 1f));
+            var progress = Rect(_root.transform, "progress", new Vector2(.5f, 0), new Vector2(0, 64), new Vector2(1632, 28));
+            var frame = progress.gameObject.AddAccent<Image>(); frame.color = DialogueWidgets.Gold; frame.raycastTarget = false;
+            var inside = Rect(progress, "track", Vector2.zero, Vector2.zero, Vector2.zero);
+            Stretch(inside); inside.offsetMin = new Vector2(2, 2); inside.offsetMax = new Vector2(-2, -2);
+            var track = inside.gameObject.AddAccent<Image>(); track.color = new Color(0, 0, 0, .88f); track.raycastTarget = false;
+            _progressFill = Rect(inside, "fill", Vector2.zero, Vector2.zero, Vector2.zero);
+            _progressFill.anchorMax = new Vector2(0, 1); _progressFill.offsetMin = new Vector2(3, 3); _progressFill.offsetMax = new Vector2(-3, -3);
+            var fill = _progressFill.gameObject.AddAccent<Image>(); fill.color = DialogueWidgets.Gold; fill.raycastTarget = false;
+            _stage = Text(_root.transform, "loading stage", Vector2.zero, new Vector2(144, 100), new Vector2(1632, 26), 22, DialogueWidgets.Gold);
             for (int i = 0; i < _tipLines.Length; i++)
                 _tipLines[i] = Text(_root.transform, "tip " + i, new Vector2(0, 1), new Vector2(144, -108 - 44 * i), new Vector2(1100, 44), 30, new Color(.953f, .937f, .894f, 1f));
             _root.SetActive(false);
@@ -140,13 +152,15 @@ namespace WildWasteland.Modules.CleanHUD
         internal void Begin(bool saving = false)
         {
             if (Active || !CleanHudModule.Running || !CleanHudModule.MenuEnabled.Value) return;
+            LoadingProgress.Begin();
             Reload();
             _saving = saving;
+            _nextProgress = _shownProgress = 0f;
             _current = _screens.Count > 0 ? _screens[_random.Next(_screens.Count)] : null;
             _currentTip = "";
             if (_current != null) _tips.TryGetValue(_current.Name, out _currentTip);
             if (_root == null) Build();
-            ShowScreen(); _completed = false; Active = true; _root.SetActive(true);
+            ShowScreen(); UpdateProgress(); _completed = false; Active = true; _root.SetActive(true);
             CleanHudModule.Log((_saving ? "Autosaving " : "Loading ") + (_current != null ? _current.Name : "(no Screen*.png found)"));
         }
         private void ShowScreen()
@@ -175,6 +189,7 @@ namespace WildWasteland.Modules.CleanHUD
         internal void End()
         {
             Active = false; _completed = false; _saving = false;
+            LoadingProgress.ScreenVisible = false;
             if (_root != null && _root.activeSelf) _root.SetActive(false);
         }
         internal void EndSaving() { if (_saving) End(); }
@@ -185,7 +200,7 @@ namespace WildWasteland.Modules.CleanHUD
         }
         internal void SceneLoaded()
         {
-            if (Active && _root == null) { Build(); ShowScreen(); _root.SetActive(true); }
+            if (Active && _root == null) { Build(); ShowScreen(); UpdateProgress(); _root.SetActive(true); }
             _nativeGame = _nativeTitle = _nativeSlots = null; _nativeLocated = false; _nextFind = 0;
             FindNative();
             if (Active && SceneCache.FindPath("Canvas_MM") != null && !NativeLoading()) End();
@@ -214,6 +229,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (_root == null) { Build(); ShowScreen(); _root.SetActive(true); }
             var labels = _saving ? SavingLabels : Labels;
             _label.Set(labels[(int)(Time.unscaledTime * 2f) % labels.Length]);
+            if (Time.unscaledTime >= _nextProgress) { _nextProgress = Time.unscaledTime + .2f; UpdateProgress(); }
             if (_background.texture != null && (_width != Screen.width || _height != Screen.height))
             {
                 _width = Screen.width; _height = Screen.height;
@@ -221,6 +237,15 @@ namespace WildWasteland.Modules.CleanHUD
                 if (screenAspect > imageAspect) { float h = imageAspect / screenAspect; _background.uvRect = new UnityEngine.Rect(0, (1 - h) / 2, 1, h); }
                 else { float w = screenAspect / imageAspect; _background.uvRect = new UnityEngine.Rect((1 - w) / 2, 0, w, 1); }
             }
+        }
+        private void UpdateProgress()
+        {
+            float fraction; string detail;
+            LoadingProgress.Read(_saving, out fraction, out detail);
+            _shownProgress = Mathf.Max(_shownProgress, fraction);
+            _stage.Set(detail);
+            _progressFill.anchorMax = new Vector2(_shownProgress, 1);
+            _progressFill.gameObject.SetActive(_shownProgress > .005f);
         }
         public void Dispose()
         {

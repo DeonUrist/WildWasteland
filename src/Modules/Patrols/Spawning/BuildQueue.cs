@@ -9,18 +9,16 @@ namespace WildWasteland.Modules.Patrols
     internal static class BuildQueue
     {
         internal static readonly object Continue = new object(), Assembled = new object();
-        private const float StepInterval = .05f, VehicleInterval = 2f;
         private sealed class Request
         {
             internal Patrol Owner; internal CarTemplate Template; internal Vector3? World; internal Quaternion Rotation;
-            internal bool Menu, Hold, Waiting; internal int Generation, Frame; internal float NextStep;
+            internal bool Menu, Hold, Waiting; internal int Generation, Frame;
             internal Action<GameObject> Done; internal Coroutine Wait;
             internal IEnumerator Root; internal readonly Stack<IEnumerator> Stack = new Stack<IEnumerator>();
         }
         private static readonly Queue<Request> Pending = new Queue<Request>();
         private static readonly List<Request> Finishing = new List<Request>();
         private static Request _active;
-        private static float _nextBuild;
         internal static int Queued { get { return Pending.Count; } }
         internal static bool Building { get { return _active != null; } }
 
@@ -34,7 +32,7 @@ namespace WildWasteland.Modules.Patrols
             if (!PatrolsModule.Running || Core.Scheduler.FrameMs >= Core.Scheduler.FrameBudgetMs) return false;
             if (_active == null)
             {
-                if (Pending.Count == 0 || Time.unscaledTime < _nextBuild) return false;
+                if (Pending.Count == 0) return false;
                 var next = Pending.Dequeue();
                 if (next.Owner == null || next.Generation != Patrol.SceneGen) { Cancel(next); return Pending.Count > 0; }
                 _active = next;
@@ -43,7 +41,7 @@ namespace WildWasteland.Modules.Patrols
                 next.Stack.Push(next.Root);
             }
             var r = _active;
-            if (r.Waiting || Time.frameCount < r.Frame || Time.unscaledTime < r.NextStep) return false;
+            if (r.Waiting || Time.frameCount < r.Frame) return false;
             try
             {
                 var iterator = r.Stack.Peek();
@@ -53,12 +51,11 @@ namespace WildWasteland.Modules.Patrols
                     if (r.Stack.Count == 0) _active = null;
                     return true;
                 }
-                r.NextStep = Time.unscaledTime + StepInterval;
                 var yielded = iterator.Current;
                 if (ReferenceEquals(yielded, Continue)) return true;
                 if (ReferenceEquals(yielded, Assembled))
                 {
-                    _active = null; _nextBuild = Time.unscaledTime + VehicleInterval;
+                    _active = null;
                     Finishing.Add(r); r.Wait = Core.Scheduler.StartCoroutine(Finish(r));
                     return false;
                 }
@@ -92,7 +89,7 @@ namespace WildWasteland.Modules.Patrols
         }
         internal static void Reset()
         {
-            var active = _active; _active = null; _nextBuild = 0f;
+            var active = _active; _active = null;
             var pending = Pending.ToArray(); Pending.Clear();
             var finishing = Finishing.ToArray(); Finishing.Clear();
             if (active != null) Cancel(active);

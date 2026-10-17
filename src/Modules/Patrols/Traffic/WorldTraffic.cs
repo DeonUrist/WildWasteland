@@ -476,11 +476,24 @@ namespace WildWasteland.Modules.Patrols
             t.SpawnLoot = new Dictionary<string, int>();
             for (int i = 0; i < record.lootNames.Length && i < record.lootCounts.Length; i++) t.SpawnLoot[record.lootNames[i]] = record.lootCounts[i];
             t.SpawnCargoKey = record.cargoKey;
+            if (t.Trailer != null && record.trailerLootNames != null && record.trailerLootCounts != null)
+            {
+                t.Trailer.SpawnLoot = new Dictionary<string, int>();
+                for (int i = 0; i < record.trailerLootNames.Length && i < record.trailerLootCounts.Length; i++) t.Trailer.SpawnLoot[record.trailerLootNames[i]] = record.trailerLootCounts[i];
+            }
             t.RestoreCrewAppearance = record.crew != null;
             if (record.crew != null) { t.Driver = record.crew.driverPresent ? record.crew.driverPrefab : ""; t.Passenger = record.crew.passengerPresent ? record.crew.passengerPrefab : ""; }
             if (record.turrets != null)
                 for (int i = 0; i < record.turrets.Length; i++)
                 { if (i < 3) t.Turrets[i] = record.turrets[i]; else if (t.Trailer != null && i < 7) t.Trailer.Turrets[i - 3] = record.turrets[i]; }
+            if (record.crew != null && record.crew.riders != null)
+                for (int i = 0; i < record.crew.riders.Length && i < 7; i++)
+                {
+                    var rider = record.crew.riders[i]; var platform = i < 3 ? t : t.Trailer; if (platform == null) continue;
+                    int slot = i < 3 ? i : i - 3;
+                    platform.Turrets[slot] = rider != null ? rider.prefab : "";
+                    if (rider != null) { platform.TurretPos[slot] = rider.position; platform.TurretStanding[slot] = rider.standing; }
+                }
             return t;
         }
 
@@ -570,7 +583,7 @@ namespace WildWasteland.Modules.Patrols
             Destroy(car.GetComponent<TrafficAgent>());
         }
 
-        internal static void BindRestored(PatrolMarker marker)
+        internal static void BindRestored(PatrolMarker marker, bool legacyState = true)
         {
             var journey = Find(marker.TrafficId); if (journey == null || _instance == null) return;
             if (marker.TrafficSlot < 0 || marker.TrafficSlot >= journey.vehicles.Length) return;
@@ -579,7 +592,7 @@ namespace WildWasteland.Modules.Patrols
             live.Cars[marker.TrafficSlot] = marker.gameObject; Attach(marker.gameObject, journey, marker.TrafficSlot);
             var record = journey.vehicles[marker.TrafficSlot];
             var template = Thaw(record);
-            if (template != null && record.turrets != null)
+            if (legacyState && template != null && record.turrets != null)
             {
                 for (int i = 0; i < 7 && i < record.turrets.Length; i++)
                 {
@@ -587,7 +600,7 @@ namespace WildWasteland.Modules.Patrols
                     var vehicleTemplate = i < 3 ? template : template.Trailer;
                     if (vehicleTemplate == null) continue;
                     Rider.Seat(marker.gameObject, marker, i, record.turrets[i], vehicleTemplate.TurretPos[i < 3 ? i : i - 3],
-                        i < 3 ? null : TrailerSupport.Attached(marker.gameObject),vehicleTemplate.TurretStanding[i<3?i:i-3]);
+                        i < 3 ? null : TrailerSupport.Attached(marker.gameObject),vehicleTemplate.TurretStanding[i<3?i:i-3], false);
                 }
                 ApplyState(marker.gameObject, record);
             }

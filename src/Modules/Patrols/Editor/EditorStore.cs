@@ -42,7 +42,7 @@ namespace WildWasteland.Modules.Patrols
                 File.WriteAllText(Path.Combine(Root,".merchant-traffic-v1"),"1");
             }
         }
-        internal static SpawnGroup CoyoteGroup()=>new SpawnGroup{Id="coyote-patrol",Name="Coyote patrol",Faction="Coyotes",Chance=10,Templates=new List<string>{"Coyote_PipeRat","Coyote_PipeRat"}};
+        internal static SpawnGroup CoyoteGroup()=>new SpawnGroup{Id="coyote-patrol",Name="Coyote patrol",Faction="Coyotes",Chance=10,Templates=new List<string>{"Coyote_PipeRat","Coyote_PipeRat","Coyote_Bike"}};
 
         internal static void Save() { AtomicWrite(StatePath, Data.ToJson()); }
         internal static void AtomicWrite(string path, string text)

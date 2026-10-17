@@ -15,7 +15,7 @@ namespace WildWasteland.Modules.CleanHUD
     public sealed class CleanHudModule : ModuleBase, IVehicleStatusDisplay, ICompassMarkers
     {
         internal const string GUID = "com.denis.apocalypter.cleanhud";
-        internal static ConfigEntry<bool> Enabled, ShowNeeds, ShowHealthNumbers, ShowInsanity, MenuEnabled, EnableCheats;
+        internal static ConfigEntry<bool> Enabled, ShowNeeds, ShowHealthNumbers, ShowInsanity, MenuEnabled, CleanFont, EnableCheats;
         internal static ConfigEntry<float> Scale;
         internal static ConfigEntry<bool> ShowConvoys, ShowLocations;
         internal static ConfigEntry<bool> AmbiguousPatrols, AmbiguousLocations;
@@ -78,6 +78,8 @@ namespace WildWasteland.Modules.CleanHUD
             cfg.Migrate(FogOpacity, "local.immersivemap.cfg", "Fog", "FogOpacity");
             BinocularZoom = cfg.Player("Map", "BinocularZoom", 1f, "Remembered additional binocular magnification. Scroll while binoculars are raised to change it from 1x to 2x.", new AcceptableValueRange<float>(1f, 2f));
             MenuEnabled = Bind(cfg, "Menu", "Enabled", true, "Replace the title and pause menus with CleanHUD's menus.");
+            CleanFont = cfg.Player("Menu", "CleanFont", false, "Use CleanHUD's forcedSquare font instead of the game's Helveticrap font. Applies to CleanHUD and its settings text.");
+            CleanFont.SettingChanged += (sender, args) => GlyphText.RefreshFont();
             AccentTheme.Setting = cfg.Player("Menu", "Accent", "Yellow", "CleanHUD text and border accent; also selectable at the bottom of the title and pause menus.", new AcceptableValueList<string>(AccentTheme.Names));
             EnableCheats = Bind(cfg, "Menu", "EnableCheats", false, "Add the game's cheat controls to the menu settings.");
             bool saved = Legacy.Get(cfg.Main.ConfigFilePath, cfg.Section("HUD"), "Scale") != null;

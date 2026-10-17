@@ -306,7 +306,7 @@
       "chance": 10,
       "uniformCargo": false,
       "templates": [
-        "Coyote_Trader"
+        "Coyote_Bike"
       ],
       "allowedCargo": [],
       "merchantTypes": []
@@ -321,7 +321,8 @@
       "uniformCargo": false,
       "templates": [
         "Coyote_PipeRat",
-        "Coyote_PipeRat"
+        "Coyote_PipeRat",
+        "Coyote_Bike"
       ],
       "allowedCargo": [],
       "merchantTypes": []

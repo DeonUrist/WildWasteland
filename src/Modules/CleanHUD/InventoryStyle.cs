@@ -40,6 +40,7 @@ namespace WildWasteland.Modules.CleanHUD
         private static int _openedFrame;
         private static InsaneSystems.InputManager.KeyAction _key;
         private static GlyphText _hint;
+        private static Slot _pressed;
         private static KeyCode _shownKey;
 
         internal static void Tick()
@@ -78,6 +79,7 @@ namespace WildWasteland.Modules.CleanHUD
                 _raycasterOn = _raycaster.enabled; _raycaster.enabled = true;
                 _view.gameObject.SetActive(true);
                 if (Core.Log.Verbose) Core.Log.Info("[CleanHUD] Inventory opened: native data, F3 modal input");
+                if (Core.Log.Verbose && ApocasetterBridge.InputBlocked) Core.Log.Info("[CleanHUD] Inventory: equipment pointer owns hover/click while Apocasetter blocks native UI");
             }
             Session.Maintain(); Menu.BlockCancelFrame = Time.frameCount + 2;
             if (Application.isFocused && Time.frameCount > _openedFrame && (Pressed(_key != null ? _key.Key : KeyCode.Tab)
@@ -86,9 +88,32 @@ namespace WildWasteland.Modules.CleanHUD
             var localScale = Vector3.one * Mathf.Max(.1f, scale); if (_view.localScale != localScale) _view.localScale = localScale;
             for (int i = 0; i < Native.Count; i++) if (Native[i] != null && Native[i].canvasRenderer.GetAlpha() != 0) Native[i].canvasRenderer.SetAlpha(0);
             _hidden = true; Refresh();
+            EquipmentPointer();
             if (_events != null && _events.currentSelectedGameObject != null && _events.currentSelectedGameObject.transform.IsChildOf(_view)) _events.SetSelectedGameObject(null);
         }
         private static bool Pressed(KeyCode key) { return key != KeyCode.None && Input.GetKeyDown(key); }
+        private static void EquipmentPointer()
+        {
+            if (!ApocasetterBridge.InputBlocked) { _pressed = null; return; }
+            // EditorSession blocks native EventSystem.Update and Button.Press as well as gameplay input.
+            // Dispatch only this modal's equipped-item controls, retaining normal press/release behavior.
+            var camera = _canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : _canvas.worldCamera;
+            Slot hovered = null;
+            foreach (var slot in Slots)
+            {
+                bool over = Application.isFocused && slot.Button.IsInteractable()
+                    && RectTransformUtility.RectangleContainsScreenPoint((RectTransform)slot.Button.transform, Input.mousePosition, camera);
+                slot.Button.OnVisual(over);
+                if (over) hovered = slot;
+            }
+            if (!Application.isFocused) { _pressed = null; return; }
+            if (Input.GetMouseButtonDown(0)) _pressed = hovered;
+            if (Input.GetMouseButtonUp(0))
+            {
+                var pressed = _pressed; _pressed = null;
+                if (pressed != null && ReferenceEquals(pressed, hovered)) pressed.Button.onClick.Invoke();
+            }
+        }
         private static RectTransform Rect(Transform parent, string name, float x, float y, float w, float h)
         { return DialogueWidgets.Rect(parent, name, x, y, w, h); }
         private static GlyphText Label(Transform parent, string text, float x, float y, float w, float h, float size, Color color, TextAnchor align = TextAnchor.MiddleLeft)
@@ -156,6 +181,7 @@ namespace WildWasteland.Modules.CleanHUD
             {
                 slot.State = FsmUtil.Find(quick.gameObject, "SlotEmptyFull"); slot.Take = FsmUtil.Find(quick.gameObject, "TakeItem");
                 if (slot.State != null) slot.Item = slot.State.FsmVariables.FindFsmGameObject("item");
+                if (slot.Take != null && slotName == "Binocular_Item") slot.CanDrop = true;
                 if (slot.Take != null) foreach (var state in slot.Take.FsmStates) if (state.Name == "dropCurrent") slot.CanDrop = true;
             }
             var hit = Rect(root, "drop", 0, 40, 208, 162).gameObject.AddAccent<Image>(); hit.color = Color.clear;
@@ -229,10 +255,28 @@ namespace WildWasteland.Modules.CleanHUD
         {
             if (!Session.Open || !Application.isFocused || !slot.CanDrop || slot.Take == null || slot.State == null || slot.Item == null) return;
             var item = slot.Item.Value; if (item == null || item.transform.parent != slot.State.transform) return;
-            // Native dropCurrent detaches, moves to ItemDrop and activates Visibility. Cancel its next-frame takeWeapon continuation.
-            slot.Take.Fsm.SetState("dropCurrent"); slot.Take.Fsm.SetState("off");
+            bool binocular = slot.State.gameObject.name == "Binocular_Item";
+            if (binocular)
+            {
+                // Binocular TakeItem has no dropCurrent. Use the same detach/ItemDrop/Visibility recipe.
+                var camera = slot.State.transform.parent.parent;
+                var point = camera.Find("ItemDrop"); var visibility = FsmUtil.Find(item, "Visibility");
+                if (point == null || visibility == null) { CleanHudModule.Warn("Inventory: binocular drop needs native ItemDrop and Visibility"); return; }
+                if (slot.State.ActiveStateName == "use")
+                {
+                    var anim = camera.Find("ItemAnim/Binocular Anim");
+                    var animation = anim != null ? FsmUtil.Find(anim.gameObject, "Animation") : null;
+                    if (animation != null) animation.SendEvent("Deactivate");
+                }
+                item.transform.SetParent(null, true); item.transform.position = point.position;
+                visibility.SendEvent("Activate"); slot.Take.Fsm.SetState("off");
+            }
+            else
+            {
+                // Cancel dropCurrent's next-frame takeWeapon continuation.
+                slot.Take.Fsm.SetState("dropCurrent"); slot.Take.Fsm.SetState("off");
+            }
             if (item.transform.parent == slot.State.transform) { CleanHudModule.Warn("Inventory: native equipment drop did not detach the item"); return; }
-            if (slot.State.gameObject.name == "Binocular_Item" && slot.State.ActiveStateName == "use") slot.State.Fsm.SetState("off");
             slot.State.Fsm.SetState("empty");
             var capacity = FsmUtil.Find(GameRefs.GameManager, "ArmorBackpack");
             if (slot.State.gameObject.name == "Armor_Item" && capacity != null)
@@ -246,10 +290,11 @@ namespace WildWasteland.Modules.CleanHUD
             if (slot.State.gameObject.name == "Flashlight_Item")
             { var camera = GameRefs.PlayerCameraHolder != null ? GameRefs.PlayerCameraHolder.transform.Find("PlayerCamera") : null; var light = camera != null ? FsmUtil.Find(camera.gameObject, "Flashlight") : null; if (light != null) { light.Fsm.SetState("off"); light.Fsm.SetState("noFlashlight"); } }
             Refresh();
-            if (Core.Log.Verbose) Core.Log.Info("[CleanHUD] Inventory: dropped " + item.name + " through native TakeItem");
+            if (Core.Log.Verbose) Core.Log.Info("[CleanHUD] Inventory: dropped " + item.name + (binocular ? " through native Visibility" : " through native TakeItem"));
         }
         private static void Close(bool native)
         {
+            _pressed = null;
             if (native && _sheet != null && _sheet.ActiveStateName == "on") _sheet.SendEvent("back");
             if (_view != null && _view.gameObject.activeSelf) _view.gameObject.SetActive(false);
             if (_hidden)

@@ -12,7 +12,7 @@ namespace WildWasteland.Modules.Patrols
     // Runner on the hidden plugin object: the car builder (template spawner + convoy), the in-game check, the persistence tick.
     internal class Patrol : MonoBehaviour
     {
-        internal static void ResetForScene() { BuildQueue.Reset(); Prefabs.Invalidate(); Register.Invalidate(); MeleeWheels.Reset(); DayLight.Reset(); _lightState = -1; SceneGen++; WorldTraffic.ResetForScene(); }
+        internal static void ResetForScene() { BuildQueue.Reset(); VehicleBuildCache.Reset(); PatrolLoadPreparation.Reset(); Prefabs.Invalidate(); Register.Invalidate(); MeleeWheels.Reset(); DayLight.Reset(); _lightState = -1; SceneGen++; WorldTraffic.ResetForScene(); }
 
         // bumped on every scene load: a build or a convoy that waited through a load does not continue in the new world
         internal static int SceneGen;
@@ -178,84 +178,38 @@ namespace WildWasteland.Modules.Patrols
                     }
                 }
 
-                car = UnityEngine.Object.Instantiate(body, pos, rot);
+                var packed = VehicleBuildCache.Require(tpl, tpl.RollBumper(), false);
+                var packedTrailer = tpl.Trailer != null ? VehicleBuildCache.Require(tpl.Trailer, "", true) : null;
+                while (!packed.Ready || (packedTrailer != null && !packedTrailer.Ready))
+                {
+                    if (gen != SceneGen || packed.Failed || (packedTrailer != null && packedTrailer.Failed)) yield break;
+                    yield return null;
+                }
+                yield return WaitForSave(gen, saveOk);
+                if (!saveOk[0]) yield break;
+                // An origin jump can occur while a custom build warms.
+                if (at.HasValue) pos = TrafficSpace.Scene(trafficSpawn);
+                car = VehicleBuildCache.Spawn(packed, pos, rot);
                 if(!menu&&tpl.Origin!="POI")EncounterCar.Attach(car,eventId,tpl.ConvoyMember,true);
                 car.SetActive(true);
                 Paint.Apply(car, body.name,tpl.Faction);
                 // The car, its parts and its cargo go into the game's save lists only once the car is complete (Register.Commit below):
                 // a save during the build (autosave, the player) does not store a half-built car
-                Register.Defer(car);
-                Register.Name(car, body.name); Register.Add(car, true);
+                // Spawn has already named/deferred the packed frame and each fitted part before activation.
                 PatrolsModule.Verbose("Car frame " + car.name + " at " + pos);
 
                 yield return null;   // let the frame's FSMs start (hinges, getEngine, START ...)
                 if (car == null) yield break;
-
-                int parts = 0;
-                if (tpl.Parts != null)
-                {
-                    // a JSON template: its exact part list, hinge by hinge (parts on parts too), a few per frame
-                    var placed = new GameObject[tpl.Parts.Length];
-                    for (int i = 0; i < tpl.Parts.Length; i++)
-                    {
-                        placed[i] = AttachTemplatePart(car, tpl, i, placed);
-                        if (placed[i] != null) parts++;
-                        yield return BuildQueue.Continue; if (car == null) yield break;
-                    }
-                    var bumperHinge = FindChild(car.transform, "hinge_bumper_front");
-                    if (bumperHinge != null && !HasPart(bumperHinge))
-                    {
-                        string bumper = tpl.RollBumper();
-                        if (bumper.Length > 0) { PatrolsModule.Verbose("Front bumper roll: " + bumper); parts += AttachAll(car, new[] { "hinge_bumper_front" }, bumper, "bumper"); }
-                    }
-                }
-                else
-                {
-                    parts += AttachAll(car, new[] { "hinge_wheel_FL" }, tpl.Wheel, "wheel");
-                    yield return BuildQueue.Continue; if (car == null) yield break;
-                    parts += AttachAll(car, new[] { "hinge_wheel_FR" }, tpl.Wheel, "wheel");
-                    yield return null; if (car == null) yield break;
-                    parts += AttachAll(car, new[] { "hinge_wheel_RL" }, tpl.RearWheel.Length > 0 ? tpl.RearWheel : tpl.Wheel, "wheel");
-                    yield return BuildQueue.Continue; if (car == null) yield break;
-                    parts += AttachAll(car, new[] { "hinge_wheel_RR" }, tpl.RearWheel.Length > 0 ? tpl.RearWheel : tpl.Wheel, "wheel");
-                    yield return null;
-                    if (car == null) yield break;
-                    string bumper = tpl.RollBumper();
-                    if (bumper.Length > 0) { PatrolsModule.Verbose("Front bumper roll: " + bumper); parts += AttachAll(car, new[] { "hinge_bumper_front" }, bumper, "bumper"); }
-                    yield return BuildQueue.Continue; if (car == null) yield break;
-                    parts += AttachAll(car, new[] { "hinge_engine" }, tpl.Engine, "engine");
-                    yield return null; if (car == null) yield break;
-                    parts += AttachAll(car, new[] { "hinge_radiator" }, tpl.Radiator, "radiator");
-                    yield return BuildQueue.Continue; if (car == null) yield break;
-                    parts += AttachAll(car, new[] { "hinge_steeringwheel" }, tpl.SteeringWheel, "steeringwheel");
-                    yield return BuildQueue.Continue; if (car == null) yield break;
-                    parts += AttachAll(car, new[] { "hinge_exhaust" }, tpl.Exhaust, "exhaust");
-                    yield return null; if (car == null) yield break;
-                    parts += AttachAll(car, new[] { "hinge_seat_driver" }, tpl.Seat, "seat");
-                    yield return BuildQueue.Continue; if (car == null) yield break;
-                    parts += AttachAll(car, new[] { "hinge_seat_passenger" }, tpl.PassengerSeat, "seat");
-                }
-                parts += AttachMissingHeadlights(car);
-                PatrolsModule.Verbose(parts + " parts attached");
 
                 if (tpl.Trailer != null)
                 {
                     var hitch = FindChild(car.transform, "hitch");
                     var attacher = FindChild(trailerBody.transform, "attacher");
                     var trailerPos = hitch.position - car.transform.rotation * trailerBody.transform.InverseTransformPoint(attacher.position);
-                    trailer = UnityEngine.Object.Instantiate(trailerBody, trailerPos, car.transform.rotation);
-                    Register.Defer(trailer);
-                    trailer.SetActive(true);
-                    Register.Name(trailer, trailerBody.name); Register.Add(trailer, true);
+                    trailer = VehicleBuildCache.Spawn(packedTrailer, trailerPos, car.transform.rotation);
                     TrailerSupport.Connect(car, trailer); // before the first frame: native TrailerLoad must not add a second joint
                     yield return null;
                     if (car == null || trailer == null) yield break;
-                    var placed = new GameObject[tpl.Trailer.Parts.Length];
-                    for (int i = 0; i < placed.Length; i++)
-                    {
-                        placed[i] = AttachTemplatePart(trailer, tpl.Trailer, i, placed);
-                        yield return BuildQueue.Continue; if (car == null || trailer == null) yield break;
-                    }
                 }
 
                 if (tpl.FillFuel)
@@ -282,7 +236,7 @@ namespace WildWasteland.Modules.Patrols
                     yield return Cargo.Load(car, rolled, tpl.IsTruck, cargo);
                     if (car == null) yield break;
                 }
-                if (tpl.Origin == "POI" && trailer != null && tpl.Trailer.SpawnLoot != null)
+                if (trailer != null && tpl.Trailer.SpawnLoot != null)
                 {
                     trailerCargo = new List<GameObject>();
                     yield return Cargo.Load(trailer, tpl.Trailer.SpawnLoot, true, trailerCargo);
@@ -368,10 +322,35 @@ namespace WildWasteland.Modules.Patrols
             }
         }
 
+        // Build only dormant structure. No registration, rolled state, occupants or native Awake/Start in the cache.
+        internal static IEnumerator PackStructure(GameObject car, CarTemplate tpl, string bumper, bool trailer)
+        {
+            if (tpl.Parts != null)
+            {
+                var placed = new GameObject[tpl.Parts.Length];
+                for (int i = 0; i < placed.Length; i++)
+                { placed[i] = AttachTemplatePart(car, tpl, i, placed, true); yield return null; }
+            }
+            else
+            {
+                string rear = tpl.RearWheel.Length > 0 ? tpl.RearWheel : tpl.Wheel;
+                string[] hinges = { "hinge_wheel_FL", "hinge_wheel_FR", "hinge_wheel_RL", "hinge_wheel_RR", "hinge_engine", "hinge_radiator", "hinge_steeringwheel", "hinge_exhaust", "hinge_seat_driver", "hinge_seat_passenger" };
+                string[] parts = { tpl.Wheel, tpl.Wheel, rear, rear, tpl.Engine, tpl.Radiator, tpl.SteeringWheel, tpl.Exhaust, tpl.Seat, tpl.PassengerSeat };
+                string[] kinds = { "wheel", "wheel", "wheel", "wheel", "engine", "radiator", "steeringwheel", "exhaust", "seat", "seat" };
+                for (int i = 0; i < hinges.Length; i++)
+                { AttachAll(car, new[] { hinges[i] }, parts[i], kinds[i], true); yield return null; }
+            }
+            if (trailer) yield break;
+            var front = FindChild(car.transform, "hinge_bumper_front");
+            if (front != null && !HasPart(front) && bumper.Length > 0) AttachAll(car, new[] { "hinge_bumper_front" }, bumper, "bumper", true);
+            yield return null;
+            AttachMissingHeadlights(car, true);
+        }
+
         // Every raider car has its headlights: each empty hinge_headlight on the frame (two same-named ones on the Junker, the one on the
         // Halfbreed's fork) gets the game's basic "Headlight" unless the template already fitted one there.
         private const string DefaultHeadlight = "Headlight";
-        private static int AttachMissingHeadlights(GameObject car)
+        private static int AttachMissingHeadlights(GameObject car, bool precache = false)
         {
             var empty = new List<Transform>();
             foreach (var t in car.GetComponentsInChildren<Transform>(true))
@@ -385,7 +364,7 @@ namespace WildWasteland.Modules.Patrols
             if (empty.Count == 0) return 0;
             var prefab = Prefabs.Find(DefaultHeadlight, "headlight");
             if (prefab == null) { Core.Log.Warn("[Patrols] " + "Headlight prefab not found: " + DefaultHeadlight); return 0; }
-            foreach (var h in empty) Attach(prefab, h);
+            foreach (var h in empty) Attach(prefab, h, precache);
             PatrolsModule.Verbose("Headlights: " + empty.Count + " fitted on " + car.name);
             return empty.Count;
         }
@@ -471,18 +450,20 @@ namespace WildWasteland.Modules.Patrols
 
         // The game's own ignition: START [Start] FSM Ignition -> Start (engine sound, RPM, IsRunning), NWH StartEngine() as a fallback.
         // Used by the build and when a saved car is revived after a load.
-        internal static IEnumerator StartUp(GameObject car)
+        internal static IEnumerator StartUp(GameObject car, bool loading = false)
         {
             if (Explode.IsWreck(car) || car.GetComponent<Crew>()?.MerchantWaiting==true) yield break;
-            if (Core.Services.VehicleIgnition != null && Core.Services.VehicleIgnition.TryStart(car)) { yield return new WaitForSeconds(1.5f); yield break; }
+            if (Core.Services.VehicleIgnition != null && Core.Services.VehicleIgnition.TryStart(car)) { if (!loading) yield return new WaitForSeconds(1.5f); yield break; }
             var start = FindFsm(car, "START", "Start");
             if (start == null) { Core.Log.Warn("[Patrols] " + "No START/Start FSM on " + (car != null ? car.name : "?")); yield break; }
+            if (loading && !start.enabled) yield break; // an optional ignition provider may still be discovering this loaded car
             PatrolsModule.Verbose("START state before: " + start.ActiveStateName);
             start.Fsm.SetState("Ignition");
             yield return null;
             yield return null;
             if (Explode.IsWreck(car) || car.GetComponent<Crew>()?.MerchantWaiting==true) yield break;   // blew up mid-start: no more ignition
             start.Fsm.SetState("Start");
+            if (loading) { Nwh.StartEngine(car); yield break; } // native physics will spin it up at handoff; no scaled-time wait while loading
             yield return new WaitForSeconds(1.5f);
             if (Explode.IsWreck(car) || car.GetComponent<Crew>()?.MerchantWaiting==true) yield break;
             bool running = Nwh.EngineRunning(car);
@@ -496,7 +477,7 @@ namespace WildWasteland.Modules.Patrols
             }
         }
 
-        private static int AttachAll(GameObject car, string[] hingeNames, string partQuery, string kind)
+        private static int AttachAll(GameObject car, string[] hingeNames, string partQuery, string kind, bool precache = false)
         {
             if (string.IsNullOrEmpty(partQuery)) return 0;
             // bumpers carry no ID FSM, so they are not in the item catalog: look them up as plain asset roots
@@ -507,7 +488,7 @@ namespace WildWasteland.Modules.Patrols
             {
                 var hinge = FindChild(car.transform, hn);
                 if (hinge == null) { Core.Log.Warn("[Patrols] " + "Hinge " + hn + " not found on " + car.name); continue; }
-                Attach(prefab, hinge);
+                Attach(prefab, hinge, precache);
                 n++;
             }
             return n;
@@ -516,9 +497,9 @@ namespace WildWasteland.Modules.Patrols
         // The game's vehPart_Attach "Attach" state: destroy the item's Rigidbody, tag vehPart, layer 8,
         // parent to the hinge with local position/rotation reset. Done before the item's own FSMs Start,
         // so CheckTag/LockPhysics see an already-attached part (same as a part loaded from a save).
-        private static GameObject Attach(GameObject prefab, Transform hinge)
+        private static GameObject Attach(GameObject prefab, Transform hinge, bool precache = false)
         {
-            var part = UnityEngine.Object.Instantiate(prefab, hinge.position, hinge.rotation);
+            var part = precache ? VehicleBuildCache.ClonePart(prefab, hinge) : UnityEngine.Object.Instantiate(prefab, hinge.position, hinge.rotation);
             part.SetActive(true);
             var rb = part.GetComponent<Rigidbody>();
             if (rb != null) UnityEngine.Object.DestroyImmediate(rb);
@@ -531,7 +512,8 @@ namespace WildWasteland.Modules.Patrols
             part.transform.localPosition = Vector3.zero;
             part.transform.localRotation = Quaternion.identity;
             HingeOffset(hinge, part.transform);
-            Register.Name(part, prefab.name); Register.Add(part, false);
+            if (precache) { part.name = prefab.name; VehicleBuildCache.Record(part, prefab.name); }
+            else { Register.Name(part, prefab.name); Register.Add(part, false); }
             PatrolsModule.Verbose("  " + part.name + " -> " + hinge.name);
             return part;
         }
@@ -539,7 +521,7 @@ namespace WildWasteland.Modules.Patrols
         // One part of a JSON template: the hinge is found by its path under the frame or under the part it sits on (by name
         // anywhere below as a fallback); a hinge that already holds a part (the frame came with one) keeps it, and that part
         // stands in as the parent for the parts listed on it.
-        internal static GameObject AttachTemplatePart(GameObject car, CarTemplate tpl, int index, GameObject[] placed)
+        internal static GameObject AttachTemplatePart(GameObject car, CarTemplate tpl, int index, GameObject[] placed, bool precache = false)
         {
             var p = tpl.Parts[index];
             if (string.IsNullOrEmpty(p.prefab)) return null;
@@ -567,7 +549,7 @@ namespace WildWasteland.Modules.Patrols
             if (existing != null) { PatrolsModule.Verbose("  " + hinge.name + " already holds " + existing.name + ", " + p.prefab + " not added"); return existing; }
             if (p.hingePos != null && p.hingePos.Length == 3) hinge.localPosition = new Vector3(p.hingePos[0], p.hingePos[1], p.hingePos[2]);
             if (p.hingeRot != null && p.hingeRot.Length == 3) hinge.localEulerAngles = new Vector3(p.hingeRot[0], p.hingeRot[1], p.hingeRot[2]);
-            var part = Attach(prefab, hinge);
+            var part = Attach(prefab, hinge, precache);
             if (p.pos != null && p.pos.Length == 3) part.transform.localPosition = new Vector3(p.pos[0], p.pos[1], p.pos[2]);
             if (p.rot != null && p.rot.Length == 3) part.transform.localEulerAngles = new Vector3(p.rot[0], p.rot[1], p.rot[2]);
             return part;
@@ -833,7 +815,7 @@ namespace WildWasteland.Modules.Patrols
                 var pose = Pose.Apply(go, anchor, prefab.name);
                 if (!passenger) pose.SetShooting(false);   // a driver sits with its hands on the wheel; PassengerGuard raises the gun only while it fires
             }
-            if (health >= 0f) SetHealth(go, health);
+            if (health >= 0f) { SetHealth(go, health); go.AddComponent<LateHealth>().Value = health; }
             PatrolsModule.Verbose(role + " " + go.name + " on " + anchor.name + " at " + pos);
             return go;
         }

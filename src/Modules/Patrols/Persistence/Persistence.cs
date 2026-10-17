@@ -48,6 +48,8 @@ namespace WildWasteland.Modules.Patrols
         public bool setupOnly;
         public string battleId="";public int battleSide,battleSlot=-1;
         public string merchantJson="";
+        public PatrolRiderData[] riders; // optional tagged extension; the schema-14 payload remains readable by older builds
+        public string trailerName; // null = legacy; empty = deliberately detached
     }
 
     internal sealed class PatrolMarker : MonoBehaviour
@@ -168,7 +170,7 @@ namespace WildWasteland.Modules.Patrols
                 faction=Faction,explodeChance=ExplodeChance,driverDied=DriverDied,driverBailed=DriverBailed,explodeRolled=ExplodeRolled,explodeSelected=ExplodeSelected,
                 battleId=GetComponent<BattleCar>()?.Battle??"",battleSide=GetComponent<BattleCar>()?.Side??0,battleSlot=GetComponent<BattleCar>()?.Slot??-1,
                 merchantJson=GetComponent<MerchantHost>()?.Snapshot()??"",
-                setupOnly=SetupOnly,
+                setupOnly=SetupOnly, riders=PatrolCrewDelta.Capture(this), trailerName=TrailerSupport.Attached(gameObject)?.name??"",
                 ramTargets = _rams.ToString(),
                 positionX = p.x, positionY = p.y, positionZ = p.z,
                 driverPrefab = CrewAppearance.Identity(_driver, _driverPrefab),
@@ -196,7 +198,9 @@ namespace WildWasteland.Modules.Patrols
         private static string _lastState, _loadSlot;
         private static float _nextScan;
         private static bool _restoreRunning;
+        private static Coroutine _restore;
         internal static bool Restoring { get { return _restoreRunning; } }
+        internal static float LoadFraction { get; private set; }
         // 1.9.0: the same data also goes INTO the game's save file (Easy Save key EsKey, base64 of the sidecar bytes), so it travels with
         // the save (Steam Cloud, copied saves). Written ~1 s after the save returns to isPlay, to the ES3 cache and the file (the game stores
         // its cache to disk at the end of a save and would wipe a key written to the file mid-save). The BepInEx sidecar stays as a fallback.
@@ -226,7 +230,7 @@ namespace WildWasteland.Modules.Patrols
         }
 
         internal static void Install() { if (!_quitHooked) { _quitHooked = true; Application.quitting += FlushPending; } }
-        internal static void Uninstall() { FlushPending(); if (_quitHooked) { _quitHooked = false; Application.quitting -= FlushPending; } }
+        internal static void Uninstall() { ResetForScene(); if (_quitHooked) { _quitHooked = false; Application.quitting -= FlushPending; } }
 
         // WW: Core.SaveBus.StateChanged (the only SaveLoadGame watcher); same transitions as the old per-frame poll
         internal static void OnStateChanged(string previous, string state)
@@ -234,6 +238,7 @@ namespace WildWasteland.Modules.Patrols
             RefreshRefs();
             if (!Alive(_saveLoad) || !_saveLoad.Fsm.Initialized) return;
             state = state ?? "";
+            PatrolLoadPreparation.StateChanged(state, _saveLoad);
             if (state != _lastState)
             {
                 var runner = Runner;
@@ -241,11 +246,11 @@ namespace WildWasteland.Modules.Patrols
                 if (state == "LoadGame") _loadSlot = CurrentSaveSlot();
                 if (state == "LoadGame" || state == "setSeed") WorldTraffic.ResetForScene();
                 if (state == "isPlay" && _pendingData != null) _flushAt = Time.unscaledTime + 1f;
-                if (state == "isPlay" && !string.IsNullOrEmpty(_loadSlot) && !_restoreRunning)
+                if ((state == "loaded" || state == "Wait for Terrain Gen" || state == "isPlay") && !string.IsNullOrEmpty(_loadSlot) && !_restoreRunning)
                 {
                     string slot = _loadSlot;
                     _loadSlot = null;
-                    if (runner != null) runner.StartCoroutine(RestoreWhenReady(slot, CurrentSeed()));
+                    if (runner != null) _restore = runner.StartCoroutine(RestoreTracked(slot, CurrentSeed()));
                 }
                 _lastState = state;
             }
@@ -254,8 +259,11 @@ namespace WildWasteland.Modules.Patrols
         internal static void ResetForScene()
         {
             FlushPending();   // saved and quit to the menu within the second: write it now
+            if (_restore != null && Runner != null) Runner.StopCoroutine(_restore);
+            _restore = null;
             _saveLoad = null; _newGoSave = null; _lastState = null; _loadSlot = null;
             _restoreRunning = false; _nextScan = 0f;
+            LoadFraction = 0f;
         }
 
         private static string CurrentSaveSlot()
@@ -303,6 +311,14 @@ namespace WildWasteland.Modules.Patrols
             catch (Exception e) { Core.Log.Error("[Patrols] " + "Persistence save failed: " + e); }
         }
 
+        private static IEnumerator RestoreTracked(string slot, int seed)
+        {
+            _restoreRunning = true;
+            LoadFraction = 0f;
+            try { yield return RestoreWhenReady(slot, seed); }
+            finally { _restoreRunning = false; _restore = null; LoadFraction = 1f; }
+        }
+
         private static IEnumerator RestoreWhenReady(string slot, int seed)
         {
             _restoreRunning = true;
@@ -345,13 +361,28 @@ namespace WildWasteland.Modules.Patrols
                         Core.Log.Error("[Patrols] " + "Persistence: failed to restore " + pending[i].carName + ": " + e);
                         pending.RemoveAt(i);
                     }
+                    LoadFraction = .5f * (savedCars.Length - pending.Count) / Math.Max(1, savedCars.Length);
+                    yield return null; // one car's native crew setup per frame during loading
                 }
                 if (pending.Count > 0) yield return new WaitForSecondsRealtime(0.5f);
             }
             PatrolsModule.Verbose("Persistence: restored " + (savedCars.Length - pending.Count) + "/" + savedCars.Length
                 + " patrol car(s) from " + slot);
             foreach (var missing in pending) { WorldTraffic.MissingRestored(missing); Core.Log.Warn("[Patrols] " + "Persistence: saved patrol car not found: " + missing.carName); }
+            int prepared = 0;
+            foreach (var kv in restored)
+            {
+                LoadFraction = .5f + .5f * ++prepared / Math.Max(1, restored.Count);
+                if (kv.Key == null) continue;
+                PatrolCrewDelta.RestoreHitch(kv.Key, kv.Value, roots);
+                PatrolCrewDelta.Restore(kv.Key, kv.Key.GetComponent<PatrolMarker>(), kv.Value.riders);
+                if (kv.Value.playerEntered) continue;
+                var crew = kv.Key.GetComponent<Crew>();
+                if (crew != null) yield return crew.PrepareLoaded();
+            }
             _restoreRunning = false;
+            LoadFraction = 1f;
+            Core.Log.Always("[Patrols] Saved patrol preparation complete: " + restored.Count + "/" + savedCars.Length + " native vehicle(s); no parts or cargo rebuilt.");
             // a second, cheap pass a few seconds later: anything the game's own load applied after us (materials) is fixed again
             yield return new WaitForSecondsRealtime(3f);
             foreach (var kv in restored)
@@ -422,14 +453,13 @@ namespace WildWasteland.Modules.Patrols
             mk.PlayerEntered = data.playerEntered;
             mk.SetupOnly=data.setupOnly;if(data.setupOnly){var setup=car.GetComponent<Crew>();if(setup!=null)setup.Hold=true;Nwh.StopEngine(car);Patrol.Handbrake(car,true);}
             MerchantRuntime.Restore(car,data.merchantJson);
-            WorldTraffic.BindRestored(mk);
+            WorldTraffic.BindRestored(mk, data.riders == null);
             WorldTraffic.BindBattle(mk,data);
             mk.FarSeconds = data.farSeconds;
             mk.CargoKey = data.cargoKey ?? "";
             mk.SuspensionWidth = data.suspensionWidth; mk.SuspensionHeight = data.suspensionHeight;
             if (data.suspensionWidth != 1f || data.suspensionHeight != 0f) Suspension.Apply(car, data.suspensionWidth, data.suspensionHeight, "restored");
-            var crew = car.GetComponent<Crew>();
-            if (crew != null && !data.setupOnly && (car.GetComponent<MerchantHost>()==null || car.GetComponent<MerchantHost>().Data.travelling) && phase != CrewPhase.Released && phase != CrewPhase.DeadRolling) crew.Revive();
+            // PrepareLoaded runs after every saved car is bound, before the native loading handoff.
             PatrolsModule.Verbose("Persistence: crew restored on " + car.name + " (" + phase + ")");
         }
 
@@ -537,6 +567,7 @@ namespace WildWasteland.Modules.Patrols
                 writer.Write(data.convoyCooldown);
                 WriteString(writer, data.lastGroup ?? "");
                 if (data.version >= 10) WriteString(writer, data.trafficJson ?? "");
+                PatrolCrewDelta.Write(writer, cars);
                 writer.Flush();
                 return stream.ToArray();
             }
@@ -561,6 +592,7 @@ namespace WildWasteland.Modules.Patrols
                 string lastGroup = version >= 8 ? reader.ReadString() : "";
                 string traffic = version >= 10 ? reader.ReadString() : "";
                 if (traffic.Length > 8000000) throw new InvalidDataException("World traffic save too large");
+                if (stream.Position < stream.Length) PatrolCrewDelta.Read(reader, cars);
                 if (stream.Position != stream.Length) PatrolsModule.Verbose("Persistence: raider data has trailing bytes");
                 return new PatrolSaveData { version = version, saveFile = slot, worldSeed = seed, cars = cars, convoyCooldown = cooldown, lastGroup = lastGroup, trafficJson = traffic };
             }

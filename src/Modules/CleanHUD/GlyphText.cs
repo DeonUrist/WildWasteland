@@ -7,8 +7,7 @@ using UnityEngine.UI;
 
 namespace WildWasteland.Modules.CleanHUD
 {
-    // The game's forcedSquare font baked into an atlas (Resources/font_atlas.png + font_meta.json, 96 px).
-    // The title scene does not load the game's Font asset, so the menus draw text from this atlas everywhere.
+    // Native Helveticrap by default, optional forcedSquare. Both atlases work before scene fonts are loaded.
     internal sealed class GlyphFont
     {
         internal struct G { internal float X, Y, W, H, Ox, Top, Adv; }
@@ -16,16 +15,19 @@ namespace WildWasteland.Modules.CleanHUD
         internal float Size, Ascent, Descent, AtlasW, AtlasH;
         internal readonly Dictionary<char, G> Map = new Dictionary<char, G>();
 
-        private static GlyphFont _inst;
-        internal static void Reset() { _inst = null; }
+        private static GlyphFont _game, _clean;
+        internal static void Reset() { _game = _clean = null; }
         internal static GlyphFont Get()
         {
-            if (_inst != null && _inst.Atlas != null) return _inst;
+            bool clean = CleanHudModule.CleanFont != null && CleanHudModule.CleanFont.Value;
+            var cached = clean ? _clean : _game;
+            if (cached != null && cached.Atlas != null) return cached;
+            string name = clean ? "font" : "game_font";
             var f = new GlyphFont();
-            f.Atlas = Assets.Tex("font_atlas");
+            f.Atlas = Assets.Tex(name + "_atlas");
             var asm = Assembly.GetExecutingAssembly();
             string json;
-            using (var s = asm.GetManifestResourceStream("CleanHUD.font_meta.json"))
+            using (var s = asm.GetManifestResourceStream("CleanHUD." + name + "_meta.json"))
             using (var r = new StreamReader(s)) json = r.ReadToEnd();
             var d = (Dictionary<string, object>)Json.Parse(json);
             f.Size = Json.Num(d, "size", 96); f.Ascent = Json.Num(d, "ascent", 58); f.Descent = Json.Num(d, "descent", 17);
@@ -37,7 +39,7 @@ namespace WildWasteland.Modules.CleanHUD
                 if (kv.Key.Length != 1 || a.Count < 7) continue;
                 f.Map[kv.Key[0]] = new G { X = F(a[0]), Y = F(a[1]), W = F(a[2]), H = F(a[3]), Ox = F(a[4]), Top = F(a[5]), Adv = F(a[6]) };
             }
-            _inst = f;
+            if (clean) _clean = f; else _game = f;
             return f;
         }
         private static float F(object o) { return o is double ? (float)(double)o : 0f; }
@@ -131,6 +133,10 @@ namespace WildWasteland.Modules.CleanHUD
     // Single-line text drawn from the GlyphFont atlas. Works with Shadow/Outline (they modify the mesh).
     public sealed class GlyphText : MaskableGraphic
     {
+        private static readonly HashSet<GlyphText> Live = new HashSet<GlyphText>();
+        protected override void OnEnable() { base.OnEnable(); Live.Add(this); SetAllDirty(); }
+        protected override void OnDisable() { Live.Remove(this); base.OnDisable(); }
+        internal static void RefreshFont() { foreach (var text in Live) if (text != null) text.SetAllDirty(); }
         [NonSerialized] public string Text = "";
         [NonSerialized] public float Size = 24f;
         [NonSerialized] public float Spacing = 0f;

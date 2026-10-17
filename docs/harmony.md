@@ -133,6 +133,7 @@ Shared `GetButtonDown.OnUpdate` prefix: `CancelHook.Prefix`, registered after HU
 |---|---|---|---|---|
 | `ES3ReferenceMgrBase.AddPrefab(ES3Prefab)` | postfix (observe only) | `Prefabs.AfterAddPrefab` | Patrols running and original returned true; invalidate lookup generation, no scan inside the patch | per new ES3 prefab registration |
 | `ES3ReferenceMgrBase.Awake` | postfix (observe only) | `Prefabs.AfterManagerAwake` | Patrols running; invalidate lookup generation, no scene API inside the patch | per ES3 manager initialization |
+| `Wait.OnUpdate` | prefix (hold final loading transition) | `PatrolLoadPreparation.BeforeWait` | Loading flag, Running, exact SaveLoadGame FSM reference, state `Wait for Terrain Gen`; original resumes when cache and saved patrol preparation finish | every Wait update; unrelated actions return immediately; NPC's dog patch is on the separate OnEnter method |
 | `GetDistance.OnEnter` | prefix (skip + Finish) | `PoiEncounter.BeforeCleanupDistance` | Cached actions of __GameManager__/DeleteFarAwayItems only; protected tankers/parts and undriven POI trucks take the native FINISHED path instead of distance deletion | native 10 s cleanup sweep |
 | `Explosion.ShouldApplyForce(GameObject)` | postfix | `NativeStormProtection.RadialForce.Postfix` | `__result && rigs loaded` | per explosion force query |
 | `Tornado.OnTriggerStay(Collider)` | prefix (skip) | `NativeStormProtection.Suction.Prefix` | rigs loaded | per tornado contact per physics step |

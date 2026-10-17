@@ -63,18 +63,35 @@ namespace WildWasteland.Modules.Patrols
         {
             var marker = car.GetComponent<PatrolMarker>(); if (marker == null) return;
             record.crew = marker.Snapshot();
+            // The original loot roll is only a departure seed. Once physical, remember what is actually still aboard.
+            var cargo = new Dictionary<string, int>(StringComparer.Ordinal);
+            CaptureCargo(car, cargo);
+            record.lootNames = cargo.Keys.ToArray(); record.lootCounts = record.lootNames.Select(k => cargo[k]).ToArray();
             if (record.partPaths == null) record.partPaths = Parts(car);
             var values = new List<TrafficValue>();
             CaptureValues(car, "", values);
             var trailer = TrailerSupport.Attached(car); if (trailer != null) CaptureValues(trailer, "trailer:", values);
+            cargo.Clear(); if (trailer != null) CaptureCargo(trailer, cargo);
+            record.trailerLootNames = cargo.Keys.ToArray(); record.trailerLootCounts = record.trailerLootNames.Select(k => cargo[k]).ToArray();
             record.values = values.ToArray();
             record.turrets = new string[7]; record.turretHealth = new float[7];
             for (int i = 0; i < marker.Riders.Length; i++)
             {
                 var rider = marker.Riders[i];
                 float health = rider != null ? Patrol.GetHealth(rider) : 0f;
-                record.turrets[i] = rider != null && health != 0f ? TemplateExporter.PrefabName(rider.name.Replace("(Rider)", "")) : "";
+                record.turrets[i] = record.crew.riders[i] != null ? record.crew.riders[i].prefab : "";
                 record.turretHealth[i] = health;
+            }
+        }
+
+        private static void CaptureCargo(GameObject car, Dictionary<string, int> counts)
+        {
+            foreach (var fsm in car.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                if (fsm.FsmName != "LockPhysics" || fsm.CompareTag("vehPart") || VehicleAttachments.IsFreeAttachment(fsm.gameObject)) continue;
+                if (fsm.GetComponent<ES3Internal.ES3Prefab>() == null) continue;
+                string name = TemplateExporter.PrefabName(fsm.name); int count;
+                counts.TryGetValue(name, out count); counts[name] = count + 1;
             }
         }
 

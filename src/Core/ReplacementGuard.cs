@@ -90,10 +90,10 @@ namespace WildWasteland.Core
             }
             Log.Always("[Core] Recommended mods not active: " + _missing.Count);
         }
-        static bool WantsNotice() { return _title && (_message != null || _missing.Count > 0) && !MenuModalOpen; }
+        static bool WantsNotice() { return _title && (_message != null || _missing.Count > 0) && !MenuModalOpen && !LoadingProgress.ScreenVisible; }
         static void Draw()
         {
-            if (MenuModalOpen || ToolWindow.IsOpen || EditorSession.Busy || ApocasetterBridge.InputBlocked) return;
+            if (LoadingProgress.ScreenVisible || MenuModalOpen || ToolWindow.IsOpen || EditorSession.Busy || ApocasetterBridge.InputBlocked) return;
             float scale = Mathf.Min(Screen.width / 1920f, Screen.height / 1080f);
             float width = 810f, inset = 30f;
             float warningHeight = _message != null ? NoticeHeight(_message.text, 26f, width - inset * 2 - 30f) + 111f : 0;

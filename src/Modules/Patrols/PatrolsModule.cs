@@ -57,6 +57,7 @@ namespace WildWasteland.Modules.Patrols
             Running = true;   // last: per-object loops only run once everything is in place
             Services.FollowerVehicles = new QuestFollowers();
             Services.Camps = new TrafficCamps.Status();
+            LoadingProgress.Register(this, VehicleBuildCache.LoadWork);
         }
 
         void InitInner()
@@ -80,6 +81,7 @@ namespace WildWasteland.Modules.Patrols
             Try("Seated LOS guard", () => SeatedLosGuard.Install(this));
             Try("Suspension", () => Suspension.Install(this));
             Prefabs.Install(this);
+            PatrolLoadPreparation.Install(this);
             Core.Hooks.SetFsmFloatEnter.Postfix(this, Ram.AfterSetFsmFloat);
             Core.Hooks.SetFsmFloatDo.Prefix(this, Ram.BeforeSetFsmFloat);   // a car never rams its own (trigger-only) crew
             Core.Hooks.SendEventEnter.Prefix(this, Ram.BeforeSendEvent);
@@ -107,7 +109,10 @@ namespace WildWasteland.Modules.Patrols
         public override void Shutdown()
         {
             Running = false;
+            LoadingProgress.Remove(this);
             Try("build queue", BuildQueue.Reset);
+            Try("vehicle build cache", VehicleBuildCache.Reset);
+            PatrolLoadPreparation.Reset();
             if (Services.FollowerVehicles is QuestFollowers) Services.FollowerVehicles = null;
             if (Services.Camps is TrafficCamps.Status) Services.Camps = null;
             TrafficCompass.Clear();
@@ -169,6 +174,7 @@ namespace WildWasteland.Modules.Patrols
         {
             Scheduler.Interval(this, "Patrols.Prefab cache", .5f, Prefabs.Refresh).RunNow();
             Scheduler.Sliced(this, "Patrols.Build", 1000, BuildQueue.Step);
+            Scheduler.Sliced(this, "Patrols.Vehicle build cache", 500, VehicleBuildCache.Step);
             TrafficCompass.Clear();
             Scheduler.Interval(this, "Compass markers", .5f, TrafficCompass.Tick);
             Scheduler.EveryFrame(this, "Patrol.Tick", () => { if (_patrol != null) _patrol.Tick(); });

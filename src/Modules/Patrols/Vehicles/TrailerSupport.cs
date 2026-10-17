@@ -49,7 +49,7 @@ namespace WildWasteland.Modules.Patrols
             return null;
         }
 
-        internal static void Connect(GameObject car, GameObject trailer)
+        internal static void Connect(GameObject car, GameObject trailer, bool preservePose = false)
         {
             var hitch = Patrol.FindChild(car.transform, "hitch");
             var attacher = Patrol.FindChild(trailer.transform, "attacher");
@@ -60,8 +60,11 @@ namespace WildWasteland.Modules.Patrols
             if (joint != null && joint.connectedBody != towRb) throw new InvalidOperationException("Trailer is attached to another vehicle");
             if (joint == null)
             {
-                trailer.transform.rotation = car.transform.rotation;
-                trailer.transform.position += hitch.position - attacher.position;
+                if (!preservePose)
+                {
+                    trailer.transform.rotation = car.transform.rotation;
+                    trailer.transform.position += hitch.position - attacher.position;
+                }
                 joint = trailer.AddComponent<ConfigurableJoint>();
             }
             joint.connectedBody = towRb;
