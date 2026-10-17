@@ -101,6 +101,8 @@ State at 0.1.0: five modules are in (PlayerBody, NPC, Guns, HUD, Patrols - see `
 
 ## 3. Ground rules (same as every Apocalypter repo)
 
+- RC29 (0.1.32) packages the authorized cargo layer-culling mitigation, Dog Companion skin-bounds correction and all ten reviewed compiler-warning fixes. Windows Release build/deploy: zero warnings/errors; DLL MD5 4CF6F5F3E559330CA973B0769BA9632B. Full RC28 assets retained; no config keys/defaults or save-format changes. Visibility and performance remain Testing; cargo cause is unconfirmed.
+
 - RC27 (0.1.30) corrects crossbow damage displays in Apocaspawner and native pickup/shop UI to 50 while WW player projectiles are enabled. Windows Release build/deploy: zero errors, ten existing warnings; DLL MD5 007CFAE230614B4D4D4D3BD8ECDA89A9. No config/save changes; display verification remains Testing. Full RC26 assets are retained.
 
 - RC26 (0.1.29) is the full working checkout at Denis's explicit request to commit/push/release EVERYTHING pending, including Weather, settings UI/search, crosshair previews, queued patrol debug spawn and SigmaMod FSM guard. Windows build/deploy zero errors, ten existing warnings; installed MD5 591B0A636F37ED72A8C9740143739750. Fresh Weather defaults now mirror Denis's live values (not a bundled config): wall B89A7D, main 805936, hurricane A3907F, sand 572F0C, darkening .75, density .8/km², width20/depth4 km; reset colors restores that palette. Preserve existing users' cfg values. Include Weather/sound/sandstorm.wav and thunder.mp3 in release. Gameplay/performance stay Testing.
