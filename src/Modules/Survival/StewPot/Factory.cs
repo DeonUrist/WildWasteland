@@ -120,6 +120,7 @@ namespace WildWasteland.Modules.Survival
                     RegisterMaterial(es3, StaleLiquids[i], "stale" + i);
                     RegisterMaterial(es3, SpoiledLiquids[i], "spoiled" + i);
                 }
+                copy.SetActive(true); // The inactive holder keeps the template hidden; native clones must start active.
                 Cached = copy;
                 WildWasteland.Core.Log.Always("[Survival] StewPot template ready: empty, 20 L, mesh collider; Camp & Farming in Apocaspawner.");
                 return copy;

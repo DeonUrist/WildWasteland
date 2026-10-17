@@ -2,7 +2,7 @@
 
 A BepInEx 5 mod for **Apocalypter** that combines gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
 
-Version **0.1.30 RC27** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
+Version **0.1.31 RC28** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
 
 | Module | What it is | Replaces (remove these from `BepInEx\plugins`) |
 |---|---|---|
@@ -18,6 +18,8 @@ Version **0.1.30 RC27** (plugin GUID `com.denis.apocalypter.wildwasteland`). Sta
 | Optional compatibility (`QuestsCompat`, `EngineSimCompat`) | Scheduling and integration for separately installed Talk/Quests and Engine Sim | None; keep these dependencies installed |
 
 With Apocasetter and its installer available, WW queues replaced standalones for disable and shows a title-menu restart notice. Restart before playing so the installer can move their files into its recoverable disabled cache; configs remain intact. WW waits for that restart before taking over the conflicting features. Without the installer, follow the notice to disable the named mods manually. This also covers Immersive Map, WomenOfWasteland, HealthStacks and iTweenGuard; optional Talk, Quests, Engine Sim, ChaseCamera and Apocapocket remain installed. Apocaraider (the old monolith) is not detected: remove it by hand.
+
+RC28: empty stew pots can appear wherever natural loot rolls a gas stove, replacing 25% of those rolls. Existing items, merchants and manual spawns are unaffected. No new config or save format; includes the complete RC27 asset set. See [RC28 changes and checks](notes/release-0.1.31-RC28.md).
 
 RC27: crossbow damage reads 50 in Apocaspawner and native pickup/shop descriptions while WW player projectiles are enabled. These displays previously showed the native 20 despite WW's existing 2.5x projectile multiplier. No config changes; includes all RC26 assets. See [RC27 changes and checks](notes/release-0.1.30-RC27.md).
 

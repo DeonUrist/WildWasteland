@@ -63,6 +63,7 @@ namespace WildWasteland.Modules.Survival
             Runtime.Init(_effects.transform);
             Hooks.GetPrefab.Resolver(this, ResolvePrefab);
             Hooks.GetButtonDownUpdate.Prefix(this, Runtime.DrinkInput);
+            Hooks.CreateObjectEnter.Prefix(this, NaturalLoot.BeforeCreate);
             Core.Patches.Patch(this, AccessTools.Method(typeof(ES3Prefab), "Awake"), postfix: AccessTools.Method(typeof(SurvivalModule), "PrefabAwake"));
             SpawnerBridge.Install(this);
             _sound = Scheduler.StartCoroutine(StewLogic.LoadSound());

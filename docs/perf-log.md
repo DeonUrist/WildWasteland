@@ -8,6 +8,10 @@ Budget (initial targets, adjust in docs/decisions.md):
 - Load: WW work after a save load spread over >= 10 frames, no single frame > 8 ms.
 - Sliced background work (nav bakes, scene scans) stops for the frame once `[Core] Frame budget (ms)` (tools.cfg, default 2 ms) is used.
 
+### Natural stew-pot loot — 2026-10-17 — NOT YET MEASURED
+
+RC28 (0.1.31): Survival subscribes to the existing shared CreateObject prefix. Unrelated FSMs exit on the ItemSpawner name; only natural ItemSpawn* stove rolls inspect the native prefab ID and use a private random generator. No scheduler job, scene scan or extra spawned item. Pot template/model preparation retains its existing first-use cost. Windows Release build/deploy: zero errors, ten existing warnings; DLL MD5 D2FFF9054A099CB2525133902B0B0B29. Natural spawning, save/reload and performance remain Testing.
+
 ### Crossbow damage displays — 2026-10-17 — NOT YET MEASURED
 
 RC27 (0.1.30): Apocaspawner damage adjustment runs only during parameter reads; reflection metadata is cached at module startup. Native pickup/shop text uses shared FsmString constants and restores the borrowed action field in a finalizer. No new scheduler job or per-frame scan. Windows Release build/deploy: zero errors, ten existing warnings; DLL MD5 007CFAE230614B4D4D4D3BD8ECDA89A9. In-game display and performance verification remain Testing.
