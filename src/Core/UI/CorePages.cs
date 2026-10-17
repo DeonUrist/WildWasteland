@@ -208,8 +208,6 @@ namespace WildWasteland.Core.UI
                 if (e.State == ModuleState.OffConflict) l.Text("Standalone replacement: " + e.Conflict, Ledger.Danger);
                 else if (e.State == ModuleState.InitFailed || e.State == ModuleState.DisabledAfterErrors) l.Text("Could not start. Switch off and on to retry: " + e.LastError, Ledger.Danger);
             }
-            l.Heading("Performance");
-            Performance(l);
         }
 
         static bool DebugSetting(ConfigEntryBase e)
@@ -440,7 +438,7 @@ namespace WildWasteland.Core.UI
 
         static readonly Dictionary<string, double[]> _sum = new Dictionary<string, double[]>();
 
-        static void Performance(ToolLayout l)
+        internal static void Performance(ToolLayout l)
         {
             l.Text("Managed time of every Wild Wasteland job, measured by the scheduler. Budget: average <= 0.5 ms per frame, worst <= 2 ms. Times while this window is open are from the paused game; close it and reopen to read live numbers.");
             l.Value("Frames measured", Scheduler.Frames.ToString(CultureInfo.InvariantCulture));

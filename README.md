@@ -2,7 +2,7 @@
 
 A BepInEx 5 mod for **Apocalypter** that combines gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
 
-Version **0.1.33 RC30** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
+Version **0.1.34 RC31** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
 
 | Module | What it is | Replaces (remove these from `BepInEx\plugins`) |
 |---|---|---|
@@ -19,7 +19,9 @@ Version **0.1.33 RC30** (plugin GUID `com.denis.apocalypter.wildwasteland`). Sta
 
 With Apocasetter and its installer available, WW queues replaced standalones for disable and shows a title-menu restart notice. Restart before playing so the installer can move their files into its recoverable disabled cache; configs remain intact. WW waits for that restart before taking over the conflicting features. Without the installer, follow the notice to disable the named mods manually. This also covers Immersive Map, WomenOfWasteland, HealthStacks and iTweenGuard; optional Talk, Quests, Engine Sim, ChaseCamera and Apocapocket remain installed. Apocaraider (the old monolith) is not detected: remove it by hand.
 
-RC30: persists compatible NPC structure navigation maps between sessions, adds custom-cache reset and vanilla export tools, and highlights uncaptured POI types in light purple by default for this collection RC (disable Highlight unbaked POIs on map in NPC Debug to restore normal colors). No accepted vanilla map binaries are bundled yet. Adds Game-page RESET, PERFORMANCE/BALANCED/VISUALS/VANILLA choices with Vanilla as the fresh default, a typed iTween.Stop guard, and CleanHUD-styled Recommended mods without the > NEXUS suffix. Includes the full RC29 asset set. Existing performance choices are preserved; gameplay and performance remain Testing. See [RC30 changes and checks](notes/release-0.1.33-RC30.md).
+RC31: prepares complete patrol and War Rig builds during loading and restores saved vehicles/crews before returning control, retaining damage, missing parts, cargo and trailer state. Corrects Coyote scout/patrol defaults. Adds the long accent-framed loading bar without module-list text, hides Recommended mods during loading, defaults to the game font with optional CleanFont in Debug, and restores inventory DROP including binoculars. Includes 41 navigation maps for all 39 vanilla POI types, persistent custom maps and cache tools, Game RESET, four Performance presets with Vanilla as the fresh default, and Performance and jobs at the bottom of Performance. Adds Vistas compatibility, fixes its activation, improves high-ground scouting and vehicle route selection, and attempts compatibility with newer optional-mod versions. Existing choices and custom assets remain intact. See [changes since RC29](notes/release-0.1.34-RC31.md).
+
+RC30 (historical): introduced persistent NPC navigation maps, cache/export tools, the optional purple capture diagnostic, Game RESET, the four Performance preset labels and styled Recommended mods. RC31 now bundles the captured maps and defaults the purple diagnostic off. See [RC30 changes and checks](notes/release-0.1.33-RC30.md).
 
 RC29: removes Performance's extra distance limits for items, food and weapons as a mitigation for reported vehicle-cargo flicker. Dog Companion's skinned bounds now follow WW's custom poses in every camera mode. Resolves all ten reviewed compiler warnings. Cargo cause remains unconfirmed; both visibility changes remain Testing. No config keys/defaults or save-format changes; includes the complete RC28 asset set. See [RC29 changes and checks](notes/release-0.1.32-RC29.md).
 

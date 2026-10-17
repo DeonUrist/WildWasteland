@@ -1,5 +1,7 @@
 # Plan: Talk + Quests modules for Wild Wasteland (target 0.1.5 RC3 / 0.1.6)
 
+2026-10-18 preparation update: full Quests 1.8.2 source is now available and Denis has requested native integration with quest/hiring UI independent of Talk; installed Talk must add its existing content. See [prepare-native-quests.md](prepare-native-quests.md) and its pinned source manifest for the current contract. The older binary-only inventory and primary-save-store proposal below are historical.
+
 Implementation update (2026-10-15): Denis chose an optional compatibility bridge for the installed standalone mods instead of this full port. See [compat-Talk-Quests.md](compat-Talk-Quests.md) for the six accepted decisions, implemented scope and 0.1.7 RC4 test steps. Work packages and recommendations below remain the original research plan, not the release's implementation contract.
 
 Written 2026-10-15 from a review of `E:\SteamLibrary\steamapps\common\Apocalypter\ModDev\ModCheck`. Both mods ship as **DLLs only** (no source anywhere under `V:\Repos\Apocalypter`), so the review is from the disassembled IL (ikdasm + Mono.Cecil call graphs). Everything below names the real classes and methods in those binaries so the porting session can find them again after decompiling.

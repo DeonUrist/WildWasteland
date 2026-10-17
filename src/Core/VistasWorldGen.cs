@@ -27,6 +27,7 @@ namespace WildWasteland.Core
         internal static IEnumerable<Vector3[]> RoadLines { get { return Roads.Values; } }
         internal static string RoadIdentity = "";
         private static ConfigFile _config;
+        private static Assembly _assembly;
         private static string _assemblyId;
         private static ConfigEntry<float> _bannerHeight;
         internal static float BannerHeight { get { return _bannerHeight != null ? _bannerHeight.Value : .18f; } }
@@ -44,6 +45,10 @@ namespace WildWasteland.Core
                 Log.Warn("[Vistas] Version " + info.Metadata.Version + " differs from the tested 1.0.7; attempting compatibility with this version.");
             try
             {
+                _assembly = assembly;
+                // MonoMod's resolver ignores field types; Vistas overloads field names by type.
+                Hook(Find(typeof(MonoMod.Utils.ReflectionHelper), "_ResolveReflection", typeof(MemberInfo),
+                    typeof(Mono.Cecil.MemberReference), typeof(Module[])), prefix: "ResolveField");
                 ConfigEntry<bool> overlay;
                 if (info.Instance.Config.TryGetEntry<bool>(new ConfigDefinition("Debug", "Overlay"), out overlay)) overlay.Value = false;
                 info.Instance.Config.TryGetEntry<float>(new ConfigDefinition("Regions", "BannerHeight"), out _bannerHeight);
@@ -66,6 +71,23 @@ namespace WildWasteland.Core
                 Log.Always("[Vistas] " + info.Metadata.Version + " compatibility ready: overlay defaults off; WW scouting, CleanHUD banners, WW sandstorms and replacement-road capture.");
             }
             catch (Exception e) { Log.Error("[Vistas] Compatibility installation failed", e); }
+        }
+        private static bool ResolveField(Mono.Cecil.MemberReference __0, ref MemberInfo __result)
+        {
+            var field = __0 as Mono.Cecil.FieldReference;
+            if (field == null || _assembly == null || field.DeclaringType == null) return true;
+            string scope = field.DeclaringType.Scope.Name;
+            if (scope != _assembly.GetName().Name && scope != _assembly.ManifestModule.Name) return true;
+            var type = _assembly.GetType(field.DeclaringType.FullName.Replace('/', '+'), false, false);
+            if (type == null) return true;
+            var signature = field.FieldType;
+            while (signature is Mono.Cecil.RequiredModifierType || signature is Mono.Cecil.OptionalModifierType)
+                signature = ((Mono.Cecil.TypeSpecification)signature).ElementType;
+            var valueType = MonoMod.Utils.ReflectionHelper.ResolveReflection(signature);
+            foreach (var candidate in type.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+                if (candidate.Name == field.Name && candidate.FieldType == valueType)
+                { __result = candidate; return false; }
+            throw new MissingFieldException(type.FullName, field.Name + " : " + signature.FullName);
         }
         private static void SettingsChanged(object sender, SettingChangedEventArgs args)
         {

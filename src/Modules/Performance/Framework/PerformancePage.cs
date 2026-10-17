@@ -43,6 +43,8 @@ namespace WildWasteland.Modules.Performance
 
             l.Heading("Measurements");
             Telemetry.Draw(l);
+            l.Heading("Performance and jobs");
+            CorePages.Performance(l);
         }
 
         internal void DrawDeveloper(ToolLayout l)
