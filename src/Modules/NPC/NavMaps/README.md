@@ -33,20 +33,24 @@ does not add upper floors or ladder traversal.
 6. On NPC Debug, click **Reset custom pathfinding baked data**. Expect `Nav: Reset custom pathfinding:` with the file/live-map counts.
    Custom and legacy cache files are removed and nearby custom maps are rediscovered/rebaked; shipped maps remain in memory/on disk/in
    the DLL. The cache can refill immediately while the player stays near a custom POI. Failed file deletion is reported, not counted as success.
-7. For a vanilla-pack test, put an accepted candidate into the plugin's `NPC/NavMaps/Vanilla/`, then restart. Expect `Nav: loaded map`
-   with `(vanilla)` and an increased vanilla count. Reset custom data again: that vanilla file/map must remain usable.
+7. For an embedded-pack test, restart with NPC VerboseLog on and visit a vanilla POI. Expect `Nav: loaded map` with `(vanilla)` and
+   `embedded:NPC.NavMaps.Vanilla.<filename>`, plus an increased vanilla count. Reset custom data again: the embedded map must remain
+   usable without a new physics bake. Check NPC movement around walls/through entrances and a different rotation/elevation.
 
 ## Capturing the release pack
 
-The temporary collection build enables tools.cfg `[NPC / Debug] HighlightUnbakedMapPois` by default. Visible CleanHUD map icons for POI
+The optional collection aid is tools.cfg `[NPC / Debug] HighlightUnbakedMapPois` (default false). Visible CleanHUD map icons for POI
 types with no completed saved bake are light purple (#C79EFF), overriding allegiance/cleared/ambiguous colors. Once a bake is saved, the
 normal color returns automatically. This is per prefab type, so another instance of an already captured type retains its normal color.
 Fog and marker Off still apply; compass colors are unaffected. The lookup indexes cache/export/shipped files on scene/enable/reset and
 updates after saves/loads, without filesystem checks in the map draw loop. Startup logs `Nav: unbaked POI map tint on; N POI types have
 saved bakes`. To revert, turn off **Highlight unbaked POIs on map (light purple)** on NPC Debug, or set `HighlightUnbakedMapPois = false`.
-That choice persists and normal map colors return immediately. Set the temporary default false before a normal release.
+That choice persists and normal map colors return immediately. Existing saved values are retained when installing the embedded pack.
 
-There are no accepted vanilla map binaries yet. With custom POI mods disabled and default navigation settings, visit the 39 native
+The initial embedded pack contains 41 captured maps covering all 39 vanilla POIs (3,494,265 bytes), including two signatures each for
+Camp_10 and Building_7. Denis captured them on 2026-10-17/18 and requested their inclusion. Embedded loading remains Testing.
+
+For future captures, with custom POI mods disabled and default navigation settings, visit the 39 native
 locations: Camp_1-16, Building_1-7, Cave_1-7, Wreck_1-8 and Starter_Area. NPC Debug > **Export vanilla pathfinding maps** collects matching
 native-name candidates into `config/WildWasteland/NPC/NavMaps/VanillaExport/` and logs missing locations. This does not designate a custom
 replacement of a native prefab as vanilla: capture must use clean native geometry. Exports are retained by custom reset.
