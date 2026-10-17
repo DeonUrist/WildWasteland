@@ -133,7 +133,7 @@ namespace WildWasteland.Modules.Performance
         {
             Owner = owner;
             _values = new[] { vanilla, low, balanced, max };
-            Override = cfg.Tool("Tuning", key, -1f, desc + " -1 = follow the preset (Low " + low + ", Balanced " + balanced + ", Max " + max + ", vanilla " + vanilla + ").");
+            Override = cfg.Tool("Tuning", key, -1f, desc + " -1 = follow the preset (Performance " + low + ", Balanced " + balanced + ", Visuals " + max + ", Vanilla " + vanilla + ").");
             Override.SettingChanged += (s, a) => { if (Owner.Module != null) Owner.Module.SettingsChanged(Owner); };
         }
         public float Value

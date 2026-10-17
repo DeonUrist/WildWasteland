@@ -6,6 +6,7 @@ using BepInEx.Bootstrap;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using WildWasteland.Core.UI;
+using CleanHud = WildWasteland.Modules.CleanHUD;
 
 namespace WildWasteland.Core
 {
@@ -19,6 +20,19 @@ namespace WildWasteland.Core
         static int _failed;
         static GUIContent _message;
         static readonly GUIContent Heading = new GUIContent("RESTART REQUIRED");
+        static readonly string[,] Recommended = {
+            { "local.apocalypterquests", "Apocalypter Quests", "45" },
+            { "apocalypter.worldamp", "Vista World Gen", "73" },
+            { "com.fived.apocalypter.fallout_nv_radio", "Apocalypter Radio", "74" },
+            { "local.apocalypter.chasecamera", "ApocaChaseCam", "44" },
+            { "apocalypter.dogcompanion", "Dog Companion", "55" },
+            { "com.denis.apocalypter.apocapocket", "Apocapocket", "7" }
+        };
+        static readonly List<int> _missing = new List<int>();
+        static bool _checked;
+        static Vector2 _scroll;
+        static readonly Action<Rect, string, float, Color, TextAnchor> NoticeText = CleanHud.GlyphFont.Draw, NoticeWrap = CleanHud.GlyphFont.DrawWrapped;
+        static readonly Func<string, float, float, float> NoticeHeight = CleanHud.GlyphFont.WrappedHeight;
 
         internal static void Prepare()
         {
@@ -31,6 +45,8 @@ namespace WildWasteland.Core
             Disable("com.denis.apocalypter.womenofwasteland");
             Disable(HealthStacks.GUID);
             Disable(ITweenGuard.GUID);
+            Scheduler.Interval(null, "Core.Replacement notice", .5f, Tick).RunNow();
+            Scheduler.Gui(null, "Core.Replacement notice", Draw, WantsNotice);
             if (_names.Count == 0) return;
             var text = new StringBuilder();
             text.Append(_names.Count).Append(_names.Count == 1 ? " standalone mod should be removed" : " standalone mods should be removed");
@@ -39,8 +55,6 @@ namespace WildWasteland.Core
             if (_failed < _names.Count) text.Append("\nRestart the game. Apocasetter will disable the queued mods. Their files and configs are kept.");
             if (_failed != 0) text.Append("\n\nDisable the mods marked 'disable manually' before restarting. Automatic disabling was unavailable for them; see LogOutput.log for details.");
             _message = new GUIContent(text.ToString());
-            Scheduler.Interval(null, "Core.Replacement notice", .5f, Tick).RunNow();
-            Scheduler.Gui(null, "Core.Replacement notice", Draw, WantsNotice);
         }
 
         static void Disable(string guid)
@@ -64,23 +78,60 @@ namespace WildWasteland.Core
         }
 
         internal static void SceneLoaded(Scene scene) { _title = scene.buildIndex == 0; }
-        static void Tick() { SceneLoaded(SceneManager.GetActiveScene()); }
-        static bool WantsNotice() { return _title && _message != null && !MenuModalOpen; }
+        static void Tick()
+        {
+            SceneLoaded(SceneManager.GetActiveScene());
+            if (_checked) return;
+            _checked = true;
+            for (int i = 0; i < Recommended.GetLength(0); i++)
+            {
+                PluginInfo info;
+                if (!Chainloader.PluginInfos.TryGetValue(Recommended[i, 0], out info) || ReferenceEquals(info.Instance, null)) _missing.Add(i);
+            }
+            Log.Always("[Core] Recommended mods not active: " + _missing.Count);
+        }
+        static bool WantsNotice() { return _title && (_message != null || _missing.Count > 0) && !MenuModalOpen; }
         static void Draw()
         {
             if (MenuModalOpen || ToolWindow.IsOpen || EditorSession.Busy || ApocasetterBridge.InputBlocked) return;
-            float scale = Mathf.Min(Screen.width / 1280f, Screen.height / 720f);
-            Skin.Ensure(scale);
-            float width = 540f * scale, inset = 20f * scale;
-            float height = Skin.Body.CalcHeight(_message, width - inset * 2) + 74f * scale;
-            var panel = new Rect(Screen.width - width - inset, Mathf.Max(inset, (Screen.height - height) * .5f), width, height);
-            int depth = GUI.depth; Color color = GUI.color;
+            float scale = Mathf.Min(Screen.width / 1920f, Screen.height / 1080f);
+            float width = 810f, inset = 30f;
+            float warningHeight = _message != null ? NoticeHeight(_message.text, 26f, width - inset * 2 - 30f) + 111f : 0;
+            float contentHeight = warningHeight + (_missing.Count > 0 ? 141f + 54f * _missing.Count : 0);
+            float height = Mathf.Min(contentHeight, Screen.height / scale - 540f);
+            var panel = new Rect(Screen.width / scale - width - inset - 40f, Mathf.Max(inset + 40f, (Screen.height / scale - height) * .5f), width, height);
+            int depth = GUI.depth; Color color = GUI.color; var matrix = GUI.matrix;
+            var accent = CleanHud.CleanHudModule.Running ? CleanHud.AccentTheme.Resolve(CleanHud.DialogueWidgets.Gold) : CleanHud.DialogueWidgets.Gold;
+            var border = new Color(214 / 255f, 203 / 255f, 176 / 255f, .55f);
+            if (CleanHud.CleanHudModule.Running) border = CleanHud.AccentTheme.Resolve(border);
+            var skin = Ledger.BeginSettings(accent, border, CleanHud.Assets.Tex("panel_menu"), CleanHud.Assets.VGradient(.75f), NoticeText, NoticeWrap, NoticeHeight);
             GUI.depth = -800; GUI.color = Color.white;
-            Skin.Fill(panel, new Color(.035f, .027f, .024f, .97f));
-            Skin.Fill(new Rect(panel.x, panel.y, 4f * scale, panel.height), Skin.Yellow);
-            GUI.Label(new Rect(panel.x + inset, panel.y + 14f * scale, width - inset * 2, 30f * scale), Heading, Skin.H1);
-            GUI.Label(new Rect(panel.x + inset, panel.y + 54f * scale, width - inset * 2, height - 64f * scale), _message, Skin.Body);
-            GUI.color = color; GUI.depth = depth;
+            GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1));
+            try
+            {
+                Ledger.Window(panel);
+                var view = new Rect(panel.x + inset, panel.y + 18f, width - inset * 2, height - 36f);
+                float rowWidth = view.width - 30f;
+                _scroll = GUI.BeginScrollView(view, _scroll, new Rect(0, 0, rowWidth, contentHeight - 36f));
+                if (_message != null)
+                {
+                    Ledger.Label(new Rect(0, 3f, rowWidth, 45f), Heading.text, Ledger.Heading, Ledger.Accent);
+                    NoticeWrap(new Rect(0, 63f, rowWidth, warningHeight - 96f), _message.text, 26f, Ledger.Text, TextAnchor.MiddleLeft);
+                }
+                if (_missing.Count > 0)
+                {
+                    Ledger.Label(new Rect(0, warningHeight + 3f, rowWidth, 45f), "RECOMMENDED MODS", Ledger.Heading, Ledger.Accent);
+                    Ledger.Label(new Rect(0, warningHeight + 54f, rowWidth, 51f), "Optional additions (not active). Click to view mod.", Ledger.Small, Ledger.Muted);
+                    for (int n = 0; n < _missing.Count; n++)
+                    {
+                        int i = _missing[n];
+                        var row = new Rect(0, warningHeight + 105f + 54f * n, rowWidth, 54f);
+                        if (Ledger.Button(row, Recommended[i, 1], gameFont: true)) Application.OpenURL("https://www.nexusmods.com/apocalypter/mods/" + Recommended[i, 2]);
+                    }
+                }
+                GUI.EndScrollView();
+            }
+            finally { Ledger.EndSettings(); GUI.skin = skin; GUI.matrix = matrix; GUI.color = color; GUI.depth = depth; }
         }
     }
 }

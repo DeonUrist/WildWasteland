@@ -83,9 +83,10 @@ namespace WildWasteland.Modules.NPC
                 l.Value("Shout", NpcModule.ShoutModifier.Value + " + " + NpcModule.ShoutKey.Value + " ([Keys] Shout)");
             }, Sec("Detection"), Sec("Senses")));
 
-            pages.Add(new LivePage(m, "Navigation & baking", "Structure maps (camps, caves, buildings): baked in slices of BakeBudgetMs per frame, nearest first, faster when an NPC waits or the player is at it.", l =>
+            pages.Add(new LivePage(m, "Navigation & baking", "Vanilla POI maps load from the shipped pack. Custom or missing maps bake once and persist in config/WildWasteland/NPC/NavMaps/Custom. Reset/export controls are on the NPC Debug page.", l =>
             {
                 l.Value("Structures", I(Nav.StructureCount) + " found, " + I(Nav.BakedCount) + " baked");
+                l.Value("Loaded maps", I(Nav.LoadedMapCount) + " (" + I(Nav.VanillaMapCount) + " vanilla / " + I(Nav.LoadedMapCount - Nav.VanillaMapCount) + " custom cache)");
                 l.Value("Baking", Nav.BakingText);
                 l.Value("ms per cell", F(Nav.MsPerCell, "0.000"));
                 l.Value("Exit picks", I(Nav.PickQueued) + " queued / running (1 ms a frame); move masks " + I(Nav.MaskedCount) + " of " + I(Nav.BakedCount) + " baked maps");
@@ -127,6 +128,12 @@ namespace WildWasteland.Modules.NPC
                 l.Value("Nav", Nav.Status());
                 if (l.Button("Write the NPC status to the log", true, false, 360))
                     Core.Log.Always("[NPC] senses " + Senses.Status() + "; brain " + Brain.Status() + "; nav " + Nav.Status() + "; baking " + Nav.BakingText + "; nests " + Nests.Count + "; webs " + Webs.Count);
+                l.Space(); l.Heading("Pathfinding baked data");
+                l.Toggle(NpcModule.HighlightUnbakedMapPois, "Highlight unbaked POIs on map (light purple)");
+                if (l.Button("Reset custom pathfinding baked data", true, false, 430)) Nav.ResetCustomMaps();
+                if (l.Button("Export vanilla pathfinding maps", true, false, 430)) Nav.ExportVanillaMaps();
+                l.Text("Reset clears locally baked maps and rebuilds nearby custom maps. Shipped vanilla maps and vanilla exports are retained. Export collects release candidates from a clean vanilla setup.");
+                if (!string.IsNullOrEmpty(Nav.MapActionStatus)) l.Text(Nav.MapActionStatus);
             }, Sec("Debug")) { IsTool = true });
 
             return pages;

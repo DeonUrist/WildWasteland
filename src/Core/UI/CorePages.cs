@@ -33,6 +33,35 @@ namespace WildWasteland.Core.UI
 
         static string F(double v) { return v.ToString("0.000", CultureInfo.InvariantCulture); }
 
+        internal static void ResetSettings()
+        {
+            var excluded = new HashSet<ConfigEntryBase>();
+            foreach (var m in ModuleHost.Entries)
+                if (m.Module.Id != "Performance" && m.Module.Id != "POI") excluded.Add(m.Config.Enabled);
+            var entries = new List<ConfigEntryBase>();
+            foreach (var file in new[] { Plugin.Settings, Plugin.Tools })
+                foreach (var key in file.Keys) if (!excluded.Contains(file[key])) entries.Add(file[key]);
+            entries.Add(Plugin.EnableDebug);
+            var drivingHud = WildWasteland.Modules.CleanHUD.ChaseCameraHud.HudEnabled;
+            if (drivingHud != null) entries.Add(drivingHud);
+            var files = new Dictionary<ConfigFile, bool>();
+            foreach (var e in entries) if (!files.ContainsKey(e.ConfigFile)) files.Add(e.ConfigFile, e.ConfigFile.SaveOnConfigSet);
+            foreach (var file in files.Keys) file.SaveOnConfigSet = false;
+            try
+            {
+                var preset = WildWasteland.Modules.Performance.PerformanceModule.PresetEntry;
+                preset.BoxedValue = preset.DefaultValue;
+                foreach (var e in entries) e.BoxedValue = e.DefaultValue;
+            }
+            finally
+            {
+                foreach (var pair in files) pair.Key.SaveOnConfigSet = pair.Value;
+                foreach (var file in files.Keys) file.Save();
+            }
+            Ledger.ClearNumbers(); ToolLayout.CancelRebind(); GUI.FocusControl(null);
+            Log.Always("[Core] Settings reset: Game, Performance, Debug and Developer restored to defaults");
+        }
+
         sealed class GameSettingsPage : ToolPage
         {
             internal GameSettingsPage() { Group = ToolGroups.General; Title = "Game"; }

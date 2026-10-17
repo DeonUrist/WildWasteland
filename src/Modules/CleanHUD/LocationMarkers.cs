@@ -28,6 +28,11 @@ namespace WildWasteland.Modules.CleanHUD
 
         internal static bool Known(Transform root) { Location location; return root != null && Locations.TryGetValue(root, out location) && location.Known; }
         internal static bool Known(Func<Vector3> position) { var location = position.Target as Location; return location != null && location.Known; }
+        internal static bool MissingBake(Func<Vector3> position)
+        {
+            var location = position.Target as Location;
+            return location != null && Services.Npc != null && Services.Npc.HighlightMissingPoiBake(location.Label);
+        }
         internal static void Begin(bool fresh)
         {
             Clear(); _loaded = false; _fresh = fresh; Discovered.Clear();

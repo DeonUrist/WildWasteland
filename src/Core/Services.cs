@@ -238,10 +238,16 @@ namespace WildWasteland.Core
         /// <summary>Baked bounds (scene space at bake time; re-validate with Box.Contains(Root.position) after origin jumps).</summary>
         public Bounds? Box;
         public bool Baked;
-        /// <summary>Floor height per cell (NaN = no floor), row-major with width <see cref="W"/>, origin Box.min.</summary>
+        /// <summary>Floor height per cell (NaN = no floor), row-major with width <see cref="W"/>.</summary>
         public float[] FloorY;
         public int W;
         public float Cell;
+        public Vector3 GridOrigin, GridRight, GridForward;
+        public Vector3 FloorPoint(int index)
+        {
+            var p = GridOrigin + GridRight * ((index % W + 0.5f) * Cell) + GridForward * ((index / W + 0.5f) * Cell);
+            p.y = FloorY[index]; return p;
+        }
     }
 
     /// <summary>Mirror of NPCAI.Api v1 plus the nav structure list Apocapatrol read by reflection.</summary>
@@ -259,6 +265,8 @@ namespace WildWasteland.Core
         void SetFollowerDriven(GameObject npc, bool enabled, float reloadUntil = 0f);
         /// <summary>Fills <paramref name="into"/> (cleared first) with the current nav structures.</summary>
         void Structures(List<NavStructure> into);
+        /// <summary>Temporary map diagnostic: highlight a POI type with no captured persistent bake.</summary>
+        bool HighlightMissingPoiBake(string prefabName);
         /// <summary>Walks an NPC to a scene point with baked-map pathfinding and feelers (an Idle travel leg); null cancels.
         /// Combat takes over while the NPC has a target; the walk resumes once it is idle again. Works for simple convoy bandits too.</summary>
         void Travel(GameObject npc, Vector3? scenePoint, float arriveRadius);

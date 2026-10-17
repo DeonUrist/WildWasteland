@@ -114,11 +114,11 @@ namespace WildWasteland.Modules.Performance
     {
         public override string PlanId { get { return "RC4"; } }
         public override string Key { get { return "Far clip"; } }
-        public override string Title { get { return "Shorter far clip plane (Low)"; } }
+        public override string Title { get { return "Shorter far clip plane (Performance)"; } }
         public override string Category { get { return Categories.Rendering; } }
         public override int Order { get { return 10; } }
         public override bool UsesPreset { get { return true; } }
-        public override string Help { get { return "Low preset: the view ends at 6 km instead of 10 km."; } }
+        public override string Help { get { return "Performance preset: the view ends at 6 km instead of 10 km."; } }
 
         Knob _far;
         public override void Bind(ModuleConfig cfg) { _far = NewKnob(cfg, "Far plane", "Far clip plane cap (m); 0 = unchanged.", 6000, 0, 0, 0); }

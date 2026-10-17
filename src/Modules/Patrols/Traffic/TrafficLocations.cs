@@ -194,7 +194,7 @@ namespace WildWasteland.Modules.Patrols
                     for (int i = 0; i < floors.Length; i++)
                     {
                         if (float.IsNaN(floors[i])) continue;
-                        var point = new Vector3(box.min.x + (i % w + 0.5f) * cell, floors[i], box.min.z + (i / w + 0.5f) * cell);
+                        var point = nav.FloorPoint(i);
                         float score = (point - root.position).sqrMagnitude;
                         if (score < nearest) { nearest = score; interior = point; }
                     }

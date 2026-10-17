@@ -19,7 +19,8 @@ namespace WildWasteland.Modules.Performance
 
         static readonly string[] _modes2 = { "Off", "On" };
         static readonly string[] _modes3 = { "Off", "On", "Shadow" };
-        static readonly string[] _presets = { "Vanilla", "Low", "Balanced", "Max" };
+        static readonly string[] _presets = { "PERFORMANCE", "BALANCED", "VISUALS", "VANILLA" };
+        static readonly PerfPreset[] _presetValues = { PerfPreset.Low, PerfPreset.Balanced, PerfPreset.Max, PerfPreset.Vanilla };
 
         public override void Draw(ToolLayout l)
         {
@@ -35,9 +36,9 @@ namespace WildWasteland.Modules.Performance
             var p = PerformanceModule.PresetEntry;
             if (p != null)
             {
-                int sel = l.Choices("Preset", (int)p.Value, _presets);
-                if (sel != (int)p.Value) p.Value = (PerfPreset)sel;
-                l.Text("Preset applies to optimizations that change what is drawn or simulated (marked *). Vanilla keeps them off; Low is fastest, Max closest to the original look.");
+                int sel = l.Choices("Preset", Array.IndexOf(_presetValues, p.Value), _presets);
+                if (_presetValues[sel] != p.Value) p.Value = _presetValues[sel];
+                l.Text("PERFORMANCE favors speed; BALANCED is the compromise; VISUALS favors detail. VANILLA (default) disables changes to visuals, simulation and item cleanup, including extra culling (marked *). Exact optimizations remain active.");
             }
 
             l.Heading("Measurements");

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection.Emit;
 using BepInEx.Bootstrap;
 using HarmonyLib;
 using UnityEngine;
@@ -17,6 +19,9 @@ namespace WildWasteland.Core
 
         internal static void Init()
         {
+            var stop = AccessTools.Method(typeof(iTween), "Stop", new[] { typeof(GameObject), typeof(string) });
+            if (Patches.Patch(null, stop, transpiler: AccessTools.Method(typeof(ITweenGuard), nameof(StopTranspiler))))
+                Log.Always("[Core] iTween stop guard ready (always on)");
             BepInEx.PluginInfo info;
             if (Chainloader.PluginInfos.TryGetValue(GUID, out info) && !ReferenceEquals(info.Instance, null))
             {
@@ -27,6 +32,24 @@ namespace WildWasteland.Core
             if (target == null) { Log.Warn("[Core] iTween guard: iTween.TweenUpdate not found; nothing patched"); return; }
             if (Patches.Patch(null, target, prefix: AccessTools.Method(typeof(ITweenGuard), nameof(Prefix))))
                 Log.Always("[Core] iTween guard ready (always on)");
+        }
+
+        static IEnumerable<CodeInstruction> StopTranspiler(IEnumerable<CodeInstruction> instructions)
+        {
+            var code = new List<CodeInstruction>(instructions);
+            var substring = AccessTools.Method(typeof(string), "Substring", new[] { typeof(int), typeof(int) });
+            var guarded = AccessTools.Method(typeof(ITweenGuard), nameof(StopPrefix));
+            int replaced = 0;
+            foreach (var ci in code)
+                if (ci.Calls(substring)) { ci.opcode = OpCodes.Call; ci.operand = guarded; replaced++; }
+            if (replaced != 1) throw new InvalidOperationException("iTween.Stop: expected one Substring call, found " + replaced);
+            return code;
+        }
+
+        // A shorter tween name cannot match the requested prefix; leave it short so Stop continues with the other tweens.
+        static string StopPrefix(string value, int startIndex, int length)
+        {
+            return value.Length < length ? value : value.Substring(startIndex, length);
         }
 
         // ___physics / ___kinematic: iTween's private fields, accessed directly by Harmony (no reflection per call).

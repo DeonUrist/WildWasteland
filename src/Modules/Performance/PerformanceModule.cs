@@ -25,7 +25,7 @@ namespace WildWasteland.Modules.Performance
         public override string DisplayName { get { return "Performance & optimization"; } }
 
         public static PerformanceModule Instance;
-        public static PerfPreset Preset { get { return _preset != null ? _preset.Value : PerfPreset.Balanced; } }
+        public static PerfPreset Preset { get { return _preset != null ? _preset.Value : PerfPreset.Vanilla; } }
         static ConfigEntry<PerfPreset> _preset;
         public static ConfigEntry<PerfPreset> PresetEntry { get { return _preset; } }
 
@@ -40,8 +40,8 @@ namespace WildWasteland.Modules.Performance
 
         public override void BindConfig(ModuleConfig cfg)
         {
-            _preset = cfg.Tool("Preset", "Preset", PerfPreset.Balanced,
-                "Visual/simulation preset for the optimizations that change what is drawn or simulated (lights, shadows, view distances, terrain detail, vehicle simulation range). Vanilla keeps those features off; exact optimizations (no visible change) are not affected.");
+            _preset = cfg.Tool("Preset", "Preset", PerfPreset.Vanilla,
+                "PERFORMANCE (Low), BALANCED, VISUALS (Max), VANILLA (default). Vanilla preserves original visuals, simulation settings and item cleanup; exact optimizations (no visible change) are not affected. Saved Low/Max values remain compatible.");
             _preset.SettingChanged += (s, a) => { if (_running) ApplyAll(true); };
             DiscoverFeatures();
             foreach (var f in _features)

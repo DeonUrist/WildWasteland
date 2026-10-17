@@ -196,7 +196,7 @@ namespace WildWasteland.Modules.Performance
         public override string Category { get { return Categories.Rendering; } }
         public override int Order { get { return 3; } }
         public override bool UsesPreset { get { return true; } }
-        public override string Help { get { return "The game's TAA has zero blending (costs time, smooths nothing). Low uses FXAA, Balanced/Max SMAA."; } }
+        public override string Help { get { return "The game's TAA has zero blending (costs time, smooths nothing). Performance uses FXAA, Balanced/Visuals SMAA."; } }
 
         Knob _mode, _quality, _nan;
         public override void Bind(ModuleConfig cfg)

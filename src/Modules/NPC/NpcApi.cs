@@ -21,6 +21,7 @@ namespace WildWasteland.Modules.NPC
         public void Inform(GameObject npc, GameObject target) { Senses.Inform(npc, target); }
         public void SetFollowerDriven(GameObject npc, bool enabled, float reloadUntil = 0f) { Brain.SetFollowerDriven(npc, enabled, reloadUntil); Idle.SetFollowerDriven(npc, enabled); }
         public void Structures(List<NavStructure> into) { Nav.Structures(into); }
+        public bool HighlightMissingPoiBake(string prefabName) { return Nav.HighlightMissingPoiBake(prefabName); }
         // (crew AI) Idle's travel leg (Idle.Travel), the senses' idle test and fought-player memory
         public void Travel(GameObject npc, Vector3? scenePoint, float arriveRadius) { Idle.Travel(npc, scenePoint, arriveRadius); }
         public int TravelState(GameObject npc) { return Idle.TravelState(npc); }

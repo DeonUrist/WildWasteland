@@ -8,6 +8,10 @@ Budget (initial targets, adjust in docs/decisions.md):
 - Load: WW work after a save load spread over >= 10 frames, no single frame > 8 ms.
 - Sliced background work (nav bakes, scene scans) stops for the frame once `[Core] Frame budget (ms)` (tools.cfg, default 2 ms) is used.
 
+### Persistent navigation maps and RC30 settings/menu changes — 2026-10-17 — NOT YET MEASURED
+
+RC30 (0.1.33): compatible prefab navigation grids load/save within the existing bake slices; missing/invalid maps retain the live-bake fallback. Floor points transform with prefab yaw and floating origin, shared with Patrols through Services.Npc. The temporary light-purple POI diagnostic indexes captured files on scene/enable/reset and updates on save/load; marker drawing performs no filesystem reads. No accepted vanilla map binaries ship yet. Settings reset is explicit user action with batched config writes; Recommended mods uses the shared CleanHUD atlas/panel. Vanilla now defaults off for preset-dependent visual/simulation work and CT1 sliced item cleanup, with saved choices retained. iTween.Stop preserves the native loop while guarding short names. Windows Release build/deploy: zero warnings/errors; DLL MD5 `4BACBA056CCB356E044B277D35790C6D`. In-game navigation, rendering, config behavior and frame-time comparisons remain Testing; no performance improvement is claimed.
+
 ### Natural stew-pot loot — 2026-10-17 — NOT YET MEASURED
 
 RC28 (0.1.31): Survival subscribes to the existing shared CreateObject prefix. Unrelated FSMs exit on the ItemSpawner name; only natural ItemSpawn* stove rolls inspect the native prefab ID and use a private random generator. No scheduler job, scene scan or extra spawned item. Pot template/model preparation retains its existing first-use cost. Windows Release build/deploy: zero errors, ten existing warnings; DLL MD5 D2FFF9054A099CB2525133902B0B0B29. Natural spawning, save/reload and performance remain Testing.

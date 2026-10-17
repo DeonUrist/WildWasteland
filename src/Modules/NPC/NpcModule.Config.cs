@@ -13,7 +13,7 @@ namespace WildWasteland.Modules.NPC
         internal const string LegacyCfg = "com.denis.apocalypter.npcai.cfg";
         internal const string LegacyHidden = "NPCAI/hidden-settings.not-saved";   // relative to BepInEx\config (Legacy.Get)
 
-        internal static ConfigEntry<bool> ApocaplayerClips, VerboseLog;
+        internal static ConfigEntry<bool> ApocaplayerClips, VerboseLog, HighlightUnbakedMapPois;
         internal static ConfigEntry<bool> AimEnabled;
         internal static ConfigEntry<float> AimTimeScale, FacingTolerance, EngagePercent, ReloadSeconds, SingleShotReload, ReloadVolume, ReloadSoundRange, RoundSeconds;
         internal static ConfigEntry<bool> Magazines; internal static ConfigEntry<string> MagazineTable;
@@ -132,6 +132,8 @@ namespace WildWasteland.Modules.NPC
             _cfg.Migrate(NavDump, LegacyCfg, "Debug", "NavDump");
             ShowNav = H("Debug", "ShowNavigation", false, "Draw the detection ghosts, NPC states and the structure maps' waypoints in the world.");
             _cfg.Migrate(ShowNav, LegacyCfg, "Debug", "ShowNavigation");
+            HighlightUnbakedMapPois = H("Debug", "HighlightUnbakedMapPois", true,
+                "Temporary bake-collection build: map POIs without a completed saved bake are light purple regardless of allegiance. Turn off to restore normal map colors immediately. Does not reveal fog or change compass colors.");
             // ---------------- F7 (tools.cfg): the dog animation tuning (ex DogAnimations.Initialize) ----------------
             DogIdlePoseMin = H("Behaviour", "DogIdlePoseMinSeconds", 10f, new ConfigDescription("Idle quadrupeds stand or lie at least this long before switching, s.", new AcceptableValueRange<float>(2f, 300f)));
             DogIdlePoseMax = H("Behaviour", "DogIdlePoseMaxSeconds", 25f, new ConfigDescription("... and at the most, s.", new AcceptableValueRange<float>(2f, 300f)));

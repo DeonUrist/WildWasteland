@@ -19,7 +19,7 @@ namespace WildWasteland.Modules.Performance
         public override string Category { get { return Categories.Rendering; } }
         public override int Order { get { return 11; } }
         public override bool UsesPreset { get { return true; } }
-        public override string Help { get { return "Low preset: half-resolution textures and non-forced anisotropic filtering (saves video memory)."; } }
+        public override string Help { get { return "Performance preset: half-resolution textures and non-forced anisotropic filtering (saves video memory)."; } }
 
         Knob _limit, _aniso;
         public override void Bind(ModuleConfig cfg)

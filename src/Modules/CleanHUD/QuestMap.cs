@@ -198,6 +198,7 @@ namespace WildWasteland.Modules.CleanHUD
                 bool ambiguous = Markers == MapDetail.Ambiguous && !(e.Owner == LocationMarkers.Owner && LocationMarkers.Known(e.Position));
                 e.Image.texture = ambiguous ? MapIcons.Get("unknown") : e.IconTexture;
                 e.Image.color = ambiguous ? Color.white : e.Color;
+                if (e.Owner == LocationMarkers.Owner && LocationMarkers.MissingBake(e.Position)) e.Image.color = new Color(.78f, .62f, 1f, 1f);
                 var scene = e.Position(); var p = _camera.WorldToViewportPoint(scene);
                 bool visible = p.z > 0 && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1 && !(e.Owner == LocationMarkers.Owner && MapFog.Hides(scene));
                 if (e.Root.gameObject.activeSelf != visible) e.Root.gameObject.SetActive(visible);

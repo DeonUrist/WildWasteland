@@ -41,6 +41,7 @@ namespace WildWasteland.Modules.Performance
         public override string Title { get { return "Sliced item culling"; } }
         public override string Category { get { return Categories.Content; } }
         public override int Order { get { return 1; } }
+        public override bool UsesPreset { get { return true; } }
         public override string Help { get { return "The game's 5/10-second item culling and cleanup sweeps run a few entries per frame instead of the whole list in one frame (same rules)."; } }
 
         internal static bool On;
