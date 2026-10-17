@@ -36,7 +36,7 @@ namespace WildWasteland.Modules.Patrols
             var entry=new TrafficBase{apron=center-direction*edge+side};var middle=new TrafficBase{apron=center+side};var exit=new TrafficBase{apron=center+direction*edge+side};
             if(role==2||(role==0&&TrafficFactions.Normalize(group.Faction)=="Coyotes"))
             {entry.apron=OffscreenTrafficPoint(middle.apron,-direction);exit.apron=OffscreenTrafficPoint(middle.apron,direction);}
-            _nearDepartures.Add(new NearbyDeparture{Role=role,Name=group.Name,Faction=group.Faction,Type=type,Vehicles=roster.Select(Freeze).ToArray(),Incoming=RoadPlanner.RequestRoute(entry,middle,false),Outgoing=RoadPlanner.RequestRoute(middle,exit,false)});
+            _nearDepartures.Add(new NearbyDeparture{Role=role,Name=group.Name,Faction=group.Faction,Type=type,Vehicles=roster.Select(Freeze).ToArray(),Incoming=RoadPlanner.RequestRoute(entry,middle,role!=0),Outgoing=RoadPlanner.RequestRoute(middle,exit,role!=0)});
             Core.Log.Info("[Patrols] " + "Planning nearby route for "+group.Name);return true;
         }
         private void PumpNearbyRoutes()

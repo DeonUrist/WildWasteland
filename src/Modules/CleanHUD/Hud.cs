@@ -793,7 +793,7 @@ namespace WildWasteland.Modules.CleanHUD
                 if (!Resolve(e, out pos)) { if (e.HasTarget && e.Target == null) entries.RemoveAt(i); continue; }
                 var dv = pos - eyePos;
                 float dist = dv.magnitude;
-                if (e.Style.MaxDistance > 0 && dist > e.Style.MaxDistance) continue;
+                if (e.Style.MaxDistance > 0 && dist > e.Style.MaxDistance * (e.Owner == "WildWasteland.Locations" || e.Owner == "WildWasteland.VehicleGroups" ? VantageDiscovery.Scale : 1f)) continue;
                 float bearing = Mathf.Atan2(dv.x, dv.z) * Mathf.Rad2Deg;
                 float rel = Mathf.DeltaAngle(heading, bearing);
                 bool edge = false;
@@ -809,7 +809,7 @@ namespace WildWasteland.Modules.CleanHUD
             for (int si = 0; si < _shown.Count; si++)
             {
                 var s = _shown[si];
-                bool ambiguous = s.E.Owner == "WildWasteland.VehicleGroups" ? CleanHudModule.AmbiguousPatrols.Value
+                bool ambiguous = s.E.Owner == "WildWasteland.VehicleGroups" ? CleanHudModule.AmbiguousPatrols.Value && !s.E.Identified
                     : s.E.Owner == "WildWasteland.Locations" && CleanHudModule.AmbiguousLocations.Value && !LocationMarkers.Known(s.E.Target);
                 var tex = IconFor(s.E, ambiguous && s.E.Owner == "WildWasteland.Locations" ? "unknown" : s.E.Style.Icon);
                 if (tex == null) continue;

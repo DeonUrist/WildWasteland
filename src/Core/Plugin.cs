@@ -39,6 +39,7 @@ namespace WildWasteland
     [BepInDependency("com.example.apocalypter.talk", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("local.apocalypterquests", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.burner.apocalypter.enginesim", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("apocalypter.worldamp", BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string GUID = "com.denis.apocalypter.wildwasteland";
@@ -100,6 +101,7 @@ namespace WildWasteland
                 Core.HealthStacks.Init();
                 Core.ITweenGuard.Init();
                 Core.QuietFsm.Install();
+                Core.VistasWorldGen.Init();
                 Core.UI.ToolWindow.Init();
                 SceneManager.sceneLoaded += OnSceneLoaded;
 

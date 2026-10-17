@@ -68,7 +68,7 @@ namespace WildWasteland.Modules.QuestsCompat
             PluginInfo info;
             if (Chainloader.PluginInfos.TryGetValue("com.example.apocalypter.talk", out info) && !ReferenceEquals(info.Instance, null))
             {
-                if (info.Metadata.Version != new Version(2, 0, 0)) throw new NotSupportedException("Talk compatibility requires Apocatalker 2.0.0");
+                if (info.Metadata.Version != new Version(2, 0, 0)) Log.Warn("[QuestsCompat] Apocatalker " + info.Metadata.Version + " differs from the tested 2.0.0; attempting compatibility with this version");
                 _talk = info.Instance; var type = _talk.GetType();
                 _talkUpdate = Binding.Call(type, "Update"); _talkLate = Binding.Call(type, "LateUpdate"); _talkClose = Binding.Call(type, "Close");
                 _talking = Binding.Get<bool>(type, "Talking");
@@ -82,7 +82,7 @@ namespace WildWasteland.Modules.QuestsCompat
                 PluginLifetime.Install(this, api, "LoadFile"); PluginLifetime.Install(this, api, "Reload");
                 Scheduler.EveryFrame(this, "Talk frame", TalkFrame);
                 Scheduler.EveryFrame(this, "Talk cursor", TalkLate, Phase.LateUpdateLast);
-                Log.Always("[QuestsCompat] Apocatalker 2.0.0 scheduled; original story profiles retained");
+                Log.Always("[QuestsCompat] Apocatalker " + info.Metadata.Version + " scheduled; original story profiles retained");
             }
             if (Chainloader.PluginInfos.TryGetValue("local.apocalypterquests", out info) && !ReferenceEquals(info.Instance, null))
             {

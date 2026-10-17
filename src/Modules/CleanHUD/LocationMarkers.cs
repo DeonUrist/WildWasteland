@@ -127,7 +127,7 @@ namespace WildWasteland.Modules.CleanHUD
                         location.Known = Discovered.Contains(location.Key);
                     }
                     var delta = pair.Key.position - player.transform.position; delta.y = 0;
-                    bool spotted = Binoculars.Observe(pair.Key, location.Caption, location.Cleared ? Color.white : location.Color);
+                    bool spotted = Binoculars.Observe(pair.Key, location.Caption, location.Cleared ? Color.white : location.Color) || !location.Known && VantageDiscovery.Sees(pair.Key);
                     if (!location.Known && (delta.sqrMagnitude <= 10000f || spotted))
                     {
                         location.Known = true; Discovered.Add(location.Key);
@@ -147,7 +147,7 @@ namespace WildWasteland.Modules.CleanHUD
                 bool onMap = pair.Key != null && hud && CleanHudModule.MapEnabled.Value && location.Map != null && location.Map.Markers != MapDetail.Off;
                 if (!onMap) { if (location.Map != null) location.Map.Remove(location.MapMarker); location.MapMarker = 0; }
                 else if (!location.Map.Exists(location.MapMarker)) location.MapMarker = location.Map.Add(Owner, location.Position, location.Icon, color, location.Label);
-                if (pair.Key == null || !visible || (pair.Key.position - origin).sqrMagnitude > 1000000f)
+                if (pair.Key == null || !visible || (pair.Key.position - origin).sqrMagnitude > 1000000f * VantageDiscovery.Scale * VantageDiscovery.Scale)
                 {
                     if (location.Marker != 0) Api.Compass.Remove(location.Marker);
                     location.Marker = 0;

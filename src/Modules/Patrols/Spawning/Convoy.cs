@@ -181,7 +181,7 @@ namespace WildWasteland.Modules.Patrols
                 var d = Quaternion.Euler(0f, angle, 0f) * dir;
                 var center = origin + d * PatrolsModule.ConvoySpawnDistance.Value;
                 facing = -d;                                                   // toward the player
-                spots = Formation(center, facing, group.Count);
+                spots = Formation(center, facing, group.Count, convoy || group.Any(t => t.IsTruck));
                 where = (driving ? "ahead" : "behind") + (angle < -10f ? "-left" : angle > 10f ? "-right" : "") + " " + PatrolsModule.ConvoySpawnDistance.Value.ToString("0") + " m";
             }
             if (spots == null) { Core.Log.Warn("[Patrols] " + "Convoy: no ground for " + definition.Name + " around the player"); return false; }
@@ -221,7 +221,7 @@ namespace WildWasteland.Modules.Patrols
 
         // Rows of three facing the player (the first car - the truck in a convoy - in the middle of the first row), 7 m apart,
         // rows 9 m behind each other. Every spot needs open terrain under it; null when most of them have none.
-        private static List<Vector3> Formation(Vector3 center, Vector3 facing, int count)
+        private static List<Vector3> Formation(Vector3 center, Vector3 facing, int count, bool truck)
         {
             var right = Vector3.Cross(Vector3.up, facing).normalized;
             var spots = new List<Vector3>();
@@ -232,7 +232,7 @@ namespace WildWasteland.Modules.Patrols
                 float side = col == 0 ? 0f : col == 1 ? -1f : 1f;
                 var p = center + right * (side * 7f) - facing * (row * 9f);
                 Vector3 g;
-                if (GroundAt(p, out g) || GroundAt(p + right * 4f, out g) || GroundAt(p - right * 4f, out g)) spots.Add(g + Vector3.up * 1.0f);
+                if (GroundAt(p, out g, truck) || GroundAt(p + right * 4f, out g, truck) || GroundAt(p - right * 4f, out g, truck)) spots.Add(g + Vector3.up * 1.0f);
                 else missing++;
             }
             if (missing > count / 2 || spots.Count == 0) return null;
@@ -240,16 +240,30 @@ namespace WildWasteland.Modules.Patrols
         }
 
         // open terrain straight below: the nearest hit of a downward ray from high above must be the terrain (not a roof, rock or car)
-        internal static bool GroundAt(Vector3 p, out Vector3 ground)
+        private static readonly RaycastHit[] GroundHits = new RaycastHit[64];
+        private static bool GroundPoint(Vector3 p, float grade, out Vector3 ground)
         {
             ground = p;
-            var hits = Physics.RaycastAll(new Vector3(p.x, p.y + 200f, p.z), Vector3.down, 600f, ~0, QueryTriggerInteraction.Ignore);
-            if (hits == null || hits.Length == 0) return false;
-            RaycastHit best = hits[0];
-            foreach (var h in hits) if (h.distance < best.distance) best = h;
+            int count = Physics.RaycastNonAlloc(new Vector3(p.x, p.y + 3000f, p.z), Vector3.down, GroundHits, 6000f, ~0, QueryTriggerInteraction.Ignore);
+            if (count == 0 || count == GroundHits.Length) { Array.Clear(GroundHits, 0, count); return false; }
+            RaycastHit best = GroundHits[0];
+            for (int i = 1; i < count; i++) if (GroundHits[i].distance < best.distance) best = GroundHits[i];
+            Array.Clear(GroundHits, 0, count);
             if (!(best.collider is TerrainCollider)) return false;
-            if (Vector3.Angle(best.normal, Vector3.up) > 30f) return false;
+            if (best.normal.y < 1f / Mathf.Sqrt(1f + grade * grade)) return false;
             ground = best.point;
+            return true;
+        }
+        internal static bool GroundAt(Vector3 p, out Vector3 ground, bool truck = false)
+        {
+            float grade = truck ? .22f : .30f;
+            if (!GroundPoint(p, grade, out ground)) return false;
+            float reach = truck ? 7f : 5f;
+            for (int i = 0; i < 4; i++)
+            {
+                var sample = ground + (i < 2 ? Vector3.right : Vector3.forward) * ((i % 2 == 0 ? 1 : -1) * reach);
+                if (!GroundPoint(sample, grade, out var edge) || Mathf.Abs(edge.y - ground.y) > reach * grade) return false;
+            }
             return true;
         }
 

@@ -16,6 +16,7 @@ namespace WildWasteland.Modules.Patrols
         internal string Error;
         internal int Revision, Epoch;
         internal bool Elevation;
+        internal TrafficBase Source, Destination;
     }
 
     // Coarse hints influence a short, fixed waypoint chain. No junction graph, connectivity prediction
@@ -31,6 +32,10 @@ namespace WildWasteland.Modules.Patrols
             internal float Influence;
             internal int Seed;
             internal ElevationGrid[] Elevation;
+            internal Vector3[][] Lines;
+            internal bool Convoy, Foot;
+            internal TrafficBase[] Sources, Destinations;
+            internal Vector3[] Existing;
         }
         private static readonly ConcurrentQueue<Request> Queue=new ConcurrentQueue<Request>();
         private static int _running,_epoch;
@@ -39,7 +44,7 @@ namespace WildWasteland.Modules.Patrols
         private static Bounds[] _blocks;
         internal static long Searches;
         internal static void Reset(){Interlocked.Increment(ref _epoch);_snapshotRoad=_snapshotCamps=_snapshotCount=-1;}
-        internal static RoadJob RequestRoute(TrafficBase source,TrafficBase destination,bool convoy)
+        internal static RoadJob RequestRoute(TrafficBase source,TrafficBase destination,bool convoy,bool foot=false,TrafficBase[] sources=null,TrafficBase[] destinations=null,Vector3[] existing=null)
         {
             if(PatrolsModule.TrafficRoadRouting.Value)TrafficRoads.RequestAlong(source.apron,destination.apron);
             if(_snapshotRoad!=TrafficRoads.Revision||_snapshotCamps!=TrafficLocations.Revision||_snapshotCount!=TrafficLocations.Known.Count)
@@ -48,16 +53,25 @@ namespace WildWasteland.Modules.Patrols
                 _tiles=TrafficRoads.Tiles.Values.ToArray();_blocks=TrafficLocations.Blocks();
             }
             int seed=unchecked(source.apron.GetHashCode()*397^destination.apron.GetHashCode()^(convoy?73:19));
-            var job=new RoadJob{Epoch=_epoch,Revision=_snapshotRoad};
+            var job=new RoadJob{Epoch=_epoch,Revision=_snapshotRoad,Source=source,Destination=destination};
             var size=TrafficRoads.TileSize;float margin=PatrolsModule.TrafficRoadConnector.Value+1600f;
             var a=source.apron;var b=destination.apron;var bounds=new Rect(Mathf.Min(a.x,b.x)-margin,Mathf.Min(a.z,b.z)-margin,Mathf.Abs(a.x-b.x)+margin*2f,Mathf.Abs(a.z-b.z)+margin*2f);
-            var nearby=_tiles.Where(t=>size.x<=0f||bounds.Overlaps(new Rect(t.X*size.x,t.Z*size.z,size.x,size.z))).ToArray();
+            var nearby=_tiles.Where(t=>sources!=null||destinations!=null||size.x<=0f||bounds.Overlaps(new Rect(t.X*size.x,t.Z*size.z,size.x,size.z))).ToArray();
             var hints=PatrolsModule.TrafficRoadRouting.Value?nearby.Select(t=>t.Hints).ToArray():new Vector3[0][];
-            job.Elevation=nearby.Any(t=>t.Elevation!=null);
+            job.Elevation=nearby.Any(t=>t.Elevation!=null&&(foot||t.FinalGround));
+            var lines=PatrolsModule.TrafficRoadRouting.Value?nearby.SelectMany(t=>t.Lines).ToList():new List<Vector3[]>();
+            if(PatrolsModule.TrafficRoadRouting.Value&&Core.VistasWorldGen.Present)lines.AddRange(Core.VistasWorldGen.RoadLines);
             Queue.Enqueue(new Request{Job=job,A=a,B=b,Hints=hints,
-                Elevation=nearby.Where(t=>t.Elevation!=null).Select(t=>t.Elevation).ToArray(),
-                Blocks=_blocks,Influence=PatrolsModule.TrafficRoadConnector.Value,Seed=seed});
+                Elevation=nearby.Where(t=>t.Elevation!=null&&(foot||t.FinalGround)).Select(t=>t.Elevation).ToArray(),
+                Blocks=_blocks,Influence=PatrolsModule.TrafficRoadConnector.Value,Seed=seed,Lines=lines.ToArray(),Convoy=convoy,Foot=foot,
+                Sources=Alternatives(sources,source),Destinations=Alternatives(destinations,destination),Existing=existing});
             Start();return job;
+        }
+        private static TrafficBase[] Alternatives(TrafficBase[] choices,TrafficBase fallback)
+        {
+            if(choices==null||choices.Length==0)return new[]{fallback};
+            var result=new TrafficBase[Math.Min(4,choices.Length)];int start=UnityEngine.Random.Range(0,choices.Length);
+            for(int i=0;i<result.Length;i++)result[i]=choices[(start+i)%choices.Length];return result;
         }
         private static void Start(){if(Interlocked.CompareExchange(ref _running,1,0)==0)Task.Run((Action)Run);}
         private static void Run()
@@ -69,8 +83,39 @@ namespace WildWasteland.Modules.Patrols
                     try
                     {
                         if(request.Job.Epoch!=Volatile.Read(ref _epoch))continue;
-                        request.Job.Route=TerrainWaypoints.Build(request.A,request.B,request.Hints,request.Blocks,request.Influence,request.Seed,request.Elevation,out var roads);
-                        request.Job.Roads=roads;RoadPath.Prepare(request.Job.Route);Interlocked.Increment(ref Searches);
+                        if(request.Foot)
+                        {
+                            request.Job.Route=TerrainWaypoints.Build(request.A,request.B,request.Hints,request.Blocks,request.Influence,request.Seed,request.Elevation,out var roads);
+                            request.Job.Roads=roads;
+                        }
+                        else if(request.Existing!=null)
+                        {
+                            request.Job.Route=VehicleRoute.Revalidate(request.Existing,request.Lines,request.Elevation,request.Blocks,request.Convoy,out var roads);
+                            request.Job.Roads=roads;
+                        }
+                        else
+                        {
+                            var pairs=new List<Tuple<float,TrafficBase,TrafficBase>>();
+                            foreach(var source in request.Sources)foreach(var destination in request.Destinations)
+                            {
+                                float distance=TrafficLocations.FlatDistance(source.apron,destination.apron);
+                                if(ReferenceEquals(source,destination)||request.Sources.Length+request.Destinations.Length>2&&distance<300f)continue;
+                                float score=distance;
+                                for(int i=0;i<=12;i++)
+                                {var p=Vector3.Lerp(source.apron,destination.apron,i/12f);score+=ElevationGrid.Sample(request.Elevation,p,out _,out float slope)?slope*slope*distance:distance;}
+                                pairs.Add(Tuple.Create(score,source,destination));
+                            }
+                            pairs.Sort((x,y)=>x.Item1.CompareTo(y.Item1));float best=float.PositiveInfinity;
+                            for(int i=0;i<Math.Min(6,pairs.Count);i++)
+                            {
+                                if(request.Job.Epoch!=Volatile.Read(ref _epoch))break;
+                                var pair=pairs[i];
+                                var route=VehicleRoute.Build(pair.Item2.apron,pair.Item3.apron,request.Lines,request.Elevation,request.Blocks,request.Convoy,out var roads,out float score);
+                                if(route==null||score>=best)continue;
+                                best=score;request.Job.Route=route;request.Job.Roads=roads;request.Job.Source=pair.Item2;request.Job.Destination=pair.Item3;
+                            }
+                        }
+                        if(request.Job.Route!=null)RoadPath.Prepare(request.Job.Route);Interlocked.Increment(ref Searches);
                     }
                     catch(Exception e){request.Job.Error=e.ToString();}
                     finally{request.Job.Complete=true;}

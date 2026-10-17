@@ -543,7 +543,7 @@ namespace WildWasteland.Modules.Patrols
             for (int i = 0; i < walkers.Length; i++) walkers[i] = new TrafficWalker { identity = pool[UnityEngine.Random.Range(0, pool.Length)] };
             _nextFootRoll = Time.time + PatrolsModule.FootCheckSeconds.Value; _footWhy = null;
             var stop = new TrafficBase { id = point.id, name = point.name, apron = point.position, center = point.position, gate = point.position };
-            _footDeparture = new FootDeparture { Job = RoadPlanner.RequestRoute(source, stop, false), Back = RoadPlanner.RequestRoute(stop, source, false), Source = source, Destination = source, Point = point, Since = Time.time,
+            _footDeparture = new FootDeparture { Job = RoadPlanner.RequestRoute(source, stop, false, true), Back = RoadPlanner.RequestRoute(stop, source, false, true), Source = source, Destination = source, Point = point, Since = Time.time,
                 Name = FootName(faction, null), Faction = faction, Walkers = walkers };
         }
 

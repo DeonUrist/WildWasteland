@@ -50,7 +50,7 @@ namespace WildWasteland.Modules.CleanHUD
             _attempted = true;
             try
             {
-                if (info.Metadata.Version != new Version(0, 2, 5)) throw new NotSupportedException("Expected ChaseCamera 0.2.5, found " + info.Metadata.Version);
+                if (info.Metadata.Version != new Version(0, 2, 5)) CleanHudModule.Warn("ChaseCamera " + info.Metadata.Version + " differs from the tested 0.2.5; attempting HUD compatibility with this version");
                 var assembly = info.Instance.GetType().Assembly;
                 var readings = assembly.GetType("ApocaChaseCamera.DrivingReadings", true);
                 var snapshot = assembly.GetType("ApocaChaseCamera.DrivingSnapshot", true);
@@ -83,7 +83,7 @@ namespace WildWasteland.Modules.CleanHUD
                 var reading = Expression.Variable(snapshot, "reading");
                 _capture = Expression.Lambda<Func<VehicleController, bool>>(Expression.Block(new[] { reading }, Expression.Call(capture, vehicle, reading)), vehicle).Compile();
                 _ready = true;
-                CleanHudModule.Log("ChaseCamera 0.2.5 HUD bridge ready: first/third-person source speed/RPM/gear, driving-only visibility, text above weapon UI and rendered compass heading.");
+                CleanHudModule.Log("ChaseCamera " + info.Metadata.Version + " HUD bridge ready: first/third-person source speed/RPM/gear, driving-only visibility, text above weapon UI and rendered compass heading.");
             }
             catch (Exception e) { _ready = false; CleanHudModule.Warn("ChaseCamera HUD bridge unavailable; retaining its original HUD: " + e.Message); }
         }

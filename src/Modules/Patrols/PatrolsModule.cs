@@ -75,6 +75,7 @@ namespace WildWasteland.Modules.Patrols
 
             // hooks (Core dispatchers) and module patches, each in its own try like the old Awake
             Try("Traffic roads", TrafficRoads.Install);
+            Scheduler.Sliced(this, "Traffic final terrain", 500, TrafficRoads.GroundStep);
             Try("Camp status", () => TrafficCamps.Install(this));
             Try("Seated LOS guard", () => SeatedLosGuard.Install(this));
             Try("Suspension", () => Suspension.Install(this));

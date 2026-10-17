@@ -147,6 +147,7 @@ namespace WildWasteland.Core
         int Add(string owner, Func<Vector3> position, string icon, Color color);
         bool Exists(int id);
         bool Remove(int id);
+        void Identify(int id);
         void RemoveAll(string owner);
     }
 

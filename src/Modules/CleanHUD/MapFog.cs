@@ -38,7 +38,11 @@ namespace WildWasteland.Modules.CleanHUD
         private static float _idleCone, _idleRange;
         private static bool _idleBinoculars;
         private static string _saves;
-        internal static float RevealRadius { get { return Mathf.Max(Cell, CleanHudModule.FogRadius.Value) * 2f; } }
+        private static bool _painting, _paintBinoculars;
+        private static Vector3 _paintPosition, _paintForward;
+        private static float _paintRadius, _paintInner, _paintCone, _paintRange;
+        private static int _paintStep, _paintReach, _paintX, _paintZ, _paintRow;
+        internal static float RevealRadius { get { return Mathf.Min(4000f, Mathf.Max(Cell, CleanHudModule.FogRadius.Value) * 2f * VantageDiscovery.Scale); } }
 
         private static byte[] New() { var d = new byte[4096]; for (int i = 0; i < d.Length; i++) d[i] = 255; return d; }
         private static long Key(int cx, int cz) { return ((long)cx << 32) ^ (uint)cz; }
@@ -55,12 +59,12 @@ namespace WildWasteland.Modules.CleanHUD
 
         internal static void Reset()
         {
-            Chunks.Clear(); _loaded = false; _seed = int.MinValue; _window = false; _havePosition = false; _wasOpen = false; _idle = false;
+            Chunks.Clear(); _loaded = false; _seed = int.MinValue; _window = false; _havePosition = false; _wasOpen = false; _idle = false; _painting = false;
             DropOverlay();
         }
 
         // Scene objects die with the scene; exploration stays until the next load replaces it.
-        internal static void SceneLoaded() { DropOverlay(); _wasOpen = false; }
+        internal static void SceneLoaded() { DropOverlay(); _wasOpen = false; _painting = false; _idle = false; }
 
         internal static void Shutdown()
         {
@@ -76,7 +80,7 @@ namespace WildWasteland.Modules.CleanHUD
             _overlay = null; _map = null;
         }
 
-        internal static void OriginShifted() { _holdUntil = Time.unscaledTime + .5f; }
+        internal static void OriginShifted() { _holdUntil = Time.unscaledTime + .5f; _painting = false; _idle = false; }
 
         // Map markers (CleanHUD location symbols) in unexplored cells stay hidden while the fog is shown.
         internal static bool Hides(Vector3 scene)
@@ -92,6 +96,7 @@ namespace WildWasteland.Modules.CleanHUD
         // ---- exploration (0.2 s interval)
         internal static void Paint()
         {
+            if (_painting) return;
             float now = Time.unscaledTime, dt = Mathf.Min(now - _lastPaint, 1f); _lastPaint = now;
             if (!_loaded || _standDown || !GameRefs.InGame || SaveBus.Busy || now < _holdUntil || Origin.AnchorTransform == null) return;
             var player = GameRefs.Player; if (player == null) return;
@@ -113,8 +118,20 @@ namespace WildWasteland.Modules.CleanHUD
             _idleBinoculars = binoculars; _idleForward = forward; _idleCone = cone; _idleRange = range;
             int step = Mathf.Max(1, (int)(dt * 255f)), reach = Mathf.CeilToInt(range / Cell) + 1;
             int px = Mathf.FloorToInt(p.x / Cell), pz = Mathf.FloorToInt(p.z / Cell);
+            _painting = true; _paintPosition = p; _paintForward = forward; _paintBinoculars = binoculars;
+            _paintRadius = radius; _paintInner = inner; _paintCone = cone; _paintRange = range;
+            _paintStep = step; _paintReach = reach; _paintX = px; _paintZ = pz; _paintRow = -reach;
+        }
+        internal static bool PaintStep()
+        {
+            if (!_painting || !GameRefs.InGame || SaveBus.Busy) return false;
+            if (!_loaded || _standDown || GameRefs.Player == null || (Origin.World(GameRefs.Player.transform.position) - _paintPosition).sqrMagnitude > 90000f)
+            { _painting = false; _idle = false; return false; }
+            var p = _paintPosition; var forward = _paintForward; bool binoculars = _paintBinoculars;
+            float radius = _paintRadius, inner = _paintInner, range = _paintRange, cone = _paintCone;
+            int px = _paintX, pz = _paintZ, step = _paintStep, reach = _paintReach;
             long lastKey = long.MinValue; Chunk chunk = null;
-            for (int dz = -reach; dz <= reach; dz++)
+            int dz = _paintRow++;
             {
                 int cz = pz + dz; float oz = (cz + .5f) * Cell - p.z;
                 for (int dx = -reach; dx <= reach; dx++)
@@ -140,6 +157,7 @@ namespace WildWasteland.Modules.CleanHUD
                     }
                 }
             }
+            _painting = _paintRow <= reach; return _painting;
         }
 
         // ---- overlay (every frame; cheap while the map is closed)
@@ -224,7 +242,7 @@ namespace WildWasteland.Modules.CleanHUD
 
         internal static void WorldReady(string slot)
         {
-            Chunks.Clear(); _window = false; _havePosition = false; _idle = false; _loaded = true; _seed = Seed();
+            Chunks.Clear(); _window = false; _havePosition = false; _idle = false; _painting = false; _loaded = true; _seed = Seed();
             if (_standDown) return;
             string from = "nothing saved for this world yet";
             try

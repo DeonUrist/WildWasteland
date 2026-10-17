@@ -33,7 +33,7 @@ namespace WildWasteland.Modules.PlayerBody
             _attempted = true;
             try
             {
-                if (info.Metadata.Version != new Version(0, 2, 5)) throw new NotSupportedException("Expected ChaseCamera 0.2.5, found " + info.Metadata.Version);
+                if (info.Metadata.Version != new Version(0, 2, 5)) Core.Log.Warn("[PlayerBody] ChaseCamera " + info.Metadata.Version + " differs from the tested 0.2.5; attempting compatibility with this version");
                 var bridge = info.Instance.GetType().Assembly.GetType("ApocaChaseCamera.ApocaplayerBridge", true);
                 var refresh = (Action)Delegate.CreateDelegate(typeof(Action), AccessTools.Method(bridge, "Refresh"));
                 var shutdown = (Action)Delegate.CreateDelegate(typeof(Action), AccessTools.Method(bridge, "Shutdown"));
@@ -43,7 +43,7 @@ namespace WildWasteland.Modules.PlayerBody
                 _refresh = refresh; _shutdown = shutdown;
                 refresh(); shutdown(); discover();
                 if (!(bool)AccessTools.Field(bridge, "compatible").GetValue(null)) throw new NotSupportedException("Source bridge rejected the PlayerBody interface; see its preceding warning");
-                Core.Log.Always("[PlayerBody] ChaseCamera 0.2.5 type adapter ready; source bridge retains driving camera, aim, cutaway and origin handling.");
+                Core.Log.Always("[PlayerBody] ChaseCamera " + info.Metadata.Version + " type adapter ready; source bridge retains driving camera, aim, cutaway and origin handling.");
             }
             catch (Exception e) { PlayerBodyModule.Warn("ChaseCamera compatibility unavailable: " + e.Message); }
         }

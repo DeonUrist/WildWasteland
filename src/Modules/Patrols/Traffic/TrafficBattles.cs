@@ -210,7 +210,7 @@ namespace WildWasteland.Modules.Patrols
                 template.SpawnEvent="battle:"+battle.id+":"+side;template.ConvoyMember=false;template.TrafficId="";template.TrafficSlot=-1;
                 if(battle.resolved){template.Driver=template.Passenger="";for(int i=0;i<template.Turrets.Length;i++)template.Turrets[i]="";if(template.Trailer!=null){template.Trailer=template.Trailer.CloneForSpawn();for(int i=0;i<template.Trailer.Turrets.Length;i++)template.Trailer.Turrets[i]="";}}
                 var world=battle.position+new Vector3((side==0?-1:1)*(18f+turn*7f),0f,turn*22f);
-                Vector3 ground;if(!Convoy.GroundAt(TrafficSpace.Scene(world),out ground))continue;
+                Vector3 ground;if(!Convoy.GroundAt(TrafficSpace.Scene(world),out ground,template.IsTruck))continue;
                 yield return BuildBattleSlot(battle,live,side,index,template,original,ground,generation);
                 if(generation!=Patrol.SceneGen)yield break;
                 yield return new WaitForSeconds(0.7f);

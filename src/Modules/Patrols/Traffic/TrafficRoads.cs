@@ -29,6 +29,7 @@ namespace WildWasteland.Modules.Patrols
         internal Vector3[][] Lines;
         internal bool Cached;
         internal ElevationGrid Elevation;
+        internal bool FinalGround;
         private Vector3[] _hints;
         internal Vector3[] Hints
         {
@@ -45,7 +46,6 @@ namespace WildWasteland.Modules.Patrols
         internal void Compact()
         {
             var hints=Hints;
-            Lines=hints.Length>=2?new[]{hints}:new Vector3[0][];
             if(hints.Length<2)_hints=new Vector3[0];
         }
     }
@@ -77,6 +77,12 @@ namespace WildWasteland.Modules.Patrols
         private static int _seed;
         private static float _scanAt, _writeAt;
         private static bool _installed;
+        private sealed class GroundCapture
+        { internal TerrainTile Tile; internal string World; internal int Index, Revision; internal ElevationGrid Grid; internal float At; }
+        private static readonly Queue<GroundCapture> GroundQueue = new Queue<GroundCapture>();
+        private static readonly Dictionary<TerrainTile, GroundCapture> GroundPending = new Dictionary<TerrainTile, GroundCapture>();
+        private static int _vistasRoads;
+        private static string _vistasIdentity;
         // WW: BepInEx\config\WildWasteland\Patrols\roads (set by PatrolsModule.Init); the standalone cache folder is read as a fallback
         internal static string CacheDir, LegacyCacheDir;
         internal static int Revision { get; private set; }
@@ -91,6 +97,7 @@ namespace WildWasteland.Modules.Patrols
             TerrainTile.OnBeforeTilePrepare += Prepare;
             TerrainTile.OnTileFinalized += Finalized;
             TerrainTile.OnTileApplied += LocationsApplied;
+            Core.VistasWorldGen.TerrainEdited += QueueGround;
         }
         internal static void Uninstall()
         {
@@ -99,11 +106,13 @@ namespace WildWasteland.Modules.Patrols
             TerrainTile.OnBeforeTilePrepare -= Prepare;
             TerrainTile.OnTileFinalized -= Finalized;
             TerrainTile.OnTileApplied -= LocationsApplied;
+            Core.VistasWorldGen.TerrainEdited -= QueueGround;
         }
 
         internal static void Reset()
         {
             Flush(); Captures.Clear(); Tiles.Clear(); Loads.Clear();Requested.Clear();
+            GroundQueue.Clear(); GroundPending.Clear();
             _world = null; _map = null; _graph = null; _scanAt = 0f; Revision++;
             while (Pending.TryDequeue(out _)) { }
         }
@@ -124,9 +133,10 @@ namespace WildWasteland.Modules.Patrols
         {
             if (map.graph == null) return;
             int seed = map.graph.random.Seed;
-            if (_world != null && _map == map && _graph == map.graph && _seed == seed) return;
+            if (_world != null && _map == map && _graph == map.graph && _seed == seed && _vistasIdentity == Core.VistasWorldGen.RoadIdentity) return;
             Flush(); Tiles.Clear(); Loads.Clear();Requested.Clear();Revision++;
             _map = map; _graph = map.graph; _seed = seed;
+            _vistasIdentity = Core.VistasWorldGen.RoadIdentity;
             // Follow the actual road terrain-layer inputs upstream to Stroke generators. No authored generator IDs.
             var sources = new HashSet<ulong>();
             var generators = map.graph.generators.ToDictionary(g => g.Id);
@@ -160,7 +170,8 @@ namespace WildWasteland.Modules.Patrols
 
         private static string Fingerprint(MapMagicObject map)
         {
-            var text = new StringBuilder("roads-v1|");
+            var text = new StringBuilder("roads-v3|");
+            text.Append(Core.VistasWorldGen.RoadIdentity).Append('|');
             text.Append(typeof(MapMagicObject).Assembly.ManifestModule.ModuleVersionId).Append('|');
             text.Append(map.graph.random.Seed).Append('|').Append(map.tileSize).Append('|')
                 .Append((int)map.tileResolution).Append('|').Append(map.tileMargins).Append('|').Append(map.globals.height);
@@ -183,7 +194,41 @@ namespace WildWasteland.Modules.Patrols
                 return BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(text.ToString()))).Replace("-", "").Substring(0, 24);
         }
 
-        private static void LocationsApplied(TerrainTile tile, TileData data, StopToken stop) { if (tile != null) TrafficLocations.TileApplied(); }
+        private static void LocationsApplied(TerrainTile tile, TileData data, StopToken stop)
+        { if (tile != null) { TrafficLocations.TileApplied(); QueueGround(tile); } }
+        private static void QueueGround(TerrainTile tile)
+        {
+            if (tile == null || tile.main == null || !tile.main.applyReady || tile.main.terrain == null || _world == null) return;
+            GroundCapture capture;
+            if (GroundPending.TryGetValue(tile, out capture))
+            { capture.Index = 0; capture.At = Time.unscaledTime + 2f; capture.Revision = Core.VistasWorldGen.RoadRevision; return; }
+            capture = new GroundCapture { Tile = tile, World = _world, At = Time.unscaledTime + 2f, Revision = Core.VistasWorldGen.RoadRevision };
+            GroundPending.Add(tile, capture); GroundQueue.Enqueue(capture);
+        }
+        internal static bool GroundStep()
+        {
+            if (GroundQueue.Count == 0) return false;
+            var capture = GroundQueue.Peek(); var tile = capture.Tile;
+            if (tile == null || capture.World != _world || tile.main == null || tile.main.terrain == null || !tile.main.applyReady)
+            { GroundQueue.Dequeue(); GroundPending.Remove(tile); return GroundQueue.Count > 0; }
+            if (Time.unscaledTime < capture.At) return false;
+            if (capture.Revision != Core.VistasWorldGen.RoadRevision)
+            { capture.Revision = Core.VistasWorldGen.RoadRevision; capture.Index = 0; capture.At = Time.unscaledTime + 2f; return false; }
+            var terrain = tile.main.terrain; var data = terrain.terrainData;
+            if (data == null) { GroundQueue.Dequeue(); GroundPending.Remove(tile); return GroundQueue.Count > 0; }
+            if (capture.Grid == null) capture.Grid = new ElevationGrid { Area = tile.WorldRect, Size = 257, Heights = new float[257 * 257] };
+            var grid = capture.Grid; float y = terrain.transform.position.y - TrafficSpace.Origin.y;
+            int end = Math.Min(grid.Heights.Length, capture.Index + 64);
+            for (; capture.Index < end; capture.Index++)
+                grid.Heights[capture.Index] = data.GetInterpolatedHeight((capture.Index % grid.Size) / (grid.Size - 1f), (capture.Index / grid.Size) / (grid.Size - 1f)) + y;
+            if (capture.Index < grid.Heights.Length) return true;
+            string id = tile.coord.x + "_" + tile.coord.z;
+            RoadTile old; Tiles.TryGetValue(id, out old);
+            var result = new RoadTile { World = _world, X = tile.coord.x, Z = tile.coord.z, Elevation = grid, FinalGround = true,
+                Lines = old != null ? old.Lines : new Vector3[0][] };
+            Tiles[id] = result; Dirty.Enqueue(result); Revision++;
+            GroundQueue.Dequeue(); GroundPending.Remove(tile); return GroundQueue.Count > 0;
+        }
         private static void Finalized(TerrainTile tile, TileData data, StopToken stop)
         {
             if (data == null || data.isDraft || (stop != null && stop.stop) || !Captures.TryRemove(data, out var capture)) return;
@@ -249,22 +294,26 @@ namespace WildWasteland.Modules.Patrols
                 if (map != null && map.graph != null)
                 {
                     Activate(map);
+                    bool finalized = false;
                     foreach (var tile in map.tiles.All())
                     {
                         string id = tile.coord.x + "_" + tile.coord.z;
-                        if (Tiles.ContainsKey(id) || tile.main == null || !tile.main.applyReady) continue;
-                        if (tile.main.data != null && tile.main.data.ProductsCount > 0)
-                        { Prepare(tile, tile.main.data); Finalized(tile, tile.main.data, null); }
-                        // Don't read full terrain paint/height arrays. Missing road hints use the cheap snake fallback.
-                        break; // One existing terrain per scan; ordinary captures are cheaper and exact.
+                        if (tile.main == null || !tile.main.applyReady) continue;
+                        RoadTile known;
+                        if ((Core.VistasWorldGen.RoadRevision != _vistasRoads || !Tiles.TryGetValue(id, out known) || !known.FinalGround) && !GroundPending.ContainsKey(tile)) QueueGround(tile);
+                        if (Tiles.ContainsKey(id)) continue;
+                        if (!finalized && tile.main.data != null && tile.main.data.ProductsCount > 0)
+                        { Prepare(tile, tile.main.data); Finalized(tile, tile.main.data, null); finalized = true; }
+                        // Final applied heights (including Vistas road grading) are captured by GroundStep.
                     }
+                    _vistasRoads = Core.VistasWorldGen.RoadRevision;
                 }
             }
             for (int i = 0; i < 4 && Pending.TryDequeue(out var tile); i++)
             {
                 if (tile.World != _world || Tiles.Count >= 2048 && !Tiles.ContainsKey(tile.Id)) continue;
                 if (Tiles.TryGetValue(tile.Id, out var old) && !old.Approximate && tile.Approximate) continue;
-                if(Tiles.TryGetValue(tile.Id,out old)&&!old.Approximate&&tile.Cached)continue;
+                if(Tiles.TryGetValue(tile.Id,out old)&&old.Elevation!=null&&(!old.Approximate&&tile.Cached||old.FinalGround))continue;
                 Tiles[tile.Id] = tile; if(!tile.Cached)Dirty.Enqueue(tile); Revision++;
             }
             if (Time.unscaledTime >= _writeAt && Dirty.Count > 0)
@@ -317,13 +366,14 @@ namespace WildWasteland.Modules.Patrols
             string temporary = path + ".tmp";
             using (var writer = new BinaryWriter(File.Create(temporary)))
             {
-                writer.Write(0x41505244); writer.Write(2); writer.Write(tile.World); writer.Write(tile.X); writer.Write(tile.Z);
+                writer.Write(0x41505244); writer.Write(3); writer.Write(tile.World); writer.Write(tile.X); writer.Write(tile.Z);
                 writer.Write(tile.Approximate); writer.Write(tile.Lines.Length);
                 foreach (var line in tile.Lines)
                 { writer.Write(line.Length); foreach (var p in line) { writer.Write(p.x); writer.Write(p.y); writer.Write(p.z); } }
                 var grid=tile.Elevation;writer.Write(grid!=null);
                 if(grid!=null)
                 {writer.Write(grid.Area.x);writer.Write(grid.Area.y);writer.Write(grid.Area.width);writer.Write(grid.Area.height);writer.Write(grid.Size);foreach(float height in grid.Heights)writer.Write(height);}
+                writer.Write(tile.FinalGround);
             }
             if (File.Exists(path)) File.Replace(temporary, path, null); else File.Move(temporary, path);
         }
@@ -332,7 +382,7 @@ namespace WildWasteland.Modules.Patrols
             using (var reader = new BinaryReader(File.OpenRead(path)))
             {
                 if(reader.ReadInt32()!=0x41505244)throw new InvalidDataException("Road cache header");
-                int version=reader.ReadInt32();if((version!=1&&version!=2)||reader.ReadString()!=world)throw new InvalidDataException("Road cache identity mismatch");
+                int version=reader.ReadInt32();if((version!=1&&version!=2&&version!=3)||reader.ReadString()!=world)throw new InvalidDataException("Road cache identity mismatch");
                 var tile = new RoadTile { World = world, X = reader.ReadInt32(), Z = reader.ReadInt32(), Approximate = reader.ReadBoolean() };
                 int count = reader.ReadInt32(), total = 0;
                 if (count < 0 || count > 4096) throw new InvalidDataException("Road count");
@@ -351,10 +401,11 @@ namespace WildWasteland.Modules.Patrols
                 if(version>=2&&reader.ReadBoolean())
                 {
                     var rect=new Rect(reader.ReadSingle(),reader.ReadSingle(),reader.ReadSingle(),reader.ReadSingle());int size=reader.ReadInt32();
-                    if(!Finite(new Vector3(rect.x,rect.y,rect.width))||!Finite(new Vector3(rect.height,0f,0f))||rect.width<=0f||rect.height<=0f||size<2||size>65)throw new InvalidDataException("Elevation grid dimensions");
+                    if(!Finite(new Vector3(rect.x,rect.y,rect.width))||!Finite(new Vector3(rect.height,0f,0f))||rect.width<=0f||rect.height<=0f||size<2||size>257)throw new InvalidDataException("Elevation grid dimensions");
                     var heights=new float[size*size];for(int i=0;i<heights.Length;i++){heights[i]=reader.ReadSingle();if(float.IsNaN(heights[i])||float.IsInfinity(heights[i]))throw new InvalidDataException("Elevation sample");}
                     tile.Elevation=new ElevationGrid{Area=rect,Size=size,Heights=heights};
                 }
+                if(version>=3)tile.FinalGround=reader.ReadBoolean();
                 if (reader.BaseStream.Position != reader.BaseStream.Length) throw new InvalidDataException("Trailing road data");
                 var hints=tile.Hints;
                 return tile;

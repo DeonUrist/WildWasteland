@@ -41,7 +41,7 @@ namespace WildWasteland.Modules.CleanHUD
         {
             PluginInfo info;
             if (!Chainloader.PluginInfos.TryGetValue("com.example.apocalypter.talk", out info) || ReferenceEquals(info.Instance, null)) return;
-            if (info.Metadata.Version != new Version(2, 0, 0)) { CleanHudModule.Warn("Dialogue bridge needs Apocatalker 2.0.0; keeping its window"); return; }
+            if (info.Metadata.Version != new Version(2, 0, 0)) CleanHudModule.Warn("Apocatalker " + info.Metadata.Version + " differs from the tested 2.0.0; attempting dialogue compatibility with this version");
             _plugin = info.Instance; var p = _plugin.GetType(); var u = p.Assembly.GetType("ApocalypterTalk.DialogueUI", true);
             _getUi = Get<object>(p, "dialogueUI"); _talking = Get<bool>(p, "Talking"); _npcName = Get<string>(p, "npcName");
             _panel = Get<RectTransform>(u, "panel"); _sourceChat = Get<RectTransform>(u, "chatContent"); _sourceChoices = Get<RectTransform>(u, "promptContent");

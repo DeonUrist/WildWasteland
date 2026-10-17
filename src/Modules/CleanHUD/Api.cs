@@ -39,6 +39,7 @@ namespace WildWasteland.Modules.CleanHUD.Api
             internal bool Anchored;
             internal Marker Style;
             internal bool Broken;
+            internal bool Identified;
             internal string IconKey; internal int IconRevision; internal Texture Icon;   // HUD's resolved icon for IconKey
         }
 

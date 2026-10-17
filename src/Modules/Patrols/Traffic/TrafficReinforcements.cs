@@ -30,7 +30,7 @@ namespace WildWasteland.Modules.Patrols
                 &&!_calls.Values.Any(c=>c.Redirect==j)&&(!_live.TryGetValue(j.id,out var live)||!live.Building)
                 &&TrafficLocations.FlatDistance(j.position,camp.apron)<=PatrolsModule.CampTrafficRange.Value)
                 .OrderBy(j=>TrafficLocations.FlatDistance(j.position,camp.apron)).FirstOrDefault();
-            TrafficVehicle[] vehicles=null;TrafficBase source;string name=redirect!=null?redirect.name:"";
+            TrafficVehicle[] vehicles=null;TrafficBase source;TrafficBase[] alternatives=null;string name=redirect!=null?redirect.name:"";
             if(redirect!=null)source=new TrafficBase{id=redirect.source,apron=redirect.position};
             else
             {
@@ -42,10 +42,11 @@ namespace WildWasteland.Modules.Patrols
                 var nearby=TrafficLocations.Known.Values.Where(c=>c.id!=camp.id&&!c.cleared&&c.faction==camp.faction&&!TrafficLocations.PlayerAt(c)
                     &&TrafficCamps.Loaded(c.id)&&TrafficLocations.FlatDistance(c.apron,camp.apron)>=300f
                     &&TrafficLocations.FlatDistance(c.apron,camp.apron)<=PatrolsModule.CampTrafficRange.Value).ToArray();
+                alternatives=nearby;
                 float angle=UnityEngine.Random.Range(0f,Mathf.PI*2f);
                 source=nearby.Length>0?nearby[UnityEngine.Random.Range(0,nearby.Length)]:new TrafficBase{id="",apron=OffscreenTrafficPoint(camp.apron,new Vector3(Mathf.Cos(angle),0f,Mathf.Sin(angle)))};
             }
-            _calls[camp.id]=new Departure{Source=source,Destination=camp,Name=name,Faction=camp.faction,Vehicles=vehicles,Redirect=redirect,Job=RoadPlanner.RequestRoute(source,camp,false)};
+            _calls[camp.id]=new Departure{Source=source,Destination=camp,Name=name,Faction=camp.faction,Vehicles=vehicles,Redirect=redirect,Job=RoadPlanner.RequestRoute(source,camp,vehicles!=null&&vehicles.Any(v=>v.truck),false,alternatives)};
             PatrolsModule.Verbose("Patrol call planning: "+camp.id+" from "+(redirect!=null?"nearby patrol "+redirect.id:string.IsNullOrEmpty(source.id)?"outside map":source.id));
         }
         private void PumpPatrolCalls()
@@ -53,6 +54,7 @@ namespace WildWasteland.Modules.Patrols
             foreach(var pair in _calls.ToArray())
             {
                 var pending=pair.Value;if(!pending.Job.Complete)continue;_calls.Remove(pair.Key);
+                pending.Source=pending.Job.Source;
                 float hour=CallHour();
                 if(!TrafficLocations.Known.TryGetValue(pair.Key,out var camp)||!PatrolsModule.ConvoyEnabled.Value||camp.cleared||hour<0f||pending.Job.Route==null)continue;
                 var journey=pending.Redirect;

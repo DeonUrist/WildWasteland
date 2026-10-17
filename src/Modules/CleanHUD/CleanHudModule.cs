@@ -70,7 +70,7 @@ namespace WildWasteland.Modules.CleanHUD
             }
             FogOfWar = cfg.Player("Map", "FogOfWar", true, "Hide the parts of the map you have not explored yet. Exploring is recorded while this is off.");
             cfg.Migrate(FogOfWar, "local.immersivemap.cfg", "Fog", "Enabled");
-            FogRadius = cfg.Player("Map", "FogRevealRadius", 500f, "Base range in meters. Exploration reveals twice this radius around you; raised binoculars extend the viewed cone twice as far again.", new AcceptableValueRange<float>(50f, 2000f));
+            FogRadius = cfg.Player("Map", "FogRevealRadius", 500f, "Base range in meters. Exploration reveals twice this radius; high ground extends it up to threefold (4 km radial cap), with raised binoculars doubling the viewed cone again.", new AcceptableValueRange<float>(50f, 2000f));
             cfg.Migrate(FogRadius, "local.immersivemap.cfg", "Fog", "RevealRadius");
             FogEdge = cfg.Player("Map", "FogEdgeFade", 200f, "Width in meters of the soft edge, measured inward from the reveal radius. 0 = hard edge.", new AcceptableValueRange<float>(0f, 1000f));
             cfg.Migrate(FogEdge, "local.immersivemap.cfg", "Fog", "EdgeFadeDistance");
@@ -124,6 +124,8 @@ namespace WildWasteland.Modules.CleanHUD
             Assets.Preload();
             SceneCache.Reset();
             Binoculars.Init(this);
+            VistasBanners.Init(this);
+            Scheduler.Interval(this, "Vantage terrain", .2f, VantageDiscovery.Tick);
             LocationMarkers.Init();
             MapFog.Init();
             _loadingScreen = new LoadingScreen();
@@ -152,6 +154,7 @@ namespace WildWasteland.Modules.CleanHUD
             Scheduler.EveryFrame(this, "Weather map areas", TickWeatherMap, Phase.LateUpdateLast);
             Scheduler.Gui(this, "Player map marker", _questMap.DrawPlayer, _questMap.PlayerShown);
             Scheduler.Interval(this, "Map fog exploration", .2f, MapFog.Paint);
+            Scheduler.Sliced(this, "Map fog painting", 500, MapFog.PaintStep);
             Scheduler.EveryFrame(this, "Dialogue window", TalkDialogue.Tick, Phase.LateUpdateLast);
             Scheduler.EveryFrame(this, "Quest journal", QuestJournal.Tick, Phase.LateUpdateLast);
             _attach = Scheduler.Interval(this, "HUD attachment", 1f, AttachHud, Phase.LateUpdateLast);
@@ -191,9 +194,10 @@ namespace WildWasteland.Modules.CleanHUD
         }
         bool ICompassMarkers.VehiclesEnabled { get { return Running && Enabled.Value && ShowCompass.Value && ShowConvoys.Value; } }
         int ICompassMarkers.Add(string owner, Func<Vector3> position, string icon, Color color)
-        { return Api.Compass.Add(owner, position, new Api.Marker { Icon = icon, Color = color, ShowDistance = true }); }
+        { return Api.Compass.Add(owner, position, new Api.Marker { Icon = icon, Color = color, ShowDistance = true, MaxDistance = owner == "WildWasteland.VehicleGroups" ? 1000f : 0f }); }
         bool ICompassMarkers.Exists(int id) { return Api.Compass.Exists(id); }
         bool ICompassMarkers.Remove(int id) { return Api.Compass.Remove(id); }
+        void ICompassMarkers.Identify(int id) { foreach (var entry in Api.Compass.Entries) if (entry.Id == id) { entry.Identified = true; break; } }
         void ICompassMarkers.RemoveAll(string owner) { Api.Compass.RemoveAll(owner); }
         private void HudChanged(object sender, EventArgs args)
         {
@@ -211,6 +215,7 @@ namespace WildWasteland.Modules.CleanHUD
         {
             _weatherMap.Clear();
             Binoculars.Reset();
+            VantageDiscovery.Reset(); VistasBanners.Reset();
             InventoryStyle.Restore();
             LocationMarkers.Begin(false);
             if (_questMap != null) _questMap.SceneLoaded(); TalkDialogue.Hide(); QuestJournal.Hide();
@@ -218,14 +223,15 @@ namespace WildWasteland.Modules.CleanHUD
             _loadingScreen.SceneLoaded();
             _retry = 0; _attach.RunNow();
         }
-        public override void OnLoadBegin(string slot) { InventoryStyle.Restore(); LocationMarkers.Begin(false); MapFog.Reset(); QuestJournal.Hide(); _loadingScreen.Begin(); Release(); Bindings.Clear(); MessageHook.Clear(); Assets.SceneLoaded(); }
+        public override void OnLoadBegin(string slot) { VantageDiscovery.Reset(); VistasBanners.Reset(); InventoryStyle.Restore(); LocationMarkers.Begin(false); MapFog.Reset(); QuestJournal.Hide(); _loadingScreen.Begin(); Release(); Bindings.Clear(); MessageHook.Clear(); Assets.SceneLoaded(); }
         public override void OnSaveEnd(string slot) { LocationMarkers.SaveEnded(slot); }
-        public override void OnOriginShift(Vector3 delta) { MapFog.OriginShifted(); }
+        public override void OnOriginShift(Vector3 delta) { MapFog.OriginShifted(); VantageDiscovery.OriginShifted(delta); }
         public override void OnWorldReady() { LocationMarkers.WorldReady(SaveBus.Slot); MapFog.WorldReady(SaveBus.Slot); SceneCache.Reset(); SceneCache.BeginKeys(); _attach.RunNow(); }
         public override void Shutdown()
         {
             _weatherMap.Clear();
             Binoculars.Shutdown();
+            VantageDiscovery.Reset(); VistasBanners.Shutdown();
             InventoryStyle.Restore();
             Running = false; Release();
             Scheduler.StopCoroutine(_updateCheck); _updateCheck = null;
