@@ -174,7 +174,8 @@ namespace WildWasteland.Modules.PlayerBody
                     try { UnityEngine.Object.DestroyImmediate(c); } catch (Exception) { }
                 }
             foreach (var r in go.GetComponentsInChildren<Renderer>(true)) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
-            foreach (var t in go.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = 0;
+            // Render-only held props: native flashlight excludes Ignore Raycast; the camera and sun include it.
+            foreach (var t in go.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = 2;
             var src = p.Source.transform;
             go.transform.SetParent(hand, false);
             go.transform.localPosition = src.localPosition;

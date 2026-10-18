@@ -114,7 +114,7 @@ namespace WildWasteland.Modules.Patrols
             {
                 if (Pending.Count == 0)
                 {
-                    if (!_reported) { _reported = true; Core.Log.Always("[Patrols] Vehicle build cache ready: " + Entries.Count + " structural variant(s)."); }
+                    if (!_reported) { _reported = true; PatrolsModule.Verbose("Vehicle build cache ready: " + Entries.Count + " structural variant(s)."); }
                     return false;
                 }
                 _active = Pending.Dequeue();

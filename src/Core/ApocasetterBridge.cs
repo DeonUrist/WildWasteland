@@ -43,11 +43,19 @@ namespace WildWasteland.Core
                 }
                 var gs = asm.GetType("Apocasetter.GameSkin");
                 if (gs != null) _font = gs.GetField("GameFont", BindingFlags.Static | BindingFlags.Public);
+                var ui = asm.GetType("Apocasetter.SettingsUI");
+                var toggle = ui != null ? ui.GetMethod("Toggle", BindingFlags.Instance | BindingFlags.NonPublic, null, Type.EmptyTypes, null) : null;
+                var open = ui != null ? ui.GetField("_open", BindingFlags.Instance | BindingFlags.NonPublic) : null;
+                if (toggle != null && toggle.ReturnType == typeof(void) && open != null && open.FieldType == typeof(bool))
+                    Patches.Patch(null, toggle, prefix: Patches.Method(typeof(ApocasetterBridge), nameof(BeforeMenuToggle)));
+                else Log.Warn("Apocasetter bridge: loading menu guard unavailable; SettingsUI.Toggle/_open not found");
             }
             catch (Exception e) { Log.Warn("Apocasetter bridge: " + e.Message); }
         }
 
         public static bool Present { get { Resolve(); return _set != null; } }
+
+        private static bool BeforeMenuToggle(bool ____open) { return ____open || !LoadingProgress.MenusBlocked; }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal static bool QueueDisable(PluginInfo info, out string error)

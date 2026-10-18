@@ -254,7 +254,7 @@ namespace WildWasteland.Modules.CleanHUD
     // ------------------------------------------------------------------ the menus
     // Title (level0 Canvas_MM) and pause (level1 MainMenu_Canvas) menus in the HUD style. The game's own buttons stay in place,
     // invisible (CanvasGroup alpha 0, no raycasts); every action here sends "Clicked" to the game's own button FSM.
-    internal sealed class Menu
+    internal sealed partial class Menu
     {
         private enum Ctx { None, Title, Pause }
         private static readonly Color Gold = new Color(0xe2 / 255f, 0xbf / 255f, 0x6c / 255f, 1f);
@@ -365,6 +365,11 @@ namespace WildWasteland.Modules.CleanHUD
         internal void Tick()
         {
             if (!CleanHudModule.Running) return;
+            if (CleanHudModule.MenuEnabled.Value)
+            {
+                HideGo(SettingsModel.FindPath("Canvas/TutorialImage"));
+                HideGo(SettingsModel.FindPath("MainMenu_Canvas/MainMenu/TutorialArrow"));
+            }
             if (WildWasteland.Core.UI.EditorSession.Busy || WildWasteland.Core.ApocasetterBridge.InputBlocked)
             {
                 if (WildWasteland.Core.UI.EditorSession.Busy) BlockCancelFrame = Time.frameCount + 1;
@@ -407,8 +412,10 @@ namespace WildWasteland.Modules.CleanHUD
                 else { float w = screenAspect / imageAspect; _background.uvRect = new Rect((1 - w) / 2, 0, w, 1); }
             }
             HideVanilla();
+            TickReference();
             _main.gameObject.SetActive(_screen == "main");
             if (_sub != null) _sub.gameObject.SetActive(_screen != "main");
+            if (_status != null) _status.gameObject.SetActive(_screen != "reference");
             bool showUpdate = _screen == "main" && _modal == null && _updateUrl != null;
             if (_updateButton != null && _updateButton.gameObject.activeSelf != showUpdate) _updateButton.gameObject.SetActive(showUpdate);
             bool showDiscord = _screen == "main" && _modal == null;
@@ -444,6 +451,7 @@ namespace WildWasteland.Modules.CleanHUD
             Core.ReplacementGuard.MenuModalOpen = false;
             if (!keepVanilla) { _van = null; _ctx = Ctx.None; }
             RestoreVanilla();
+            ForgetReference();
             if (_root != null) UnityEngine.Object.Destroy(_root);
             _background = null; _backgroundWidth = _backgroundHeight = 0;
             _root = null; _main = _sub = _modal = _status = null; _sound = null; _screen = "main"; _seedEdit = false; _vanillaWatch = null;
@@ -754,8 +762,8 @@ namespace WildWasteland.Modules.CleanHUD
                 rows.Add(new KeyValuePair<string, Action>("SAVE GAME", OpenSave));
                 rows.Add(new KeyValuePair<string, Action>("WILD WASTELAND", WildWasteland.Core.UI.ToolWindow.OpenFromMenu));
                 rows.Add(new KeyValuePair<string, Action>("SETTINGS", ShowSettings));
-                rows.Add(new KeyValuePair<string, Action>("CODEX", () => Click("MainMenu_Canvas/MainMenu/Codex")));
-                rows.Add(new KeyValuePair<string, Action>("TUTORIAL", () => Click("MainMenu_Canvas/MainMenu/Tutorial")));
+                rows.Add(new KeyValuePair<string, Action>("CODEX", () => ShowReference(false)));
+                rows.Add(new KeyValuePair<string, Action>("TUTORIAL", () => ShowReference(true)));
                 rows.Add(new KeyValuePair<string, Action>("CREDITS", () => Click("MainMenu_Canvas/MainMenu/Credits")));
                 rows.Add(new KeyValuePair<string, Action>("MODS", OpenMods));
                 if (_languageShown) rows.Add(new KeyValuePair<string, Action>("LANGUAGE", OpenLanguage));
@@ -851,6 +859,7 @@ namespace WildWasteland.Modules.CleanHUD
         // ---------------------------------------------------------------- actions
         private void ResetToMain()
         {
+            CloseReference();
             CloseModal();
             if (_seedEdit) EndSeedEdit(false);
             if (_sub != null) { UnityEngine.Object.Destroy(_sub.gameObject); _sub = null; }

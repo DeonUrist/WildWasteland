@@ -2,7 +2,7 @@
 
 A BepInEx 5 mod for **Apocalypter** that combines gameplay mods into one plugin: one load order, one set of Harmony patches, one save/scene lifecycle and one shared frame budget. Every former mod is a **module** with its own on/off switch; everything else about them (features, settings, saves, data files) stays as it was.
 
-Version **0.1.34 RC31** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
+Version **0.1.35 RC32** (plugin GUID `com.denis.apocalypter.wildwasteland`). Status: in-game verification remains pending for features marked Testing on the project board.
 
 | Module | What it is | Replaces (remove these from `BepInEx\plugins`) |
 |---|---|---|
@@ -18,6 +18,8 @@ Version **0.1.34 RC31** (plugin GUID `com.denis.apocalypter.wildwasteland`). Sta
 | Optional compatibility (`QuestsCompat`, `EngineSimCompat`) | Scheduling and integration for separately installed Talk/Quests and Engine Sim | None; keep these dependencies installed |
 
 With Apocasetter and its installer available, WW queues replaced standalones for disable and shows a title-menu restart notice. Restart before playing so the installer can move their files into its recoverable disabled cache; configs remain intact. WW waits for that restart before taking over the conflicting features. Without the installer, follow the notice to disable the named mods manually. This also covers Immersive Map, WomenOfWasteland, HealthStacks and iTweenGuard; optional Talk, Quests, Engine Sim, ChaseCamera and Apocapocket remain installed. Apocaraider (the old monolith) is not detected: remove it by hand.
+
+RC32 includes RC31's features below, adds CleanHUD Tutorial/Codex panels retaining native content, and fits Codex pictures and Tutorial videos without scrolling. Hides the startup tutorial suggestion and blocks F3/F6 menus during loading, including autosave presentation. Vistas routine logs, PlayMaker handler diagnostics and cache-ready messages follow WW VerboseLog. War Rig markers use CleanHUD's diamond, and held weapon copies no longer cast flashlight shadows while retaining sunlight shadows. No config/save changes in this RC. The [release description](notes/release-0.1.35-RC32.md) retains RC31's player-facing changes since RC29, as requested.
 
 RC31: prepares complete patrol and War Rig builds during loading and restores saved vehicles/crews before returning control, retaining damage, missing parts, cargo and trailer state. Corrects Coyote scout/patrol defaults. Adds the long accent-framed loading bar without module-list text, hides Recommended mods during loading, defaults to the game font with optional CleanFont in Debug, and restores inventory DROP including binoculars. Includes 41 navigation maps for all 39 vanilla POI types, persistent custom maps and cache tools, Game RESET, four Performance presets with Vanilla as the fresh default, and Performance and jobs at the bottom of Performance. Adds Vistas compatibility, fixes its activation, improves high-ground scouting and vehicle route selection, and attempts compatibility with newer optional-mod versions. Existing choices and custom assets remain intact. See [changes since RC29](notes/release-0.1.34-RC31.md).
 

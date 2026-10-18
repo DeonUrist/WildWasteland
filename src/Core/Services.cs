@@ -302,6 +302,8 @@ namespace WildWasteland.Core
 
     public interface IMapMarkers
     {
+        /// <summary>Borrowed map artwork, or null while Clean HUD is off. Callers must not dispose it.</summary>
+        Texture2D GetIcon(string key);
         MapDetail Markers { get; }
         MapDetail Routes { get; }
         int Add(string owner, Func<Vector3> position, string icon, Color color, string label);

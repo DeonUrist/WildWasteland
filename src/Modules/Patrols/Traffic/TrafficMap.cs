@@ -159,7 +159,10 @@ namespace WildWasteland.Modules.Patrols
                 if(_rigXStyle==null)_rigXStyle=new GUIStyle(GUI.skin.label){fontSize=24,fontStyle=FontStyle.Bold,alignment=TextAnchor.MiddleCenter,normal={textColor=Color.yellow}};
                 bool unknown=mapApi!=null&&mapApi.Markers==Core.MapDetail.Ambiguous;
                 _rigXStyle.normal.textColor=unknown?Color.white:Color.yellow;
-                GUI.color=Color.white;GUI.Label(new Rect(p.x*rect.width-12f,(1f-p.y)*rect.height-12f,24f,24f),unknown?"?":"X",_rigXStyle);
+                var markerRect=new Rect(p.x*rect.width-12f,(1f-p.y)*rect.height-12f,24f,24f);
+                var icon=mapApi!=null?mapApi.GetIcon(unknown?"unknown":"diamond"):null;
+                if(icon!=null){GUI.color=unknown?Color.white:Color.yellow;GUI.DrawTexture(markerRect,icon,ScaleMode.ScaleToFit);}
+                else{GUI.color=Color.white;GUI.Label(markerRect,unknown?"?":"X",_rigXStyle);}
             }
             GUI.EndGroup();GUI.color=old;
         }

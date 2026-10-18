@@ -7,6 +7,7 @@ using System.Runtime.CompilerServices;
 using BepInEx;
 using BepInEx.Bootstrap;
 using BepInEx.Configuration;
+using BepInEx.Logging;
 using HarmonyLib;
 using MapMagic.Core;
 using MapMagic.Terrains;
@@ -28,6 +29,7 @@ namespace WildWasteland.Core
         internal static string RoadIdentity = "";
         private static ConfigFile _config;
         private static Assembly _assembly;
+        private static ManualLogSource _logger;
         private static string _assemblyId;
         private static ConfigEntry<float> _bannerHeight;
         internal static float BannerHeight { get { return _bannerHeight != null ? _bannerHeight.Value : .18f; } }
@@ -45,6 +47,8 @@ namespace WildWasteland.Core
                 Log.Warn("[Vistas] Version " + info.Metadata.Version + " differs from the tested 1.0.7; attempting compatibility with this version.");
             try
             {
+                _logger = (ManualLogSource)AccessTools.Property(typeof(BaseUnityPlugin), "Logger").GetValue(info.Instance, null);
+                Hook(Find(typeof(ManualLogSource), "Log", typeof(void), typeof(LogLevel), typeof(object)), prefix: "QuietLog");
                 _assembly = assembly;
                 // MonoMod's resolver ignores field types; Vistas overloads field names by type.
                 Hook(Find(typeof(MonoMod.Utils.ReflectionHelper), "_ResolveReflection", typeof(MemberInfo),
@@ -68,10 +72,12 @@ namespace WildWasteland.Core
                 Hook(Find(assembly.GetType("A.q", true), "a", typeof(int), typeof(double[]), typeof(double[]), typeof(int), typeof(bool), typeof(string)), postfix: "RoadCreated");
                 Hook(Find(assembly.GetType("A.S", true), "A", typeof(void), assembly.GetType("A.q", true), typeof(MapMagicObject), typeof(TerrainTile), typeof(Terrain), typeof(TerrainData), assembly.GetType("A.S+A", true), typeof(int), typeof(float)), postfix: "GroundEdited");
                 Hook(Find(assembly.GetType("ApocalpyterWorldAmp.WorldAmpDriver", true), "ClearWorld", typeof(void)), postfix: "ClearRoads");
-                Log.Always("[Vistas] " + info.Metadata.Version + " compatibility ready: overlay defaults off; WW scouting, CleanHUD banners, WW sandstorms and replacement-road capture.");
+                Log.Always("[Vistas] " + info.Metadata.Version + " compatibility ready: overlay defaults off; WW scouting, CleanHUD banners, WW sandstorms and replacement-road capture; routine logging follows WW VerboseLog.");
             }
             catch (Exception e) { Log.Error("[Vistas] Compatibility installation failed", e); }
         }
+        private static bool QuietLog(ManualLogSource __instance, LogLevel __0)
+        { return !ReferenceEquals(__instance, _logger) || Log.Verbose || (__0 & ~(LogLevel.Info | LogLevel.Debug)) != 0; }
         private static bool ResolveField(Mono.Cecil.MemberReference __0, ref MemberInfo __result)
         {
             var field = __0 as Mono.Cecil.FieldReference;

@@ -47,6 +47,7 @@ namespace WildWasteland.Core.UI
         }
         internal static void Tick()
         {
+            if (LoadingProgress.MenusBlocked) { if (_open) Close(); return; }
             if (_open && !_session.Open) Close();
             if (!_openNewGame || !GameRefs.InGame || EditorSession.Busy || ApocasetterBridge.InputBlocked) return;
             Open(CorePages.GamePage);
@@ -65,6 +66,7 @@ namespace WildWasteland.Core.UI
 
         static void Open(ToolPage page, bool fromMenu)
         {
+            if (LoadingProgress.MenusBlocked) return;
             if (!_open)
             {
                 if (EditorSession.Busy || !_session.Acquire(true, fromMenu)) { Log.Info("Settings: another editor is open or the game is paused"); return; }

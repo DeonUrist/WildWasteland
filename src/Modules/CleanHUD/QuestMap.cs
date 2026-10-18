@@ -47,6 +47,7 @@ namespace WildWasteland.Modules.CleanHUD
             }
             finally { GUI.matrix = matrix; GUI.EndGroup(); GUI.color = color; GUI.depth = depth; }
         }
+        public Texture2D GetIcon(string key) { return CleanHudModule.Enabled.Value ? MapIcons.Get(key) : null; }
         public MapDetail Markers { get { return CleanHudModule.MapMarkers.Value; } }
         public MapDetail Routes { get { return CleanHudModule.MapRoutes.Value; } }
         public int Add(string owner, Func<Vector3> position, string icon, Color color, string label)

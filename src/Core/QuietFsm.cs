@@ -19,10 +19,14 @@ namespace WildWasteland.Core
         internal static bool On;
         internal static void Install()
         {
+            Patches.Patch(null, AccessTools.PropertyGetter(typeof(PlayMakerPrefs), "LogPerformanceWarnings"),
+                postfix: AccessTools.Method(typeof(QuietFsm), nameof(PerformanceWarnings)));
             var target = AccessTools.Method(typeof(HutongGames.PlayMaker.ActionHelpers), "GetGameObjectFsm", new[] { typeof(GameObject), typeof(string) });
             if (target == null) { Log.Warn("[Core] QuietFsm: ActionHelpers.GetGameObjectFsm not found; missing-FSM warnings stay"); return; }
             Patches.Patch(null, target, prefix: AccessTools.Method(typeof(QuietFsm), nameof(Prefix)));
         }
+
+        private static void PerformanceWarnings(ref bool __result) { __result = __result && Log.Verbose; }
 
         private static bool Prefix(GameObject __0, string __1, ref PlayMakerFSM __result)
         {
