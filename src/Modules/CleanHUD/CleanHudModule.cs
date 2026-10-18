@@ -127,6 +127,7 @@ namespace WildWasteland.Modules.CleanHUD
             SceneCache.Reset();
             Binoculars.Init(this);
             VistasBanners.Init(this);
+            VistasEngineHud.Install(this);
             Scheduler.Interval(this, "Vantage terrain", .2f, VantageDiscovery.Tick);
             LocationMarkers.Init();
             MapFog.Init();
@@ -145,6 +146,7 @@ namespace WildWasteland.Modules.CleanHUD
             Core.Patches.Patch(this, AccessTools.Method(typeof(UiTextSetText), "OnEnter"), postfix: AccessTools.Method(typeof(MessageHook), "Postfix"));
             Hooks.GetButtonDownUpdate.Prefix(this, CancelHook.Prefix);
             Hooks.EnterState.Postfix(this, PauseCursorFix.AfterEnterState);
+            Hooks.EnterState.Postfix(this, _loadingScreen.AfterEnterState);
             Scheduler.Sliced(this, "Scene key discovery", 500, SceneCache.Step);
             Scheduler.Sliced(this, "Weapon icons", 500, Assets.RenderStep);
             Scheduler.Sliced(this, "Accent panels", 500, AccentTheme.Step);
@@ -159,6 +161,7 @@ namespace WildWasteland.Modules.CleanHUD
             Scheduler.Sliced(this, "Map fog painting", 500, MapFog.PaintStep);
             Scheduler.EveryFrame(this, "Dialogue window", TalkDialogue.Tick, Phase.LateUpdateLast);
             Scheduler.EveryFrame(this, "Quest journal", QuestJournal.Tick, Phase.LateUpdateLast);
+            Scheduler.EveryFrame(this, "Quest dialogue", QuestDialogue.Tick, Phase.LateUpdateLast);
             _attach = Scheduler.Interval(this, "HUD attachment", 1f, AttachHud, Phase.LateUpdateLast);
             _attach.RunNow();
             Scheduler.EveryFrame(this, "HUD", TickHud, Phase.LateUpdateLast);
@@ -220,7 +223,7 @@ namespace WildWasteland.Modules.CleanHUD
             VantageDiscovery.Reset(); VistasBanners.Reset();
             InventoryStyle.Restore();
             LocationMarkers.Begin(false);
-            if (_questMap != null) _questMap.SceneLoaded(); TalkDialogue.Hide(); QuestJournal.Hide();
+            if (_questMap != null) _questMap.SceneLoaded(); TalkDialogue.Hide(); QuestJournal.Hide(); QuestDialogue.Hide();
             Release(); _menu.Teardown(); SceneCache.Reset(); MessageHook.Clear(); Bindings.Clear(); Assets.SceneLoaded();
             _loadingScreen.SceneLoaded();
             _retry = 0; _attach.RunNow();
@@ -234,13 +237,14 @@ namespace WildWasteland.Modules.CleanHUD
             _weatherMap.Clear();
             Binoculars.Shutdown();
             VantageDiscovery.Reset(); VistasBanners.Shutdown();
+            VistasEngineHud.Clear();
             InventoryStyle.Restore();
             Running = false; Release();
             Scheduler.StopCoroutine(_updateCheck); _updateCheck = null;
             ChaseCameraHud.Clear();
             TalkDialogue.Dispose();
             QuestTracker.Clear();
-            QuestJournal.Clear();
+            QuestJournal.Clear(); QuestDialogue.Dispose(); QuestNotifications.Clear();
             if (ReferenceEquals(Services.Map, _questMap)) Services.Map = null;
             if (_questMap != null) _questMap.Dispose(); _questMap = null;
             if (ReferenceEquals(Services.VehicleStatus, this)) Services.VehicleStatus = null;

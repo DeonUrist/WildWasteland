@@ -311,6 +311,7 @@ namespace WildWasteland.Modules.PlayerBody
             Scheduler.EveryFrame(this, "Body update", BodyRunner.Tick, Phase.Update);
             Scheduler.EveryFrame(this, "Body late", BodyRunner.LateTick, Phase.LateUpdate);
             Scheduler.EveryFrame(this, "ModAPI characters", BodyRunner.ModApiTick, Phase.LateUpdate);
+            Scheduler.EveryFrame(this, "PlayerBody.WheelArms", BodyRunner.WheelTick, Phase.LateUpdateLast);
             Scheduler.Gui(this, "Weapon pose hint + vehicle HUD", BodyRunner.Gui, BodyRunner.GuiWanted);   // (WW perf) OnGUI only while one of them shows
             StartEndOfFrame();
 

@@ -9,6 +9,8 @@ namespace WildWasteland.Modules.CleanHUD
     {
         private static LoadingScreen _screen;
         private static bool _ready;
+        private static Func<bool> _saveActive;
+        internal static bool SaveActive { get { return _saveActive != null && _saveActive(); } }
         private static Action _confirmName, _cancelName;
         private static GUIStyle _namePlate, _nameField;
 
@@ -16,6 +18,9 @@ namespace WildWasteland.Modules.CleanHUD
         internal static void Install(CleanHudModule owner, LoadingScreen screen)
         {
             _screen = screen; _ready = false;
+            var coordinator = AccessTools.TypeByName("Apocasaver.SaveCoordinator");
+            var active = coordinator != null ? AccessTools.PropertyGetter(coordinator, "Active") : null;
+            _saveActive = active != null ? (Func<bool>)Delegate.CreateDelegate(typeof(Func<bool>), active) : null;
             InstallNaming(owner);
             var type = AccessTools.TypeByName("Apocasaver.AutosavePresentation");
             if (type == null) return;
@@ -24,7 +29,7 @@ namespace WildWasteland.Modules.CleanHUD
             _ready = begin && end;
             if (_ready) CleanHudModule.Log("Autosave loading screen hooks ready");
         }
-        internal static void Clear() { _screen = null; _ready = false; _confirmName = _cancelName = null; _namePlate = _nameField = null; }
+        internal static void Clear() { _screen = null; _ready = false; _saveActive = null; _confirmName = _cancelName = null; _namePlate = _nameField = null; }
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void InstallNaming(CleanHudModule owner)
         {
@@ -109,7 +114,7 @@ namespace WildWasteland.Modules.CleanHUD
         private static void AfterBegin()
         {
             if (_screen == null || !_ready) return;
-            try { _screen.Begin(true); } catch (Exception e) { CleanHudModule.Throttled("autosave screen", e); }
+            try { _screen.Begin(true, true); } catch (Exception e) { CleanHudModule.Throttled("autosave screen", e); }
         }
         private static void AfterEnd()
         {

@@ -1540,7 +1540,7 @@ namespace WildWasteland.Modules.CleanHUD
     {
         internal static bool Prefix(HutongGames.PlayMaker.Actions.GetButtonDown __instance)
         {
-            if (!CleanHudModule.Running || !CleanHudModule.MenuEnabled.Value || Menu.BlockCancelFrame < Time.frameCount) return true;
+            if (!CleanHudModule.Running || !CleanHudModule.MenuEnabled.Value || (!Core.LoadingProgress.ScreenVisible && Menu.BlockCancelFrame < Time.frameCount)) return true;
             var b = __instance.buttonName;
             return b == null || b.Value != "Cancel";
         }

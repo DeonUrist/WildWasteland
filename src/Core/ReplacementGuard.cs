@@ -21,7 +21,6 @@ namespace WildWasteland.Core
         static GUIContent _message;
         static readonly GUIContent Heading = new GUIContent("RESTART REQUIRED");
         static readonly string[,] Recommended = {
-            { "local.apocalypterquests", "Apocalypter Quests", "45" },
             { "apocalypter.worldamp", "Vista World Gen", "73" },
             { "com.fived.apocalypter.fallout_nv_radio", "Apocalypter Radio", "74" },
             { "local.apocalypter.chasecamera", "ApocaChaseCam", "44" },
@@ -47,6 +46,11 @@ namespace WildWasteland.Core
             Disable(ITweenGuard.GUID);
             Scheduler.Interval(null, "Core.Replacement notice", .5f, Tick).RunNow();
             Scheduler.Gui(null, "Core.Replacement notice", Draw, WantsNotice);
+            RebuildNotice();
+        }
+        internal static void LateConflict(string guid) { Disable(guid); RebuildNotice(); }
+        static void RebuildNotice()
+        {
             if (_names.Count == 0) return;
             var text = new StringBuilder();
             text.Append(_names.Count).Append(_names.Count == 1 ? " standalone mod should be removed" : " standalone mods should be removed");

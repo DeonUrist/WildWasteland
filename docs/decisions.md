@@ -92,3 +92,7 @@ Denis: the Debug page keeps editors and switches, not fine tuning. Debug = Tools
 
 ## 2026-10-15 - Women of Wasteland is an NPC framework
 Denis explicitly requested WoW inside NPC, female crew support, and population controls in WW's in-game Debug settings rather than Apocasetter/F6. Port source `21d05c6` without adding a module or runner. Core changes are limited to the WoW soft dependency and `INpcAppearance` service. Patrols keeps female aliases in existing prefab-name strings, resolves their native base assets, and transfers identity when it creates dismount/corpse replacements. Existing male crews are not rerolled on restoration. The standalone WoW conflict gates just the female framework, preserving NPC AI. Default assets are embedded and extracted only when missing; old config/custom assets remain readable. Runtime status stays Testing until Denis verifies it.
+
+## 2026-10-18: native Quests 1.8.2 (Testing)
+
+Denis authorized the complete native port using supplied 1.8.2 source and confirmed maintenance rights. Quests is a native module with optional Talk content; retire external Quests reflection and its soft dependency. Preserve all source settings/content/voices, AQ1/ES3 and crew-history paths. Typed Core APIs connect UI, followers, camps and map markers. No gameplay/performance verification or release approval is implied. See notes/port-Quests.md.

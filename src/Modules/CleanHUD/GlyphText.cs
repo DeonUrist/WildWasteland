@@ -141,6 +141,8 @@ namespace WildWasteland.Modules.CleanHUD
         [NonSerialized] public float Size = 24f;
         [NonSerialized] public float Spacing = 0f;
         [NonSerialized] public TextAnchor Align = TextAnchor.MiddleLeft;
+        [NonSerialized] internal int LeadingCharacters;
+        [NonSerialized] internal Color LeadingColor = Color.white;
 
         public override Texture mainTexture { get { var f = GlyphFont.Get(); return f != null ? f.Atlas : null; } }
 
@@ -178,19 +180,22 @@ namespace WildWasteland.Modules.CleanHUD
                 default: baseline = r.center.y + (f.Descent - f.Ascent) * s / 2f; break;
             }
             Color32 c = color;
+            var leading = LeadingColor; leading.a *= color.a;
+            Color32 lead = leading;
             int v = 0;
             for (int i = 0; i < Text.Length; i++)
             {
                 GlyphFont.G g;
+                Color32 tint = i < LeadingCharacters ? lead : c;
                 if (!f.Map.TryGetValue(Text[i], out g)) { if (f.Map.TryGetValue(' ', out g)) x += g.Adv * s + Spacing; continue; }
                 if (g.W > 1f && g.H > 1f && Text[i] != ' ')
                 {
                     float l = x + g.Ox * s, t = baseline + g.Top * s, rr = l + g.W * s, b = t - g.H * s;
                     float u0 = g.X / f.AtlasW, u1 = (g.X + g.W) / f.AtlasW, v1 = 1f - g.Y / f.AtlasH, v0 = 1f - (g.Y + g.H) / f.AtlasH;
-                    vh.AddVert(new Vector3(l, b), c, new Vector2(u0, v0));
-                    vh.AddVert(new Vector3(l, t), c, new Vector2(u0, v1));
-                    vh.AddVert(new Vector3(rr, t), c, new Vector2(u1, v1));
-                    vh.AddVert(new Vector3(rr, b), c, new Vector2(u1, v0));
+                    vh.AddVert(new Vector3(l, b), tint, new Vector2(u0, v0));
+                    vh.AddVert(new Vector3(l, t), tint, new Vector2(u0, v1));
+                    vh.AddVert(new Vector3(rr, t), tint, new Vector2(u1, v1));
+                    vh.AddVert(new Vector3(rr, b), tint, new Vector2(u1, v0));
                     vh.AddTriangle(v, v + 1, v + 2); vh.AddTriangle(v + 2, v + 3, v);
                     v += 4;
                 }

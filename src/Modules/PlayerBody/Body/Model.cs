@@ -12,7 +12,7 @@ namespace WildWasteland.Modules.PlayerBody
     //            shoulders; head, neck and arms removed (the game draws its own first-person arms)
     internal static class Model
     {
-        public static Mesh Full, NoHead, NoArms, ArmsOnly;
+        public static Mesh Full, NoHead, NoArms, ArmsOnly, NoHeadRightArm, LeftArmOnly;
         public static Texture2D BodyTex, ArmsTex, ArmsLeftTex;
         private static bool _tried, _texTried, _armsTried, _armsLeftTried;
 
@@ -23,6 +23,8 @@ namespace WildWasteland.Modules.PlayerBody
             "mixamorig:LeftArm", "mixamorig:LeftForeArm", "mixamorig:LeftHand",
             "mixamorig:RightArm", "mixamorig:RightForeArm", "mixamorig:RightHand",
         };
+        private static readonly HashSet<string> RightArmBones = new HashSet<string> { "mixamorig:RightArm", "mixamorig:RightForeArm", "mixamorig:RightHand" };
+        private static readonly HashSet<string> LeftArmBones = new HashSet<string> { "mixamorig:LeftArm", "mixamorig:LeftForeArm", "mixamorig:LeftHand" };
 
         public static bool Build(SkinnedMeshRenderer smr)
         {
@@ -74,6 +76,8 @@ namespace WildWasteland.Modules.PlayerBody
             NoArms = Make("Apocaplayer_noarms", verts, nrms, uvs, bws, bp, Filter(model.Tris, dom, HeadNeckBones, ArmBones), model.HasNormals);
             // first person, nothing in hand: exactly the arm triangles NoArms leaves out (no gap at the shoulder), without head/neck
             ArmsOnly = Make("Apocaplayer_armsonly", verts, nrms, uvs, bws, bp, Only(model.Tris, dom, ArmBones, HeadNeckBones), model.HasNormals);
+            NoHeadRightArm = Make("Apocaplayer_noheadrightarm", verts, nrms, uvs, bws, bp, Filter(model.Tris, dom, HeadNeckBones, RightArmBones), model.HasNormals);
+            LeftArmOnly = Make("Apocaplayer_leftarm", verts, nrms, uvs, bws, bp, Only(model.Tris, dom, LeftArmBones, HeadNeckBones), model.HasNormals);
 
             // the skeleton of the file vs Flexa's (must be ~0: same armature)
             float worst = 0f; string worstName = "";
@@ -299,7 +303,7 @@ namespace WildWasteland.Modules.PlayerBody
         private static void AddW(Dictionary<int, float> d, int bone, float w) { if (w <= 0f) return; float o; d.TryGetValue(bone, out o); d[bone] = o + w; }
 
         // Character switched: the next body is built from the other model
-        public static void Reset() { _inside.Clear(); Full = NoHead = NoArms = ArmsOnly = null; BodyTex = ArmsTex = ArmsLeftTex = null; _tried = _texTried = _armsTried = _armsLeftTried = false; }
+        public static void Reset() { _inside.Clear(); Full = NoHead = NoArms = ArmsOnly = NoHeadRightArm = LeftArmOnly = null; BodyTex = ArmsTex = ArmsLeftTex = null; _tried = _texTried = _armsTried = _armsLeftTried = false; }
 
         public static Texture2D Body()
         {

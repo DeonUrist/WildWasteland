@@ -1,24 +1,17 @@
-using System;
-using System.Runtime.CompilerServices;
-using BepInEx;
-using BepInEx.Bootstrap;
-using HarmonyLib;
-
+using WildWasteland.Core;
 namespace WildWasteland.Modules.CleanHUD
 {
-    internal static class QuestNotifications
+    internal sealed class QuestNotifications : IQuestPresentation
     {
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        internal static void Install(CleanHudModule owner)
+        public bool Tracker { get { return QuestTracker.Owned; } }
+        public bool Journal { get { return QuestJournal.Shown; } }
+        public bool Conversation { get { return QuestDialogue.Shown; } }
+        public bool Notify(string text)
         {
-            PluginInfo info;
-            if (!Chainloader.PluginInfos.TryGetValue("local.apocalypterquests", out info) || ReferenceEquals(info.Instance, null)) return;
-            Core.Patches.Patch(owner, AccessTools.Method(info.Instance.GetType(), "AddToast"), prefix: AccessTools.Method(typeof(QuestNotifications), "BeforeToast"));
+            if (!CleanHudModule.Running || !CleanHudModule.Enabled.Value || string.IsNullOrEmpty(text)) return false;
+            MessageHook.Push(text); return true;
         }
-        private static bool BeforeToast(string __0)
-        {
-            if (!CleanHudModule.Running || !CleanHudModule.Enabled.Value || string.IsNullOrEmpty(__0)) return true;
-            MessageHook.Push(__0); Core.Log.Always("[Quests] " + __0); return false;
-        }
+        internal static void Install(CleanHudModule owner) { Services.QuestUi = new QuestNotifications(); }
+        internal static void Clear() { if (Services.QuestUi is QuestNotifications) Services.QuestUi = null; }
     }
 }

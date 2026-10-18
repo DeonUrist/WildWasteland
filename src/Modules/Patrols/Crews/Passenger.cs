@@ -39,6 +39,8 @@ namespace WildWasteland.Modules.Patrols
         private bool _questFollower; private GameObject _questTarget; private float _questBlockedUntil;
         internal void QuestTarget(GameObject target, float blockedUntil)
         { _questFollower = true; _questTarget = target; _questBlockedUntil = blockedUntil; }
+        internal void QuestRanged() { _rangedPrefab = _ranged = true; _questFollower = true; _nextFireCheck = 0; }
+        internal bool QuestCanFire { get { return _canFire && Time.time >= _questBlockedUntil; } }
 
         internal static bool IsRangedHuman(GameObject who) { return IsRanged(who); }
 

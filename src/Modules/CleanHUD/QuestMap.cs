@@ -54,6 +54,7 @@ namespace WildWasteland.Modules.CleanHUD
         { var e = new Entry { Id = ++_next, Owner = owner, Position = position, Icon = icon, Color = color }; _entries.Add(e); _ids.Add(e.Id); return e.Id; }
         public bool Exists(int id) { return _ids.Contains(id); }
         public bool Hidden(Vector3 scene) { return MapFog.Hides(scene); }
+        public bool Explored(Vector3 scene) { return MapFog.Explored(scene); }
         public bool Open { get { return _open; } }
         internal bool TryWeatherView(out Camera camera, out RectTransform map)
         { camera = _camera; map = _map; return _open && camera != null && map != null && CleanHudModule.Enabled.Value && GameRefs.InPlay && !Core.UI.ToolWindow.IsOpen; }

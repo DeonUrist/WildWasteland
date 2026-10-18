@@ -25,6 +25,7 @@ namespace WildWasteland.Modules.PlayerBody
                 new ActionPage(m, G, "Camera", CameraPage),
                 new ActionPage(m, G, "Climbing", ClimbingPage),
                 new ActionPage(m, G, "Weapon pose editor", PoseEditor) { ShowWhenModuleOff = false, IsTool = true },
+                new ActionPage(m, G, "Steering-wheel hands", WheelArms.Draw) { ShowWhenModuleOff = false, IsTool = true },
             };
         }
 

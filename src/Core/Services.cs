@@ -27,6 +27,8 @@ namespace WildWasteland.Core
         public static IWeatherRegions Weather;
         public static IWeatherVisualPolicy WeatherVisualPolicy;
         public static IFollowerVehicles FollowerVehicles;
+        public static IQuestApi Quests;
+        public static IQuestPresentation QuestUi;
         public static ICampStatus Camps;
         private static IPoiApi _poi;
         public static event Action<IPoiApi> PoiChanged;
@@ -312,6 +314,8 @@ namespace WildWasteland.Core
         void RemoveAll(string owner);
         /// <summary>True while the map's fog of war covers this scene position (always false with the fog off).</summary>
         bool Hidden(Vector3 scene);
+        /// <summary>Saved exploration at this scene position, independent of fog display settings.</summary>
+        bool Explored(Vector3 scene);
         /// <summary>True while the native map is shown (other mouse-wheel users stand down).</summary>
         bool Open { get; }
         /// <summary>Map setting "World traffic markers": moving traffic dots + names, with independent detail and fog of war.</summary>
@@ -324,6 +328,12 @@ namespace WildWasteland.Core
 
     public interface IFollowerVehicles
     {
+        bool IsSeated(GameObject npc);
+        float ShootDistance { get; }
+        Component SeatPose(GameObject npc, Transform seat, string name, string armLike);
+        Component SeatCombat(GameObject npc, GameObject car, Transform seat);
+        void ReleasePose(Component pose);
+        bool CanFire(GameObject npc);
         // Legacy Quests binds these types by reflection; the provider owns the mapping.
         Type ResolveType(string name);
         // Includes dismounted crew while their existing runtime tags are present.

@@ -16,6 +16,7 @@ namespace WildWasteland.Modules.PlayerBody
         private static bool _ignitionPress;
         private static PlayMakerFSM _start;
         private static Transform _startCar;
+        private static Transform _viewCar;
         private static string _hint = "";
         private static Text _gameText;       // the game's own hint text (what the START FSM writes "Start" into): its font
         private static Font _font;
@@ -32,9 +33,21 @@ namespace WildWasteland.Modules.PlayerBody
         public static void Tick()
         {
             _hint = "";
-            if (!PlayerBodyModule.Running || !Game.Ready || !Game.InCar || Game.Dead) return;
+            if (!PlayerBodyModule.Running || !Game.Ready || !Game.InCar || Game.Dead) { _viewCar = null; return; }
             var car = Game.CarRoot;
             if (car == null) return;
+            if (_viewCar != car && Game.CameraHolder != null && Game.PlayerCamera != null)
+            {
+                var look = Core.FsmUtil.Find(Game.Player, "Look");
+                if (look != null && look.Fsm.Initialized)
+                {
+                    Game.CameraHolder.localRotation = Quaternion.identity;
+                    Game.PlayerCamera.localRotation = Quaternion.identity;
+                    // MouseLook.OnEnter recaptures its private yaw/pitch from the reset holder.
+                    look.Fsm.ReEnterState(); _viewCar = car;
+                    PlayerBodyModule.Verbose("Cockpit entry: facing forward in " + car.name);
+                }
+            }
             // (2.2.6) searched once per car (again every 5 s while nothing was found - parts can arrive late), not on every frame
             if (_startCar != car || (_start == null && Time.unscaledTime >= _startRetry))
             {
@@ -356,7 +369,7 @@ namespace WildWasteland.Modules.PlayerBody
 
         public static void Reset()
         {
-            _ignitionPress = false; _start = null; _startCar = null; _hint = ""; _gameText = null; _font = null; _engine = null; _isRunning = null;
+            _ignitionPress = false; _start = null; _startCar = _viewCar = null; _hint = ""; _gameText = null; _font = null; _engine = null; _isRunning = null;
             _lightOn = _lightOff = _handbrake = _radioOnOff = _play = _stop = _volume = null;
             _radioAudio = null; _nextControls = 0f;
             _running = _lightsOn = _brakeOn = _musicPlaying = false;

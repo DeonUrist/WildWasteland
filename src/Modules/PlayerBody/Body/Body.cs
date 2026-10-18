@@ -689,6 +689,8 @@ namespace WildWasteland.Modules.PlayerBody
         // the body's own arms in first person (nothing in hand) - drawn on top of whatever mesh the body has (NoArms / hidden)
         public void SetFirstPersonArms(bool on)
         {
+            var want = Game.ToolInHand ? Model.LeftArmOnly : Model.ArmsOnly;
+            if (_fpArms != null && _fpArms.sharedMesh != want) _fpArms.sharedMesh = want;
             if (_fpArms != null && _fpArms.enabled != on) _fpArms.enabled = on;
         }
 
@@ -931,6 +933,13 @@ namespace WildWasteland.Modules.PlayerBody
             _rigWant = 0f; _rigW = 0f; _rigEff = 0f;
         }
 
+        private int _wheelPoseFrame = -1;
+        private string _wheelArmOwner = "off";
+        internal void LateWheelArms()
+        {
+            if (_wheelPoseFrame == Time.frameCount) WheelArms.Solve(Bones, _wheelArmOwner);
+        }
+
         public void LateCar(Transform player, bool firstPerson)
         {
             float dt = Time.deltaTime;
@@ -960,6 +969,8 @@ namespace WildWasteland.Modules.PlayerBody
             bool throwing = _mixamo && _layers.IsValid() && Time.time < _throwUntil && Anims.Get(_throwClip) != null;
             bool gun = _mixamo && _layers.IsValid() && (kind == Props.Kind.Rifle || kind == Props.Kind.Pistol);
             bool arms = gun || throwing;   // the Animator drives her arms (gun clips or the throw)
+            _wheelPoseFrame = Time.frameCount;
+            _wheelArmOwner = arms ? (throwing ? "throw" : "gun") : weapon != "" ? "held item" : Game.Binoculars ? "binoculars" : Game.ToolInHand ? "tool" : Game.GameArmsShown ? "native arms" : "wheel";
             // the lance leaving her hand / the grenade holstering the gun changes the weapon mid-throw: that must not reset the throw's arms
             if (weapon != _carWeapon) { _carWeapon = weapon; if (!throwing) { _carArmsReady = false; _carTurnedReady = false; _upperClip = ""; } _weaponSince = Time.time; }
 
@@ -1076,6 +1087,7 @@ namespace WildWasteland.Modules.PlayerBody
         public void SetMesh(bool firstPerson, bool inCar, bool gameArms = false)
         {
             var want = !firstPerson ? Model.Full : inCar && !gameArms && PlayerBodyModule.ArmsInCar ? Model.NoHead : Model.NoArms;   // arms on the wheel only with FirstPersonArms
+            if (firstPerson && want == Model.NoHead && Game.ToolInHand) want = Model.NoHeadRightArm;
             if (_smr.sharedMesh != want) _smr.sharedMesh = want;
             _innerOn = firstPerson;
             if (_inner != null) { var inside = firstPerson ? Model.Inside(want) : null; if (_inner.sharedMesh != inside) _inner.sharedMesh = inside; }

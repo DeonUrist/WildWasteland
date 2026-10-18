@@ -33,6 +33,7 @@ namespace WildWasteland.Modules.PlayerBody
 
         public static void OnSceneLoaded()
         {
+            WheelArms.Clear();
             ClimbingController.ResetInstance();
             DestroyBody();
             CarSeat.Detach();
@@ -55,6 +56,7 @@ namespace WildWasteland.Modules.PlayerBody
         // Shutdown: everything the old "Enabled = false" branch restored, plus the camera / cutaway components
         internal static void TearDown()
         {
+            WheelArms.Clear();
             DestroyBody();
             CarSeat.Detach();
             ThirdPerson.Off();
@@ -95,6 +97,7 @@ namespace WildWasteland.Modules.PlayerBody
             long t0 = Perf.Now;
             try
             {
+                WheelArms.Tick();
                 try { Perf.Frame(); } catch (Exception e) { PlayerBodyModule.Warn("Perf: " + e.Message); }
                 if (!Game.Ready) { OcclusionCutaway.Stop(); if (_body != null) DestroyBody(); return; }   // (2.2.6) the cutaway taken down in menus / loading too
                 if (!Game.Dead) { _lastVelocity = Game.Velocity; _lastCar = Game.InCar ? Game.CarRoot : null; }
@@ -156,7 +159,7 @@ namespace WildWasteland.Modules.PlayerBody
                         _body.SetVisible(!firstPerson || PlayerBodyModule.BodyInCar, firstPerson && PlayerBodyModule.BodyInCar);
                         ThirdPerson.CarShift = firstPerson && PlayerBodyModule.BodyInCar && PlayerBodyModule.CarCameraForward.Value != 0f;
                         // no body in first person: still her arms on the wheel while nothing is drawn (the body mesh has them when it is shown)
-                        fpArms = firstPerson && fpCam && !PlayerBodyModule.BodyInCar && PlayerBodyModule.ArmsInCar && Game.DrawnWeapon == "" && !Game.Binoculars && !Game.GameArmsShown;
+                        fpArms = firstPerson && fpCam && !PlayerBodyModule.BodyInCar && PlayerBodyModule.ArmsInCar && Game.DrawnWeapon == "" && !Game.Binoculars && (Game.ToolInHand || !Game.GameArmsShown);
                         mode = firstPerson ? "car, first person" : "car, third person";
                     }
                 }
@@ -174,7 +177,7 @@ namespace WildWasteland.Modules.PlayerBody
                     _body.SetVisible(show && fpCam, !third && show && fpCam);
                     // first person, nothing in hand: the game draws no arms - show the body's own, animated like the rest of her
                     fpArms = !third && fpCam && (ModAPI.PlayerTraversalActive
-                        || PlayerBodyModule.EmptyHandArms.Value && !Game.Binoculars && !Game.GameArmsShown);
+                        || PlayerBodyModule.EmptyHandArms.Value && !Game.Binoculars && (Game.ToolInHand || !Game.GameArmsShown));
                     mode = third ? "on foot, third person" : "on foot, first person";
                 }
                 _body.SetFirstPersonArms(fpArms);
@@ -186,6 +189,12 @@ namespace WildWasteland.Modules.PlayerBody
             finally { Perf.Add(Perf.Late, t0); }
         }
 
+        internal static void WheelTick()
+        {
+            if (_body != null && _body.Alive && Game.Ready && Game.InCar && !Game.Dead && PlayerBodyModule.ReplaceDriver.Value && CarSeat.Seat != null)
+                _body.LateWheelArms();
+        }
+
         // (2.2.0) characters animated through ModAPI, after the Animators (was ModApiRunner.LateUpdate)
         internal static void ModApiTick()
         {
@@ -195,8 +204,8 @@ namespace WildWasteland.Modules.PlayerBody
 
 
         // the same conditions GunPose.OnGUI / Car.OnGUI draw under (an editor hint, or seated in a car)
-        internal static bool GuiWanted() { return !string.IsNullOrEmpty(GunPose.HintText) || Car.GuiWanted; }
-        internal static void Gui() { long t0 = Perf.Now; try { GunPose.OnGUI(); Car.OnGUI(); } catch (Exception) { } Perf.Add(Perf.Gui, t0); }
+        internal static bool GuiWanted() { return !string.IsNullOrEmpty(GunPose.HintText) || Car.GuiWanted || WheelArms.EditorVisible; }
+        internal static void Gui() { long t0 = Perf.Now; try { GunPose.OnGUI(); Car.OnGUI(); WheelArms.DrawEditorHint(); } catch (Exception) { } Perf.Add(Perf.Gui, t0); }
 
         // after the frame is drawn: the camera's real matrices back (the game's mouse picks next frame cast from the eye)
         internal static System.Collections.IEnumerator EndOfFrameLoop()

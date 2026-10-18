@@ -7,6 +7,14 @@ namespace WildWasteland.Modules.CleanHUD
     internal static class DialogueWidgets
     {
         internal static readonly Color Gold = new Color(.886f, .749f, .424f);
+        internal static readonly Color SpeakerGray = new Color32(160, 160, 160, 255);
+        internal static void Speaker(GlyphText label, string npc)
+        {
+            bool player = label.Text.StartsWith("You:", StringComparison.OrdinalIgnoreCase);
+            label.LeadingCharacters = player ? 4 : label.Text.StartsWith(npc + ":", StringComparison.OrdinalIgnoreCase) ? npc.Length + 1 : 0;
+            label.LeadingColor = player ? Gold : SpeakerGray;
+            label.SetVerticesDirty();
+        }
         internal static RectTransform Rect(Transform parent, string name, float x, float y, float w, float h)
         {
             var go = new GameObject(name, typeof(RectTransform)); go.transform.SetParent(parent, false);

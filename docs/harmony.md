@@ -35,7 +35,7 @@ Dispatcher semantics = HarmonyX with separate plugins: every prefix handler runs
 | `SensorGetLineOfSightResult.OnUpdate3D` | prefix (skip) | NPC: `Senses.BeforeLosResult`; Patrols: `SeatedLosGuard.Before` | every frame for everyFrame LOS actions | same | |
 | `SensorGetDetections.DoAction` | prefix (NPC skips; Guns observes) | NPC: `Senses.BeforeGetDetections` (registers agents via `Senses.Of`); Guns: `Bosses.BeforeGetDetections` (registers human bosses once per owner) | per frame per NPC | NPC: `!On` (static) then FSM "Detection"; Guns: `!BossHealth`, FSM "Detection", owner instance-id cache | ApocalypterAI |
 | `HutongGames.PlayMaker.Fsm.ProcessEvent(FsmEvent, FsmEventData)` | prefix | NPC: `Brain.BeforeDrivingHide` (filters driving retreat), `DogAnimations.BeforeDamageEvent` (only with the dog bundle; skips); Guns: `Fsm_Event_Patch.Prefix` -> `Unloader.OnFsmEvent` (never skips), `WeaponTransition.BeforeEvent` (delays player weapon switches while lowering) | EVERY FSM event | NPC Brain: `_npcs.Count == 0 \|\| !On`, event "hide", Attack/trigger; dogs: `Dogs.Count == 0 \|\| !Running`; Guns: `Unloader.Busy` field compare; transition: cached WeaponInHand FSM reference, SmoothWeaponSwitch, replay guard | Apocasaver `Fsm_ProcessEvent_Patch` (separate Harmony owner; coexists) |
-| `Fsm.EnterState(FsmState)` | prefix + postfix (never skip) | Guns: `MagazineStatePatch` -> `PerGunAmmo.BeforeState` / `AfterState`; CleanHUD: `PauseCursorFix.AfterEnterState`; Performance: `PollSleep.AfterEnterState`, `CarLod.AfterEnterState` | every state entry of every FSM (x2) | Guns: name length 12; CleanHUD: running, Menu/play on __GameManager__; Performance: tracked FSM / active feature | Apocasaver `AutosaveStatePatch` (postfix) |
+| `Fsm.EnterState(FsmState)` | prefix + postfix (never skip) | Guns: `MagazineStatePatch` -> `PerGunAmmo.BeforeState` / `AfterState`; CleanHUD: `PauseCursorFix.AfterEnterState`, `LoadingScreen.AfterEnterState`; Performance: `PollSleep.AfterEnterState`, `CarLod.AfterEnterState` | every state entry of every FSM (x2) | Guns: name length 12; CleanHUD: running, Menu/play on __GameManager__ or Continue/clicked on native savegame / Yes_Save; Performance: tracked FSM / active feature | Apocasaver `AutosaveStatePatch` (postfix) |
 | `ES3Internal.ES3ReferenceMgrBase.GetPrefab(long,bool)` | prefix (first resolver returning a prefab wins) | Patrols: `MotorcycleIntegration.ResolvePrefab` (id 735710202610050001), `PrefabLookup.Resolve` (War Rig, id 735710202610090001); Survival: `SurvivalModule.ResolvePrefab` (Stew Pot, id 7392481500621300201) | per prefab lookup on load | `id != PrefabId` | |
 | `PlayMakerFSM.OnEnable` | postfix (observe) | Patrols: `NativeStormProtection.TrackDust.Postfix`; Performance: `FsmRegistry.OnEnablePost` (PM1 index), `GuiLoopFeature.OnFsmEnabled` (PM5) | per FSM enable | Patrols: `FsmName != "SandPlayer"`; Performance: registry users > 0 / static `On` | |
 | `Apocaspawner.Catalog.Entries` (optional, reflected) | postfix | Survival: `SpawnerBridge.CatalogBuilt`; Patrols: `SpawnerIntegration.CatalogPostfix` | catalog access | Survival: cached returned list/entry reference; Patrols: spawn enabled, entry key | Adds Stew Pot and War Rig through one Core dispatcher; no patch without subscribers |
@@ -126,9 +126,9 @@ No module-only patches (its single target is the shared `SetFsmFloat.OnEnter` pr
 | `Apocasaver.AutosavePresentation.Begin` / `.End` (optional, reflected third-party UI methods) | postfix | `ApocasaverLoading.AfterBegin` / `.AfterEnd` | Cached loading screen provider null; display only, exceptions contained | per autosave presentation begin/end |
 | `Apocasaver.SaveNaming.OnGUI` (optional, reflected third-party UI method) | prefix | `ApocasaverLoading.BeforeNameGui` | Running + Clean menus enabled + naming popup open; replaces drawing only, original Confirm/Cancel delegates retain save/input/cursor lifecycle; original popup when off or drawing fails | per source OnGUI callback; no other known patchers |
 | `Apocapocket.ExtraSlots.BuildUi` (optional, reflected third-party UI method) | postfix | `ApocapocketInventory.AfterBuildUi` | Bridge absent / first cloned icon absent; increments a revision for one-time alpha capture and exclusion of CleanHUD-owned transforms from native card shifting | per native pocket UI creation |
-| `ApocalypterQuests.Plugin.OnGUI` (optional, 1.8.0) | transpiler | `QuestJournal.JournalDrawing` / `NativeJournal` | Suppresses only the journal branch while CleanHUD's journal canvas is visible; original tracker gate, toast expiry and J state remain intact; fallback when CleanHUD is off | per scheduled source GUI callback; QuestsCompat owns the separate scheduling prefix |
+| `a.u.A(): void` (optional World Amp 1.0.7 engine HUD) | prefix | `VistasEngineHud.Draw` | CleanHUD running + HUD enabled + bridge ready; suppresses numeric overlay and sends overheating/seized transitions to MessageHook; original when off | per source gameplay Repaint; no other known patchers |
 
-Shared `GetButtonDown.OnUpdate` prefix: `CancelHook.Prefix`, registered after HUD and before Patrols. Early-out on module/menu off or `BlockCancelFrame < Time.frameCount`; skips only Cancel while a CleanHUD sub-screen, key capture or dialog is open. Apocasetter remains the input blocker. No separate Harmony instance or runner. `Canvas.willRenderCanvases` keeps replaced native graphics hidden; removed on disposal.
+Shared `GetButtonDown.OnUpdate` prefix: `CancelHook.Prefix`, registered after HUD and before Patrols. Early-out on module/menu off or expired `BlockCancelFrame` with no loading screen; skips only Cancel while a CleanHUD sub-screen, key capture, dialog or loading/saving screen is open. Apocasetter remains the input blocker. No separate Harmony instance or runner. `Canvas.willRenderCanvases` keeps replaced native graphics hidden; removed on disposal.
 
 ### Patrols
 
@@ -200,50 +200,22 @@ Only Engine Sim 1.7.0 is adapted. Hook/delegate setup is transactional; an unsup
 
 The manager jobs fail open to original callbacks/discovery on an uncaught exception. Native simulation threads, DSP audio, WheelCoupling's WaitForFixedUpdate coroutine, Windage/RimFriction physics and Belt.LateUpdate remain owned by Engine Sim. Disabling the module restores original callbacks without stopping source sessions. Engine Sim's own verbose FSM dump is unchanged and is not sliced.
 
-### Optional Talk/Quests compatibility (0.1.6 RC3, Testing)
+### Native Quests and optional Apocatalker (2026-10-18, Testing)
 
-All targets below are optional external DLL methods, installed only for Talk 2.0.0 / Quests 1.8.0. No additional global Unity Input or PlayMaker action patch is installed. Native Talk input patches and Quests' CreateObject death postfix remain with their original owners.
-
-| Owner | Target | Kind / handler | Frequency / filter |
-|---|---|---|---|
-| QuestsCompat | Talk.Plugin.Update / LateUpdate; Quests.Plugin.Update / LateUpdate / OnGUI | Prefix ScheduledOnly; original runs once from its corresponding scheduler job | Per Unity callback / scheduler invocation; static dispatch flag |
-| QuestsCompat | Talk.Plugin.Open / Close | BeforeOpen, AfterOpen / AfterClose: shared modal session preserving PauseWhileTalking | Per conversation; game/modal gate |
-| QuestsCompat | Talk.Plugin.GetCam | Prefix TalkCamera; cached Core camera | Per talk camera request |
-| QuestsCompat | Quests.Plugin.Tick / TrackSaveLoad | TickOnly / SkipWatcher; 0.5 s scheduler job and SaveBus replace native polling | Per callback; static dispatch flag |
-| QuestsCompat | Quests.MapLink.get_Available / Sync / Reset | MapAvailable postfix / ForwardMap prefix / ClearMarkers postfix | Approximately 1 s; native Immersive Map Sync runs only when its API is resolved |
-| QuestsCompat | Quests.Game.FindItems; FindPeople / FindEnemies / FindBodies / LiveNames / FindNpcNames | Transpilers replace only FsmList getter with published item/people cache | Per world query; discovery uses a 500 us scheduler slice |
-| QuestsCompat | Quests.Plugin.Objective / DeliveryStolen / CancelQuest | DeliveryRecovery.Objective postfix / Timeout and Cancel prefixes; recovery returns show the empty-destination reason and use normal failure rather than theft/cancellation | Per objective text / timeout / cancellation; saved return marker only |
-| QuestsCompat | Quests.Plugin.ReturnGoods; Quests.Takeover.GiverTick | ReturnDialogue / GiverRespawn transpilers; explain the failed delivery when returning goods, suppress automatic giver respawn only for recovery returns | Per return / approximately 1 s giver update; other quests retain original behavior |
-| QuestsCompat | Hire.MissingMods / GetPlugin / FindApi / Inform / SetExcluded | Prefixes route provider availability, optional legacy lookup, NPC target and steering handoff | On hire / target / exclusion changes |
-| QuestsCompat | Hire.TryMount / AttachGuard / LendArmPose / TeachAll / PatrolShootDistance | LegacyTypes transpiler; provider resolves original Apocapatrol type names | On mount/setup or range refresh |
-| QuestsCompat | Hire.FootShoot / PlayShotAnim / WatchShots; CountShot | AnimationCalls transpiler suppresses native Animator.Play only while WW owns this animator; Shot postfix drives shot/reload clips | Per shot / shot observation |
-| QuestsCompat | Hire.FeedTarget / HoldFire | Prefixes feed explicit follower target and reload hold to Patrols | Per mounted follower update |
-| QuestsCompat | Quests.Plugin.BuildButtons; HireNpc / AskForWork / AcceptQuest / RunTalkAction | CrewButtons postfix hides hiring while seated and new quest offers for current/former crew; prefixes block hiring before reputation charge and new quests, including scripted quest.give. Former crew may be hired on foot; existing turn-ins and dismissal remain available | Per dialogue rebuild/action; Patrols crew service plus saved NPC-name history, current seat parenting for hiring |
-| CleanHUD | Talk.DialogueUI.ShowDialogue / AppendChatLine / SetChoices | Changed postfix; invalidates mirrored chat | Per dialogue change; no reflection in Tick |
-| CleanHUD | Quests.Plugin.AddToast | QuestNotifications.BeforeToast prefix; queues the existing CleanHUD message log and suppresses only the source popup/log duplication, keeping a WW quest log line | Per notification; CleanHUD running + HUD enabled, otherwise original |
-| CleanHUD | Quests.Plugin.Shadowed | QuestTracker.BeforeShadowed prefix; suppresses only the tracker style while an attached CleanHUD owns its replacement, preserving source log/toast drawing | Per source GUI text; cached GUIStyle reference comparison, original when CleanHUD off |
-| CleanHUD | Quests.Plugin.RefreshLines | QuestTracker.LinesChanged postfix; snapshots stable quest-ID colors in tracker row order to match map/compass flags for objectives and returns | Approximately 1 s; published active quest list, no scene scans |
-| QuestsCompat | Talk.Plugin.OnDestroy; TalkApi.LoadFile / Reload; Quests.Hooks.OpenPostfix / ClosePostfix / CreateObjectPostfix; Hire.GetPlugin | KeepDialogueModel prefix / PluginLifetime transpilers: retain managed plugin-backed callbacks across native component destruction, while keeping Unity null semantics for world objects | On destruction / API calls / source hooks; BaseUnityPlugin-only identity substitution |
-
-### Talk/Quests performance patches (perf pass 2026-10-15, Testing)
-
-Installed by `QuestsCompat/QuestsPerf.cs` through `QuestsPerf.Optional`: a failed target logs `Optional speed-up unavailable` and the source behaviour stays (the compatibility module is not rolled back), except the four `SplitOnly` gates, which use the module's normal `Patch`.
+Quests runs directly as a WW module; all former Quests/Hire/Takeover/Game private Harmony targets have been retired. Named jobs own frame/pose/progress/camp/giver/map/reputation/interaction and 500 us world discovery. CleanHUD reads typed Services.Quests/QuestUi rather than patching quest drawing.
 
 | Owner | Target | Kind / handler | Frequency / filter |
 |---|---|---|---|
-| QuestsCompat | Hire.NearestByName | PeopleScan transpiler + 0.25 s retry prefix/postfix per name | While the hire is unattached (<= 60 s window) |
-| QuestsCompat | Hire.IsRangedNpc | Prefix cache per instance id (1 s) + CachedFsms transpiler | Per hire update |
-| QuestsCompat | Hire.FindFsm / FootMagazine / FootWatch / Hostile / HoldFire / FireShots / WatchShots / FeedTarget / Calm | CachedFsms transpiler: `GetComponents<PlayMakerFSM>()` -> cached array per GameObject (1 s) | Per frame while a hire exists |
-| QuestsCompat | Hire.ClearShot(GameObject) | NonAllocRays transpiler: RaycastAll -> RaycastNonAlloc + reused exact-length array | Per frame with a target |
-| QuestsCompat | Hire.Clear / Reset / DetachGuard | Postfixes clear the caches | On hire changes |
-| QuestsCompat | Takeover.MoveFsm | Prefix/postfix memo (positive live, negative 5 s) | Per walker per frame |
-| QuestsCompat | Takeover.InactiveExists / ScanForPrefab | Shared FindObjectsOfTypeAll array transpiler + miss memo (30 s, GiverTick only) | ~30 s while a giver is missing |
-| QuestsCompat | Takeover.NeutralizeTick / GiverTick; Plugin.SyncMapMarkers / ReputationTick | SplitOnly prefixes; each runs from its own 0.5 s Interval job (internal timers unchanged) | Per Tick |
-| QuestsCompat | Game.Matches | Prefix/postfix memo per (ItemName FSM id, token), re-validated against the live names, 30 s | Per item query |
-| QuestsCompat | Plugin.Aim | Prefix: at most one directions recompute per frame; others keep their cached AimInfo | Per RefreshLines |
-| QuestsCompat | TalkBridge.get_TalkingNow; TalkBridge.NeedsSync | Compiled-accessor prefix; Signature cache transpiler (same TalkBtn references) | Per frame |
-| QuestsCompat | Talk DialogueUI.ShowPrompt | Prefix/postfix skip when name/key/hint unchanged | Every 0.25 s near an NPC |
+| Quests | Shared Hooks.CreateObjectEnter | Death postfix; source kill/giver-death notifications | Health FSM spawn state, ready world |
+| Quests | Shared Hooks.GetButtonDownUpdate / GetButtonDo / GetButtonUpUpdate / GetMouseButtonDownUpdate | Input prefixes | Original native quest conversation only; scoped input blocking |
+| Quests | Optional Talk.Plugin.Open / Close | Opened / Closed postfixes | Attach native quest choices/flags/voice lifecycle to original Talk content |
+| QuestsCompat | Optional Talk.Plugin.Update / LateUpdate | ScheduledOnly prefixes | Talk.Frame / Talk.Cursor own callbacks |
+| QuestsCompat | Optional Talk.Plugin.Open / Close | BeforeOpen / AfterOpen / AfterClose | Shared modal EditorSession and source pause setting |
+| QuestsCompat | Optional Talk.Plugin.GetCam / OnDestroy | TalkCamera / KeepModel prefixes | Core camera cache / managed callback lifetime |
+| QuestsCompat | Optional TalkApi.LoadFile / Reload | PluginLifetime transpilers | Source managed plugin identity; story/profile behavior retained |
+| CleanHUD | Optional Talk.DialogueUI.ShowDialogue / AppendChatLine / SetChoices | Changed postfix | Invalidate mirrored dialogue; source content retained |
 
+Optional Talk fields/calls use Cecil-generated delegates through Core.OptionalAccess, avoiding stripped DynamicMethod and interpreted Expression.Compile in hot paths. Source ES3 reflection remains a save-boundary transport, not an external Quests dependency.
 
 ### Weather native fog scope — 2026-10-16 (Testing)
 
@@ -257,6 +229,8 @@ Installed by `QuestsCompat/QuestsPerf.cs` through `QuestsPerf.Optional`: a faile
 | Weather | Shared Hooks.SetVelocityDo | WeatherNative.VelocityBefore prevents native motion for owned manual previews and stops natural anchors during diagnostic freeze/non-gameplay; original natural movement otherwise runs | Move name then cached root ID; unrelated SetVelocity calls unchanged |
 
 ## VistasWorldGen 1.0.7 (Core-owned optional private targets, 2026-10-18, Testing)
+
+CleanHUD also owns the optional `a.u.A(): void` engine HUD prefix through `VistasEngineHud`. While Clean HUD is enabled it replaces the source numeric overlay with once-per-condition overheating/seizure notifications; disabling Clean HUD restores source drawing. Active/Temperature/Stalled use cached Core.OptionalAccess delegates. Source simulation and config are unchanged.
 
 `VistasWorldGen.QuietLog` prefixes `BepInEx.Logging.ManualLogSource.Log(LogLevel, object)` only when Vistas is installed. It suppresses Info/Debug for the exact Vistas logger instance while WW global VerboseLog is off. Warnings/errors/fatal/message levels and all other logger instances remain unchanged; enabling VerboseLog restores source diagnostics immediately. No console/disk config changes or log-string inspection.
 

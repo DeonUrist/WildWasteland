@@ -253,3 +253,9 @@ Weather native encounter/hazard replacement (2026-10-16, Testing): Weather.Nativ
 ### VistasWorldGen compatibility — 2026-10-18 — NOT YET MEASURED
 
 Height discovery adds one terrain ray per 0.2 s tick and uses the existing location/traffic reconciliation for nonalloc visibility checks. Fog rows and final terrain (257x257 immutable height snapshots) run in named 500 us slices. One existing background route worker runs bounded A* searches (120,000-cell / 240,000-pop cap), prefers actual roads, rejects unknown/steep ground and compares up to six candidate pairs; this can delay departures. No game, headless harness or runtime profiling was run for this task. Existing Vistas independent driver/render/audio work is outside WW scheduler timings. Windows Release build/deploy: zero warnings/errors; built/installed MD5 `8C04EAAFA4C9698757B5CBE5DD07FECF`. Details: notes/compat-VistasWorldGen.md.
+
+## 2026-10-18 — native Quests 1.8.2, Testing
+
+RC33 includes the PlayerBody.WheelArms LateUpdateLast job with cached wheel geometry/bones and per-wheel profiles. It runs after final seat/first-person offsets, without per-frame scene discovery. No runtime cost or animation acceptance was measured. Combined RC33 Windows Release/deploy passed zero warnings/errors; DLL MD5 `F165942C49354E5A5D89E595776802D4`.
+
+NOT YET MEASURED. Native Quests replaces the old private-method compatibility patches with named jobs, 500 us world-discovery slices, cached FSM/item/ranged queries and reused ray buffers. Voice decoding, spawning and UI rendering retain indivisible work. Denis must record standalone and ported scenarios (offers, active quests, crowded camps, walking/seated combat, save/load and optional Talk). No performance improvement claimed; no game/harness launched.

@@ -160,6 +160,24 @@ namespace WildWasteland.Core
             var e = Of(m); if (e == null || e.State != ModuleState.Running) return;
             Stop(e, ModuleState.OffByConfig); Start(e); Hooks.ApplyUsed();
         }
+        // Modules without a standalone ordering dependency can finish initialization after chainloading.
+        internal static bool DeferredInit(IModule module, Action initialize)
+        {
+            var entry = Of(module); if (entry == null || entry.State != ModuleState.Running) return false;
+            string conflict = FindConflict(module);
+            if (conflict != null)
+            {
+                foreach (string guid in module.ConflictsWith) ReplacementGuard.LateConflict(guid);
+                conflict = FindConflict(module);
+                Stop(entry, ModuleState.OffConflict); entry.Conflict = entry.LastError = conflict; Log.Warn("[" + module.Id + "] " + conflict); return false;
+            }
+            try { initialize(); Hooks.ApplyUsed(); Hotkeys.CheckConflicts(); return true; }
+            catch (Exception error)
+            {
+                Stop(entry, ModuleState.InitFailed); entry.LastError = error.Message;
+                Log.Error("[" + module.Id + "] deferred initialization failed", error); return false;
+            }
+        }
 
         // ---------------------------------------------------------------- broadcasts
 

@@ -24,6 +24,7 @@ namespace WildWasteland.Core
         public static string State { get; private set; }
         public static bool Saving { get; private set; }
         public static bool Loading { get; private set; }
+        public static int Generation { get; private set; }
         /// <summary>SaveLoadGame not in isPlay (a save or load is running). Spawns should wait.</summary>
         public static bool Busy { get { return State != null && State != "isPlay"; } }
 
@@ -50,7 +51,7 @@ namespace WildWasteland.Core
         /// <summary>Run <paramref name="a"/> once, <paramref name="delay"/> unscaled seconds after the next isPlay following a save.</summary>
         public static void AfterSave(Action a, float delay = 1f) { _after.Add(new KeyValuePair<float, Action>(-delay, a)); }
 
-        internal static void OnSceneLoaded() { State = null; Saving = Loading = false; _pendingWorldReady = true; _after.Clear(); }
+        internal static void OnSceneLoaded() { Generation++; State = null; Saving = Loading = false; _pendingWorldReady = true; _after.Clear(); }
 
         /// <summary>Called once per frame by Core (EarlyUpdate).</summary>
         internal static void Tick()
@@ -90,11 +91,13 @@ namespace WildWasteland.Core
                     ModuleHost.Broadcast(ModuleHost.Event.SaveBegin, _saveSlot);
                     break;
                 case "LoadGame":
+                    Generation++;
                     Loading = true; _pendingWorldReady = true; _after.Clear();
                     ModuleHost.Broadcast(ModuleHost.Event.LoadBegin, Slot);
                     break;
                 case "setSeed":
                 case "Start":
+                    Generation++;
                     _pendingWorldReady = true;
                     break;
                 case "isPlay":

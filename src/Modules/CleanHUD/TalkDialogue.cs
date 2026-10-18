@@ -29,7 +29,9 @@ namespace WildWasteland.Modules.CleanHUD
         private static bool _oldRays;
         private static GlyphText _title;
         private static RectTransform _chat, _choices;
-        private static ScrollRect _chatScroll;
+        private static ScrollRect _chatScroll, _choiceScroll;
+        private static MenuButton _closeButton;
+        private static readonly DialoguePointer Pointer = new DialoguePointer();
         private static int _revision, _shownRevision = -1, _choiceHash;
         private static int _chatHash;
         private static readonly List<MenuButton> Buttons = new List<MenuButton>();
@@ -69,10 +71,10 @@ namespace WildWasteland.Modules.CleanHUD
             var panel = DialogueWidgets.Rect(_root.transform, "window", 0, 0, 1200, 900);
             panel.anchorMin = panel.anchorMax = panel.pivot = new Vector2(.5f, .5f);
             var plate = panel.gameObject.AddComponent<Image>(); plate.sprite = Menu.PlateSprite(); plate.type = Image.Type.Sliced;
-            _title = DialogueWidgets.Text(panel, "name", 50, 35, 1100, 60, 42, DialogueWidgets.Gold, "");
+            _title = DialogueWidgets.Text(panel, "name", 50, 35, 1100, 60, 42, DialogueWidgets.SpeakerGray, "");
             _chatScroll = DialogueWidgets.Scroll(panel, "conversation", 50, 110, 1100, 420, out _chat);
-            RectTransform content; DialogueWidgets.Scroll(panel, "choices", 50, 555, 1100, 255, out content); _choices = content;
-            DialogueWidgets.Button(panel, 900, 820, 250, 60, "CLOSE", () => _close(_plugin));
+            RectTransform content; _choiceScroll = DialogueWidgets.Scroll(panel, "choices", 50, 555, 1100, 255, out content); _choices = content;
+            _closeButton = DialogueWidgets.Button(panel, 900, 820, 250, 60, "CLOSE", () => _close(_plugin));
         }
         internal static void Tick()
         {
@@ -109,6 +111,7 @@ namespace WildWasteland.Modules.CleanHUD
             for (int i = 0; i < choices.childCount; i++) hash = unchecked(hash * 31 + choices.GetChild(i).GetInstanceID());
             if (hash != _choiceHash)
             {
+                Pointer.Clear();
                 _choiceHash = hash; Clear(_choices); Buttons.Clear(); Sources.Clear(); float y = 0;
                 for (int i = 0; i < choices.childCount; i++)
                 {
@@ -123,6 +126,7 @@ namespace WildWasteland.Modules.CleanHUD
                 }
                 _choices.sizeDelta = new Vector2(1100, y);
             }
+            Pointer.Tick(Buttons, _closeButton); DialoguePointer.Wheel(_chatScroll); DialoguePointer.Wheel(_choiceScroll);
             for (int i = 0; i < Buttons.Count; i++) { Buttons[i].interactable = Sources[i] != null && Sources[i].interactable; Buttons[i].Refresh(); }
         }
         internal static List<string> Wrap(string text, float width, float size = 26)
@@ -142,7 +146,7 @@ namespace WildWasteland.Modules.CleanHUD
         }
         private static float Lines(Transform parent, string text, float y, float width, Color color)
         {
-            foreach (var line in Wrap(text, width)) { DialogueWidgets.Text(parent, "line", 10, y, width, 32, 26, color, line); y += 32; }
+            foreach (var line in Wrap(text, width)) { var label = DialogueWidgets.Text(parent, "line", 10, y, width, 32, 26, color, line); DialogueWidgets.Speaker(label, _npcName(_plugin)); y += 32; }
             return y;
         }
         private static void Clear(Transform parent)
@@ -152,7 +156,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (_hidden != null) { _hidden.alpha = _oldAlpha; _hidden.blocksRaycasts = _oldRays; if (_ownsGroup) UnityEngine.Object.Destroy(_hidden); }
             _hidden = null;
         }
-        internal static void Hide() { if (_root != null) _root.SetActive(false); RestoreSource(); }
+        internal static void Hide() { Pointer.Clear(); if (_root != null) _root.SetActive(false); RestoreSource(); }
         internal static void Dispose()
         { Hide(); if (_root != null) UnityEngine.Object.Destroy(_root); _root = null; _plugin = _ui = null; Buttons.Clear(); Sources.Clear(); }
     }

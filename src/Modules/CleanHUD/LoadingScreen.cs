@@ -20,7 +20,8 @@ namespace WildWasteland.Modules.CleanHUD
         private Dictionary<string, string> _tips = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private readonly GlyphText[] _tipLines = new GlyphText[8];
         private static readonly string[] Labels = { "LOADING.", "LOADING..", "LOADING..." };
-        private static readonly string[] SavingLabels = { "AUTOSAVING.", "AUTOSAVING..", "AUTOSAVING..." };
+        private static readonly string[] SavingLabels = { "SAVING.", "SAVING..", "SAVING..." };
+        private static readonly string[] AutosavingLabels = { "AUTOSAVING.", "AUTOSAVING..", "AUTOSAVING..." };
         private GameObject _root;
         private RawImage _background;
         private GlyphText _label;
@@ -33,7 +34,7 @@ namespace WildWasteland.Modules.CleanHUD
         private int _width, _height;
         private float _nextFind;
         private bool _completed;
-        private bool _saving;
+        private bool _saving, _autosaving, _saveFinished;
         private bool _nativeLocated;
         internal bool Active { get; private set; }
 
@@ -149,26 +150,27 @@ namespace WildWasteland.Modules.CleanHUD
             _root.SetActive(false);
         }
 
-        internal void Begin(bool saving = false)
+        internal void Begin(bool saving = false, bool autosaving = false)
         {
             if (Active || !CleanHudModule.Running || !CleanHudModule.MenuEnabled.Value) return;
             LoadingProgress.Begin();
             Reload();
-            _saving = saving;
+            _saving = saving; _autosaving = autosaving; _saveFinished = false;
             _nextProgress = _shownProgress = 0f;
             _current = _screens.Count > 0 ? _screens[_random.Next(_screens.Count)] : null;
             _currentTip = "";
             if (_current != null) _tips.TryGetValue(_current.Name, out _currentTip);
             if (_root == null) Build();
             ShowScreen(); UpdateProgress(); _completed = false; Active = true; _root.SetActive(true);
-            CleanHudModule.Log((_saving ? "Autosaving " : "Loading ") + (_current != null ? _current.Name : "(no Screen*.png found)"));
+            var events = UnityEngine.EventSystems.EventSystem.current; if (events != null) events.SetSelectedGameObject(null);
+            CleanHudModule.Log((_autosaving ? "Autosaving " : _saving ? "Saving " : "Loading ") + (_current != null ? _current.Name : "(no Screen*.png found)"));
         }
         private void ShowScreen()
         {
             _background.texture = _current != null ? _current.Texture : null;
             _background.enabled = _background.texture != null;
             _width = _height = 0;
-            _label.Set((_saving ? SavingLabels : Labels)[0]);
+            _label.Set((_autosaving ? AutosavingLabels : _saving ? SavingLabels : Labels)[0]);
             foreach (var line in _tipLines) { line.Set(""); line.gameObject.SetActive(false); }
             int index = 0; var current = new StringBuilder(); var font = GlyphFont.Get();
             foreach (string paragraph in (_currentTip ?? "").Replace("\r", "").Split('\n'))
@@ -188,15 +190,23 @@ namespace WildWasteland.Modules.CleanHUD
         }
         internal void End()
         {
-            Active = false; _completed = false; _saving = false;
+            Active = false; _completed = false; _saving = _autosaving = _saveFinished = false;
             LoadingProgress.ScreenVisible = false;
             if (_root != null && _root.activeSelf) _root.SetActive(false);
         }
-        internal void EndSaving() { if (_saving) End(); }
+        internal void EndSaving() { if (_autosaving) End(); }
+        private void SaveFinished() { _saveFinished = true; }
+        internal void AfterEnterState(HutongGames.PlayMaker.Fsm fsm, HutongGames.PlayMaker.FsmState state)
+        {
+            if (!CleanHudModule.Running || state == null || state.Name != "clicked" || fsm.Name != "Continue") return;
+            var go = fsm.GameObject; if (go == null || go.transform.parent == null) return;
+            if ((go.name == "savegame" && go.transform.parent.name == "SaveGame") || (go.name == "Yes_Save" && go.transform.parent.name == "Really Save")) Begin(true);
+        }
         internal void StateChanged(string previous, string current)
         {
             if (current == "Start" || current == "setSeed" || current == "LoadGame" || current == "generateTerrain" || current == "generateTerrain 2") Begin();
-            else if (current == "isPlay") _completed = true;
+            else if (current == "wait" || current == "SaveGame") Begin(true);
+            else if (current == "isPlay") { _completed = true; if (_saving && !_autosaving) SaveBus.AfterSave(SaveFinished); }
         }
         internal void SceneLoaded()
         {
@@ -225,9 +235,10 @@ namespace WildWasteland.Modules.CleanHUD
             bool native = NativeLoading();
             if (!Active && native) Begin();
             if (!Active) return;
+            if (_saving && !_autosaving && _saveFinished && !ApocasaverLoading.SaveActive) { CleanHudModule.Log("Saving complete; menus unlocked"); End(); return; }
             if (!_saving && _completed && !native) { End(); return; }
             if (_root == null) { Build(); ShowScreen(); _root.SetActive(true); }
-            var labels = _saving ? SavingLabels : Labels;
+            var labels = _autosaving ? AutosavingLabels : _saving ? SavingLabels : Labels;
             _label.Set(labels[(int)(Time.unscaledTime * 2f) % labels.Length]);
             if (Time.unscaledTime >= _nextProgress) { _nextProgress = Time.unscaledTime + .2f; UpdateProgress(); }
             if (_background.texture != null && (_width != Screen.width || _height != Screen.height))
@@ -242,6 +253,7 @@ namespace WildWasteland.Modules.CleanHUD
         {
             float fraction; string detail;
             LoadingProgress.Read(_saving, out fraction, out detail);
+            if (_saving && SaveBus.State == "isPlay") { fraction = _completed ? .95f : .02f; detail = _completed ? "Finishing save" : "Preparing save"; }
             _shownProgress = Mathf.Max(_shownProgress, fraction);
             _stage.Set(detail);
             _progressFill.anchorMax = new Vector2(_shownProgress, 1);

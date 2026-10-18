@@ -7,6 +7,25 @@ namespace WildWasteland.Modules.Patrols
 {
     internal sealed class QuestFollowers : IFollowerVehicles
     {
+        public bool IsSeated(GameObject npc) { return npc != null && npc.transform.parent != null && npc.GetComponent<Pose>() != null; }
+        public float ShootDistance { get { return PatrolsModule.ShootDistance.Value; } }
+        public Component SeatPose(GameObject npc, Transform seat, string name, string armLike)
+        {
+            ArmPoseProfile profile;
+            if (!PatrolsModule.HumanArmPoses.ContainsKey(name) && PatrolsModule.HumanArmPoses.TryGetValue(armLike, out profile))
+                PatrolsModule.HumanArmPoses[name] = profile;
+            Hired.Add(npc.GetInstanceID());
+            return Pose.Apply(npc, seat, name);
+        }
+        public Component SeatCombat(GameObject npc, GameObject car, Transform seat)
+        {
+            Hired.Add(npc.GetInstanceID()); PassengerGuard.Attach(npc, car, seat);
+            var guard = npc.GetComponent<PassengerGuard>(); guard.QuestRanged(); return guard;
+        }
+        public void ReleasePose(Component component)
+        { var pose = component as Pose; if (pose != null) pose.ReleaseBody(); }
+        public bool CanFire(GameObject npc)
+        { var guard = npc != null ? npc.GetComponent<PassengerGuard>() : null; return guard != null && guard.QuestCanFire; }
         public Type ResolveType(string name)
         {
             switch (name)

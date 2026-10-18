@@ -92,6 +92,14 @@ namespace WildWasteland.Modules.CleanHUD
             return c.D[(cz & 63) * 64 + (cx & 63)] > ExploredFog;
         }
         private static bool Shown { get { return _loaded && !_standDown && CleanHudModule.FogOfWar.Value && CleanHudModule.MapEnabled.Value; } }
+        internal static bool Explored(Vector3 scene)
+        {
+            if (!_loaded || _standDown) return false;
+            var world = Origin.World(scene);
+            int cx = Mathf.FloorToInt(world.x / Cell), cz = Mathf.FloorToInt(world.z / Cell);
+            Chunk chunk;
+            return Chunks.TryGetValue(Key(cx >> 6, cz >> 6), out chunk) && chunk.D[(cz & 63) * 64 + (cx & 63)] <= ExploredFog;
+        }
 
         // ---- exploration (0.2 s interval)
         internal static void Paint()

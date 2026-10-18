@@ -16,8 +16,11 @@ namespace WildWasteland.Modules.PlayerBody
         public static Transform WeaponsParent;
         public static PlayMakerFSM GrenadeFsm;      // PlayerCamera/QuickItems/grenade [Attack]: on -> (Throw Grenade) -> checkGrenade -> fire 0.4 s -> wait 0.35 s -> throw      // PlayerCamera/WeaponsArm/Parent: one child per first-person weapon, the drawn one active
         private static float _nextFind;
+        private static Transform _handUse, _toolArm, _repairArm, _adjustArm;
+        public static bool ToolInHand { get { return ToolActive(_toolArm) || ToolActive(_repairArm) || ToolActive(_adjustArm); } }
+        private static bool ToolActive(Transform arm) { return arm != null && _handUse != null && arm.parent == _handUse && arm.gameObject.activeSelf; }
 
-        public static void Reset() { _drawnFrame = -1; _drawnParent = _drawnChild = null; _deadFrame = -1; _healthVar = null; _healthVarFor = null; _rb = null; _rbFor = null; _jumpFsm = _kickFsm = null; _reloadFsms.Clear(); _perRound.Clear(); _arms.Clear(); _attackFsms.Clear(); _adsFsm = null; GrenadeFsm = null; Player = null; InCarFsm = MovementFsm = null; CameraHolder = PlayerCamera = WeaponsParent = null; Cam = null; _nextFind = 0f; }
+        public static void Reset() { _handUse = _toolArm = _repairArm = _adjustArm = null; _drawnFrame = -1; _drawnParent = _drawnChild = null; _deadFrame = -1; _healthVar = null; _healthVarFor = null; _rb = null; _rbFor = null; _jumpFsm = _kickFsm = null; _reloadFsms.Clear(); _perRound.Clear(); _arms.Clear(); _attackFsms.Clear(); _adsFsm = null; GrenadeFsm = null; Player = null; InCarFsm = MovementFsm = null; CameraHolder = PlayerCamera = WeaponsParent = null; Cam = null; _nextFind = 0f; }
 
         public static bool Ready
         {
@@ -56,6 +59,8 @@ namespace WildWasteland.Modules.PlayerBody
                     PlayerCamera = CameraHolder.Find("PlayerCamera");
                     if (PlayerCamera != null)
                     {
+                        _handUse = PlayerCamera.Find("HandItemUse");
+                        _toolArm = FindDeep(PlayerCamera, "ToolArm"); _repairArm = FindDeep(PlayerCamera, "RepairArm"); _adjustArm = FindDeep(PlayerCamera, "AdjustArm");
                         Cam = PlayerCamera.GetComponent<Camera>();
                         var wa = PlayerCamera.Find("WeaponsArm");
                         WeaponsParent = wa != null ? wa.Find("Parent") : null;

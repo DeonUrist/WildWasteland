@@ -1,6 +1,6 @@
 # Native Quests integration preparation
 
-Status: prepared on 2026-10-18; implementation has not started. No DLL/config/plugin installation changes are part of this preparation.
+Status: native cutover implemented on 2026-10-18, Testing. See [port-Quests.md](port-Quests.md) for implementation, build/deploy and remaining in-game acceptance. The design below is retained as the agreed contract.
 
 ## Agreed behavior
 
@@ -70,7 +70,7 @@ Create `src/Modules/Quests/` with a ModuleBase entry point, source provenance an
 2. **Native engine:** port the quest model, saving and scheduler lifecycle under Quests; move follower/camp/world-cache behavior into native paths. Add a typed Core quest UI/actions service instead of cross-module class references.
 3. **Independent interaction:** implement quest/hire NPC interaction and the current CleanHUD view without Talk installed. Verify quest acceptance/turn-in and hiring before adding optional dialogue content.
 4. **Optional Talk:** attach additional Talk content through the small adapter and verify interaction ownership in both modes. Retain shared/default story profiles only when Talk exists.
-5. **Replacement:** register Quests in Plugin, remove its `local.apocalypterquests` SoftDependency and QuestsCompat quest branch, remove Quests from ReplacementGuard's recommendations, and declare Quests.ConflictsWith containing `local.apocalypterquests`. The normal installer/restart mechanism prevents double ownership if a standalone copy is active. Do not auto-disable Apocatalker; it still adds content and may serve other mods.
+5. **Replacement:** register Quests in Plugin, remove its `local.apocalypterquests` SoftDependency and QuestsCompat quest branch, and declare Quests.ConflictsWith containing `local.apocalypterquests`. The recommendation-list removal was brought forward into the first implementation build at Denis's request; this does not mark the gameplay cutover complete. The normal installer/restart mechanism prevents double ownership if a standalone copy is active. Do not auto-disable Apocatalker; it still adds content and may serve other mods.
 6. **Cleanup/report:** remove obsolete Quests private reflection/transpilers, update docs/modules.md and docs/harmony.md and release assets/attribution, preserve debug visibility/config migration, and leave status Testing. Do not discard source hooks until each has an owned replacement.
 
 ## Acceptance checklist for the implementation
@@ -88,4 +88,4 @@ Create `src/Modules/Quests/` with a ModuleBase entry point, source provenance an
 
 ## Preparation outcome
 
-Completed: source/build identity, current installation state, feature and config inventory, data/save contracts, old-bridge replacement map and the agreed no-Talk/with-Talk/hiring design. Only this plan, its manifest, a pointer in the earlier plan and AGENTS.md guidance are changed. No runtime code has changed, no standalone content has been enabled/disabled, and no build/deploy or commit is needed for these research artifacts.
+Preparation completed; native runtime, optional Talk adapter, typed UI/follower integration and migration are now implemented. Gameplay/performance acceptance remains pending. The source manifest is unchanged; original disabled installs and custom content remain preserved. See the port report for the current build and tests.
