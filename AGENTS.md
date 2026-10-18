@@ -4,6 +4,8 @@ Instructions for every AI agent and session working in this repo. Read all of it
 
 ## 0. Fixing issues: the default task (read this before anything else)
 
+- Traveller hearing (WildWastelandMP issue #2, 2026-10-18, Testing): Denis explicitly requested the same source fix here, with no base-game deployment. Simple foot travellers previously bypassed Noise/Assign and gunshot responder selection. Senses now admits active dismounted simple bandits to normal sound investigation/search; Brain uses its existing ghost movement/search path before returning to simple combat. Newly heard shots must not grant fought-memory/live player position. Preserve normal range, storm, faction and responder limits. NPC VerboseLog confirms `investigates Engine at ghost #...` / `investigates Gunshot at ghost #...`. Denis subsequently authorized commit/push/release as 0.1.37 RC34, still with no game-folder staging/deployment while testing MP. Windows Release/Deploy=false passed zero warnings/errors; built/release-staged DLL MD5 `C196502CBC09EBB8DD7C74B415B17F44`. Full RC33 assets retained; no config/save changes; human runtime retest pending. See `notes/release-0.1.37-RC34.md`.
+
 From 0.1.0 on, almost every task is "fix issue #N" from the board (https://github.com/users/DeonUrist/projects/4). These rules override anything below that suggests otherwise.
 
 ### 0.1 Scope: change only what the issue needs
