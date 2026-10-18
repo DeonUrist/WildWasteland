@@ -937,7 +937,9 @@ namespace WildWasteland.Modules.PlayerBody
         private string _wheelArmOwner = "off";
         internal void LateWheelArms()
         {
-            if (_wheelPoseFrame == Time.frameCount) WheelArms.Solve(Bones, _wheelArmOwner);
+            if (_wheelPoseFrame != Time.frameCount) return;
+            if (WheelArms.MissingWheel) WheelArms.RestPassengerArms(Bones, _wheelArmOwner);
+            else WheelArms.Solve(Bones, _wheelArmOwner);
         }
 
         public void LateCar(Transform player, bool firstPerson)

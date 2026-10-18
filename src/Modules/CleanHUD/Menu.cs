@@ -90,7 +90,7 @@ namespace WildWasteland.Modules.CleanHUD
             F("GRAPHICS", "FIELD OF VIEW", "FOV", 40, 120, 75, "Graphics_Canvas/Graphics/fov/FOV", "0");
             B("GRAPHICS", "AMBIENT OCCLUSION", "ambient_occlusion", true, "Graphics_Canvas/Graphics/ambient occlusion/ambient_occlusion");
             B("GRAPHICS", "BLOOM", "bloom", true, "Graphics_Canvas/Graphics/bloom/bloom");
-            B("GRAPHICS", "COLOR GRADING", "color_grading", true, "Graphics_Canvas/Graphics/color grading/color_grading");
+            B("GRAPHICS", "COLOR GRADING", "color_grading", false, "Graphics_Canvas/Graphics/color grading/color_grading");
             B("GRAPHICS", "SCREEN SPACE SHADOWS", "screen_space_shadows", true, "Graphics_Canvas/Graphics/screen space shadows/screen_space_shadows");
             B("GRAPHICS", "SHARPEN", "sharpen", true, "Graphics_Canvas/Graphics/sharpen/sharpen");
             B("GRAPHICS", "SHOW FPS", "toggleFPS", false, "Graphics_Canvas/Graphics/show fps/show_fps");
@@ -146,6 +146,7 @@ namespace WildWasteland.Modules.CleanHUD
 
         internal static float Read(SettingDef d)
         {
+            if (d.Key == "color_grading") return 0;
             if (d.Kind == "fsm") { var f = FsmOf(d); return f != null && f.ActiveStateName == d.OnState ? 1 : 0; }
             var t = FindPath(d.Path);
             if (t != null)
@@ -165,6 +166,7 @@ namespace WildWasteland.Modules.CleanHUD
 
         internal static void Write(SettingDef d, float v)
         {
+            if (d.Key == "color_grading") v = 0;
             if (d.Kind == "fsm")
             {
                 var f = FsmOf(d);
@@ -1178,6 +1180,7 @@ namespace WildWasteland.Modules.CleanHUD
                     var vt = T(b.transform, "value", cx + 44, 0, 120, h, 24, TextAnchor.MiddleLeft, White, "");
                     Action show = () => { fill.enabled = v > .5f; vt.Set(SettingsModel.Format(d, v)); };
                     show();
+                    if (d.Key == "color_grading") { SetEnabled(b, false); break; }
                     Action flip = () => { v = v > .5f ? 0 : 1; SettingsModel.Write(d, v); if (d.Kind == "bool") _settingsDirty = true; show(); };
                     b.onClick.AddListener(() => { Sound(); flip(); });
                     b.OnHorizontal = dir => flip();

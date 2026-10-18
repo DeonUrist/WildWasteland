@@ -212,7 +212,7 @@ namespace WildWasteland.Core.UI
             Ledger.Fill(new Rect(438, 304, 1.5f, 656), new Color(Ledger.Accent.r, Ledger.Accent.g, Ledger.Accent.b, .35f));
             if (_current == null) return;
             Ledger.Label(new Rect(body.x + 22, body.y + 22, body.width - 44, 50), _current.Title, Ledger.DialogTitle, Ledger.Accent);
-            if (_current == CorePages.GamePage && Ledger.Button(new Rect(body.xMax - 182, body.y + 22, 160, 50), "RESET"))
+            if ((_current == CorePages.GamePage || _current == CorePages.WorldPage || _current == CorePages.HudPage) && Ledger.Button(new Rect(body.xMax - 182, body.y + 22, 160, 50), "RESET"))
             {
                 CorePages.ResetSettings();
                 _debugSearch = _developerSearch = ""; _scroll = Vector2.zero;

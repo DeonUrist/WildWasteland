@@ -300,6 +300,7 @@ namespace WildWasteland.Modules.PlayerBody
             Core.Patches.Patch(this, Core.Patches.Method(typeof(HutongGames.PlayMaker.Actions.MouseLook), "OnUpdate"),
                 prefix: Core.Patches.Method(typeof(ThirdPerson), "BeforeMouseLook"));
             Car.Patch(this);
+            WheelArms.Patch(this);
             PickAssist.Patch(this);
             AimTransition.Patch(this);
             FemalePain.Patch(this);
