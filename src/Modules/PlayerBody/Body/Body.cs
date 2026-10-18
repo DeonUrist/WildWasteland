@@ -634,6 +634,7 @@ namespace WildWasteland.Modules.PlayerBody
 
         public void Destroy()
         {
+            EndCrawl();
             EndTraversal();
             if (_ragdoll != null) { _ragdoll.Destroy(); _ragdoll = null; }
             try { if (_graph.IsValid()) _graph.Destroy(); } catch (Exception) { }
@@ -748,6 +749,7 @@ namespace WildWasteland.Modules.PlayerBody
         public void LateFoot(View view, float dt)
         {
             if (LateTraversal(view)) return;
+            if (LateCrawl(view, dt)) return;
             TickUpper(dt);
             if (_inCar) StartPoseFade(0.3f, false);   // out of the driver's seat: the seated pose eases into standing
             LateFootInner(view, dt);
@@ -763,7 +765,7 @@ namespace WildWasteland.Modules.PlayerBody
             var yaw = Quaternion.LookRotation(fwd.normalized, Vector3.up);
             float standH = Game.StandingHeight;
             string mstate = Game.MoveState;
-            bool crawl = mstate.StartsWith("Crawl", StringComparison.Ordinal) || standH < 0.75f;
+            bool crawl = Crawling.Clip == null && (mstate.StartsWith("Crawl", StringComparison.Ordinal) || standH < 0.75f);
             bool crouch = !crawl && (mstate.StartsWith("Crouch", StringComparison.Ordinal) || standH < 1.4f);
             _crouch = Mathf.MoveTowards(_crouch, crouch ? 1f : 0f, dt * 4f);
             _prone = Mathf.MoveTowards(_prone, crawl ? 1f : 0f, dt * 3f);

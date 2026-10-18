@@ -67,6 +67,8 @@ Shared GetButtonDown/GetPrefab/Apocaspawner catalog subscriptions are listed in 
 
 ### PlayerBody
 
+Low Crawl (2026-10-19, Testing) adds PlayerBody subscriptions to existing dispatchers: SetVelocityDo prefix Crawling.Velocity (cached Movement FSM + active crawl, zero sideways axis), GetButtonDownUpdate/GetButtonDo prefixes Crawling.Button/HeldButton (active crawl + local ownership + weapon/fire inputs), ProcessEvent prefix Crawling.WeaponEvent (active crawl + cached native weapon FSMs, deny redraw/allow holster), and EnterState postfix Crawling.Stance (cached Movement + Crawling entry, native holster). No separate direct patches on these shared targets. The MP downed-input adapter and pose stream are not included in this singleplayer backport.
+
 | Target | Kind | Handler | Filter (first line) | Hot? |
 |---|---|---|---|---|
 | `ApocaChaseCamera.ApocaplayerBridge.FindType` (optional, 0.2.5) | prefix | `ChaseCameraCompat.BeforeFindType` | PlayerBody running; maps only the five former Apocaplayer types to this module and its config facade | Source bridge discovery only; ChaseCamera owns its original view/aim/origin hooks |
