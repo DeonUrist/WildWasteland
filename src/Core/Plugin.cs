@@ -127,7 +127,6 @@ namespace WildWasteland
             Core.ModuleHost.Add(new Modules.Patrols.PatrolsModule());
             Core.ModuleHost.Add(new Modules.POI.PoiModule());
             Core.ModuleHost.Add(new Modules.Weather.WeatherModule());
-            Core.ModuleHost.Add(new Modules.QuestsCompat.QuestsCompatModule());
             Core.ModuleHost.Add(new Modules.Quests.QuestsModule());
             Core.ModuleHost.Add(new Modules.EngineSimCompat.EngineSimCompatModule());
             Core.ModuleHost.Add(new Modules.Survival.SurvivalModule());

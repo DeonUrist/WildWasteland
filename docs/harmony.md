@@ -209,10 +209,6 @@ Quests runs directly as a WW module; all former Quests/Hire/Takeover/Game privat
 | Quests | Shared Hooks.CreateObjectEnter | Death postfix; source kill/giver-death notifications | Health FSM spawn state, ready world |
 | Quests | Shared Hooks.GetButtonDownUpdate / GetButtonDo / GetButtonUpUpdate / GetMouseButtonDownUpdate | Input prefixes | Original native quest conversation only; scoped input blocking |
 | Quests | Optional Talk.Plugin.Open / Close | Opened / Closed postfixes | Attach native quest choices/flags/voice lifecycle to original Talk content |
-| QuestsCompat | Optional Talk.Plugin.Update / LateUpdate | ScheduledOnly prefixes | Talk.Frame / Talk.Cursor own callbacks |
-| QuestsCompat | Optional Talk.Plugin.Open / Close | BeforeOpen / AfterOpen / AfterClose | Shared modal EditorSession and source pause setting |
-| QuestsCompat | Optional Talk.Plugin.GetCam / OnDestroy | TalkCamera / KeepModel prefixes | Core camera cache / managed callback lifetime |
-| QuestsCompat | Optional TalkApi.LoadFile / Reload | PluginLifetime transpilers | Source managed plugin identity; story/profile behavior retained |
 | CleanHUD | Optional Talk.DialogueUI.ShowDialogue / AppendChatLine / SetChoices | Changed postfix | Invalidate mirrored dialogue; source content retained |
 
 Optional Talk fields/calls use Cecil-generated delegates through Core.OptionalAccess, avoiding stripped DynamicMethod and interpreted Expression.Compile in hot paths. Source ES3 reflection remains a save-boundary transport, not an external Quests dependency.
