@@ -68,7 +68,7 @@ namespace WildWasteland.Modules.PlayerBody
         // the driver's-seat view offset Denis set in game (1.5.3: X -0.03, Y 0.02, Z 0.02) is the built-in base; the F7 values add to it
         internal static readonly Vector3 CarViewBase = new Vector3(-0.03f, 0.02f, 0.02f);
         // mirror of the game's Controls "Ignition" key (IgnitionControl), for the moment before the row exists (was a never-saved entry)
-        internal static KeyCode IgnitionKeyCode = KeyCode.E;
+        internal static KeyCode IgnitionKeyCode = KeyCode.I;
 
         internal static bool Female { get { return Character != null && Character.Value == Gender.Female; } }
         internal static string BodyModelFile { get { return Female ? ModelFile.Value : "Models/Player_male.glb"; } }
@@ -133,7 +133,7 @@ namespace WildWasteland.Modules.PlayerBody
             Mig(VehicleStatusHint, "VEHICLE", "VehicleStatusHint");
             VehicleHotkeyHint = cfg.Player("Vehicles", "VehicleHotkeyHint", true, "Show the vehicle hotkeys on the left while driving. Hiding the hints keeps the keys working.");
             Mig(VehicleHotkeyHint, "VEHICLE", "VehicleHotkeyHint");
-            IgnitionControlOn = cfg.Player("Vehicles", "IgnitionKey", true, "Adds an \"Ignition\" row to the game's Controls screen (default E): each press performs one ignition/start panel click (ignition on, crank, then stop on standard cars).");
+            IgnitionControlOn = cfg.Player("Vehicles", "IgnitionKey", true, "Adds an \"Ignition\" row to the game's Controls screen (default I): each press performs one ignition/start panel click (ignition on, crank, then stop on standard cars).");
             LanceIgnoresOwnCar = cfg.Player("Vehicles", "LanceIgnoresOwnCar", true, "A blast lance thrown from the driver's seat flies out of your own car instead of blowing up on it.");
 
             // ---- [Keys]: gameplay keys keep Apocaplayer's defaults (polled in context: third person, climbing, driving)
@@ -390,7 +390,7 @@ namespace WildWasteland.Modules.PlayerBody
         {
             string raw = Legacy.Get(OldCfg, "VEHICLE", "IgnitionKey");
             if (raw == null || raw == "E") raw = Legacy.Get(OldCfg, "General", "IgnitionKey") ?? raw;
-            try { return raw != null ? (KeyCode)Enum.Parse(typeof(KeyCode), raw.Trim(), true) : KeyCode.E; } catch { return KeyCode.E; }
+            try { return raw != null ? (KeyCode)Enum.Parse(typeof(KeyCode), raw.Trim(), true) : KeyCode.I; } catch { return KeyCode.I; }
         }
 
         // ================================================================== F7

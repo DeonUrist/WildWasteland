@@ -16,7 +16,7 @@ namespace WildWasteland.Modules.PlayerBody
     internal static class IgnitionControl
     {
         internal const string Name = "Ignition";
-        private static KeyCode _key = KeyCode.E, _alt = KeyCode.None, _lastKey, _lastAlt;
+        private static KeyCode _key = KeyCode.I, _alt = KeyCode.None, _lastKey, _lastAlt;
         private static bool _loaded, _lastEnabled;
 
         // (WW) config/WildWasteland/PlayerBody/ignition-key.txt (copied once from config/Apocaplayer by PlayerBodyModule.MigrateSidecars)
@@ -31,7 +31,7 @@ namespace WildWasteland.Modules.PlayerBody
                 if (File.Exists(FilePath))
                 {
                     var parts = File.ReadAllText(FilePath).Trim().Split(',');
-                    _key = Parse(parts.Length > 0 ? parts[0] : "", KeyCode.E);
+                    _key = Parse(parts.Length > 0 ? parts[0] : "", KeyCode.I);
                     _alt = parts.Length > 1 ? Parse(parts[1], KeyCode.None) : KeyCode.None;
                 }
                 else
