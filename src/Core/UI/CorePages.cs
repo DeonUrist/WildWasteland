@@ -152,6 +152,7 @@ namespace WildWasteland.Core.UI
         static void NavigationSettings(ToolLayout l)
         {
             l.Text("Map and compass world settings");
+            Switch(l, "Fog of war", CleanHudSettings.FogOfWar);
             CompassDetail(l, "Patrols on compass", CleanHudSettings.ShowConvoys, CleanHudSettings.AmbiguousPatrols);
             CompassDetail(l, "Locations on compass (1 km)", CleanHudSettings.ShowLocations, CleanHudSettings.AmbiguousLocations);
             CleanHudSettings.MapMarkers.Value = (MapDetail)l.Choices("Map markers", (int)CleanHudSettings.MapMarkers.Value, "Off", "Ambiguous", "On");
@@ -317,8 +318,7 @@ namespace WildWasteland.Core.UI
                 if (owner != null && owner.Id == "CleanHUD")
                 {
                     l.Heading("Map fog of war");
-                    l.Text("These controls affect unexplored areas on the map.");
-                    l.Toggle(CleanHudSettings.FogOfWar, "Fog of war");
+                    l.Text("Tune unexplored areas on the map. Fog of war on/off is in World.");
                     l.Entry(CleanHudSettings.FogRadius);
                     l.Entry(CleanHudSettings.FogEdge); l.Entry(CleanHudSettings.FogOpacity);
                 }

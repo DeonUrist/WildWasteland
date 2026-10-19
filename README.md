@@ -1,10 +1,10 @@
 # Wild Wasteland
 
-**Wild Wasteland 1.0.2** is a single-player gameplay overhaul for **Apocalypter**, built for BepInEx 5. It brings a visible player body, more capable enemies, travelling vehicle crews, expanded combat, quests, survival features and a unified interface into one configurable mod.
+**Wild Wasteland 1.0.3** is a single-player gameplay overhaul for **Apocalypter**, built for BepInEx 5. It brings a visible player body, more capable enemies, travelling vehicle crews, expanded combat, quests, survival features and a unified interface into one configurable mod.
 
 Choose which modules to use and adjust them through the in-game settings. Wild Wasteland shares their loading, saving and update work so the included systems can interact without running duplicate standalone plugins.
 
-[Download 1.0.2](https://github.com/DeonUrist/WildWasteland/releases/tag/v1.0.2) · [Feature wiki](https://github.com/DeonUrist/WildWasteland/wiki) · [Report a problem](https://github.com/DeonUrist/WildWasteland/issues)
+[Download 1.0.3](https://github.com/DeonUrist/WildWasteland/releases/tag/v1.0.3) · [Feature wiki](https://github.com/DeonUrist/WildWasteland/wiki) · [Report a problem](https://github.com/DeonUrist/WildWasteland/issues)
 
 ## Player body and movement
 
@@ -86,6 +86,8 @@ Remove the old **Apocaraider** monolith manually as well. Apocasaver's save engi
 ## Settings and controls
 
 The default **F3** window groups ordinary choices under **PLAYER**, **WORLD**, **HUD** and **SYSTEM**, alongside module switches and Performance. Debug and Developer expose advanced tools when enabled. The window pauses single-player gameplay. Apocasetter's **F6** Mods menu provides the Wild Wasteland entry and window-key/debug options.
+
+**WORLD** includes Fog of war on/off, available with Debug disabled. Reveal radius, edge fade and opacity are under **Debug → CleanHUD → Map fog of war**.
 
 Rebind actions through the Controls screen. Useful defaults include **Y** for Crawl, **I** for Ignition, **J** for the quest journal, **F** for friendly NPC interaction and **Delete** to dismiss a hire. Existing saved bindings take precedence.
 
