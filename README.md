@@ -1,10 +1,10 @@
 # Wild Wasteland
 
-**Wild Wasteland 1.0.1** is a single-player gameplay overhaul for **Apocalypter**, built for BepInEx 5. It brings a visible player body, more capable enemies, travelling vehicle crews, expanded combat, quests, survival features and a unified interface into one configurable mod.
+**Wild Wasteland 1.0.2** is a single-player gameplay overhaul for **Apocalypter**, built for BepInEx 5. It brings a visible player body, more capable enemies, travelling vehicle crews, expanded combat, quests, survival features and a unified interface into one configurable mod.
 
 Choose which modules to use and adjust them through the in-game settings. Wild Wasteland shares their loading, saving and update work so the included systems can interact without running duplicate standalone plugins.
 
-[Download 1.0.1](https://github.com/DeonUrist/WildWasteland/releases/tag/v1.0.1) · [Feature wiki](https://github.com/DeonUrist/WildWasteland/wiki) · [Report a problem](https://github.com/DeonUrist/WildWasteland/issues)
+[Download 1.0.2](https://github.com/DeonUrist/WildWasteland/releases/tag/v1.0.2) · [Feature wiki](https://github.com/DeonUrist/WildWasteland/wiki) · [Report a problem](https://github.com/DeonUrist/WildWasteland/issues)
 
 ## Player body and movement
 
@@ -95,7 +95,7 @@ Performance optimizations are optional and experimental. Its presets and measure
 
 ## Compatibility and support
 
-Wild Wasteland 1.0.1 is the **single-player** project. Multiplayer-specific features belong to the separate WWMP build. Mod-created vehicles and components require their supporting modules when loading; removing the mod cannot make the base game restore objects it does not know.
+Wild Wasteland 1.0.2 is the **single-player** project. Multiplayer-specific features belong to the separate WWMP build. Mod-created vehicles and components require their supporting modules when loading; removing the mod cannot make the base game restore objects it does not know.
 
 Some features remain marked **Testing** in the [wiki](https://github.com/DeonUrist/WildWasteland/wiki). The release compiles successfully; that does not establish complete gameplay, save-recovery or performance verification across every setup.
 
