@@ -6,4 +6,4 @@ Includes current settings.cfg/tools.cfg plus only the active public-main General
 
 Profiles are embedded under DefaultProfiles and installed only after the original migration, and only when the destination file is absent. The ignition-key cache and generated pose source are excluded. Existing pose, wheel, layout and key-backup files are never overwritten.
 
-Examples: fresh/missing autosave interval 20 minutes, warning30 seconds, five autosaves/backups, screenshots on, driving autosaves off; cleanup off; map edge499.3507/opacity0.463468, routes Ambiguous; default Male, current camera/aim/wheel values. Existing SP choices remain as saved.
+Examples: fresh/missing autosave interval 20 minutes, warning30 seconds, five autosaves/backups, screenshots on, driving autosaves off; cleanup off; map edge499.3507/opacity1, routes Ambiguous; default Male, current camera/aim/wheel values. Version1.0.1 corrects the unintended captured opacity0.463468 to1, including an exact-value upgrade for saved copies of that default. Other existing SP choices remain as saved.

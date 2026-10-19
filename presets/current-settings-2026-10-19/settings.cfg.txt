@@ -24,7 +24,7 @@ Routes = Ambiguous
 FogOfWar = true
 FogRevealRadius = 500
 FogEdgeFade = 499.3507
-FogOpacity = 0.463468
+FogOpacity = 1
 BinocularZoom = 1
 TrafficMarkers = true
 

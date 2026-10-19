@@ -76,6 +76,8 @@ namespace WildWasteland.Modules.CleanHUD
             cfg.Migrate(FogEdge, "local.immersivemap.cfg", "Fog", "EdgeFadeDistance");
             FogOpacity = cfg.Player("Map", "FogOpacity", 1f, "1 hides unexplored areas completely; lower values leave them faintly visible.", new AcceptableValueRange<float>(0f, 1f));
             cfg.Migrate(FogOpacity, "local.immersivemap.cfg", "Fog", "FogOpacity");
+            // 1.0 captured this unintended transparent default; retain all other custom opacity values.
+            if (FogOpacity.Value == .463468f) FogOpacity.Value = 1f;
             BinocularZoom = cfg.Player("Map", "BinocularZoom", 1f, "Remembered additional binocular magnification. Scroll while binoculars are raised to change it from 1x to 2x.", new AcceptableValueRange<float>(1f, 2f));
             MenuEnabled = Bind(cfg, "Menu", "Enabled", true, "Replace the title and pause menus with CleanHUD's menus.");
             CleanFont = cfg.Player("Menu", "CleanFont", false, "Use CleanHUD's forcedSquare font instead of the game's Helveticrap font. Applies to CleanHUD and its settings text.");

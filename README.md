@@ -1,10 +1,10 @@
 # Wild Wasteland
 
-**Wild Wasteland 1.0** is a single-player gameplay overhaul for **Apocalypter**, built for BepInEx 5. It brings a visible player body, more capable enemies, travelling vehicle crews, expanded combat, quests, survival features and a unified interface into one configurable mod.
+**Wild Wasteland 1.0.1** is a single-player gameplay overhaul for **Apocalypter**, built for BepInEx 5. It brings a visible player body, more capable enemies, travelling vehicle crews, expanded combat, quests, survival features and a unified interface into one configurable mod.
 
 Choose which modules to use and adjust them through the in-game settings. Wild Wasteland shares their loading, saving and update work so the included systems can interact without running duplicate standalone plugins.
 
-[Download 1.0](https://github.com/DeonUrist/WildWasteland/releases/tag/v1.0) · [Feature wiki](https://github.com/DeonUrist/WildWasteland/wiki) · [Report a problem](https://github.com/DeonUrist/WildWasteland/issues)
+[Download 1.0.1](https://github.com/DeonUrist/WildWasteland/releases/tag/v1.0.1) · [Feature wiki](https://github.com/DeonUrist/WildWasteland/wiki) · [Report a problem](https://github.com/DeonUrist/WildWasteland/issues)
 
 ## Player body and movement
 
@@ -38,7 +38,7 @@ Stew pots can be found in natural loot and used for filling, drinking and cookin
 
 ## HUD, map and menus
 
-CleanHUD provides configurable vitals, weapon and ammo displays, quick slots, vehicle status, a strip compass and a message log. Map exploration and fog of war reveal the places you visit; binoculars help identify distant locations and traffic. Map, compass and world-traffic visibility can be configured independently.
+CleanHUD provides configurable vitals, weapon and ammo displays, quick slots, vehicle status, a strip compass and a message log. Map exploration and fog of war reveal the places you visit; unexplored areas default to full opacity (1.0), with a soft reveal edge. Binoculars help identify distant locations and traffic. Map, compass and world-traffic visibility can be configured independently.
 
 Styled title, pause, inventory, journal and settings screens share the game's font and a choice of accent colors. Loading and saving use 18 illustrated screens with tips, gentle image movement and progress reporting. External icons, loading artwork and supported layout files can be customized.
 
@@ -95,7 +95,7 @@ Performance optimizations are optional and experimental. Its presets and measure
 
 ## Compatibility and support
 
-Wild Wasteland 1.0 is the **single-player** project. Multiplayer-specific features belong to the separate WWMP build. Mod-created vehicles and components require their supporting modules when loading; removing the mod cannot make the base game restore objects it does not know.
+Wild Wasteland 1.0.1 is the **single-player** project. Multiplayer-specific features belong to the separate WWMP build. Mod-created vehicles and components require their supporting modules when loading; removing the mod cannot make the base game restore objects it does not know.
 
 Some features remain marked **Testing** in the [wiki](https://github.com/DeonUrist/WildWasteland/wiki). The release compiles successfully; that does not establish complete gameplay, save-recovery or performance verification across every setup.
 
