@@ -12,7 +12,7 @@ namespace WildWasteland.Core.UI
     /// <summary>Pages owned by Core: module overview (on/off), performance, Harmony inventory, core settings.</summary>
     internal static class CorePages
     {
-        internal static ToolPage GamePage, WorldPage, HudPage, DebugPage, DeveloperPage;
+        internal static ToolPage GamePage, WorldPage, HudPage, SystemPage, DebugPage, DeveloperPage;
         static readonly List<ToolPage> _debugPages = new List<ToolPage>();
         static ConfigPage _settings;
         static ConfigEntry<bool> _poi;
@@ -24,6 +24,8 @@ namespace WildWasteland.Core.UI
             WorldPage = new GameSettingsPage("WORLD", DrawWorld);
             HudPage = new GameSettingsPage("HUD", DrawHud);
             ToolWindow.Add(GamePage); ToolWindow.Add(WorldPage); ToolWindow.Add(HudPage);
+            SystemPage = new GameSettingsPage("SYSTEM", SaveLibraryPage.DrawSystem);
+            ToolWindow.Add(SystemPage); ToolWindow.Add(SaveLibraryPage.Instance);
             ToolWindow.Add(new ActionPage(null, ToolGroups.General, "Modules", Modules));
             ToolWindow.Add(WildWasteland.Modules.Performance.PerformancePage.Instance);   // #133: separate Performance tab
             DebugPage = new ActionPage(null, ToolGroups.General, "Debug", Debug) { DebugOnly = true };
@@ -144,15 +146,14 @@ namespace WildWasteland.Core.UI
             }
             Switch(l, "Vehicle Icons", Player.VehicleStatusHint);
             Switch(l, "Compass", CleanHudSettings.ShowCompass);
-            Switch(l, "Map", CleanHudSettings.MapEnabled);
             l.Entry(CleanHudSettings.Scale);
         }
+
         static void NavigationSettings(ToolLayout l)
         {
             l.Text("Map and compass world settings");
             CompassDetail(l, "Patrols on compass", CleanHudSettings.ShowConvoys, CleanHudSettings.AmbiguousPatrols);
             CompassDetail(l, "Locations on compass (1 km)", CleanHudSettings.ShowLocations, CleanHudSettings.AmbiguousLocations);
-            Switch(l, "Fog of war", CleanHudSettings.FogOfWar);
             CleanHudSettings.MapMarkers.Value = (MapDetail)l.Choices("Map markers", (int)CleanHudSettings.MapMarkers.Value, "Off", "Ambiguous", "On");
             CleanHudSettings.MapTrafficMarkers.Value = (MapDetail)l.Choices("World traffic markers", (int)CleanHudSettings.MapTrafficMarkers.Value, "Off", "Ambiguous", "On");
             CleanHudSettings.MapRoutes.Value = (MapDetail)l.Choices("Map Routes", (int)CleanHudSettings.MapRoutes.Value, "Off", "Ambiguous", "On");
@@ -174,18 +175,17 @@ namespace WildWasteland.Core.UI
 
         static void BodySelection(ToolLayout l)
         {
-            var r = l.Next(162); float width = (r.width - 10) / 2;
-            for (int i = 0; i < 2; i++)
+            var order = WildWasteland.Modules.PlayerBody.CharacterPortraits.Order;
+            var r = l.Next(288); float width = (r.width - 8 * (order.Length - 1)) / order.Length;
+            for (int i = 0; i < order.Length; i++)
             {
-                bool female = i == 1;
-                var card = new Rect(r.x + i * (width + 10), r.y, width, r.height);
-                bool selected = Player.Female == female;
+                int choice = order[i];
+                var card = new Rect(r.x + i * (width + 8), r.y, width, r.height);
+                bool selected = (int)Player.Character.Value == choice;
                 Ledger.Panel(card, selected ? Ledger.Selected : Ledger.Field, selected ? Ledger.Accent : Ledger.Line);
-                var texture = WildWasteland.Modules.PlayerBody.InventoryModel.SettingsPicture(female);
-                if (texture != null) GUI.DrawTexture(new Rect(card.x + 8, card.y + 6, card.width - 16, card.height - 36), texture, ScaleMode.ScaleToFit);
-                else Ledger.Label(new Rect(card.x + 8, card.y + 8, card.width - 16, card.height - 40), "TAB preview unavailable", Ledger.Small, Ledger.Muted, TextAnchor.MiddleCenter);
-                Ledger.Label(new Rect(card.x, card.yMax - 29, card.width, 26), female ? "Female" : "Male", Ledger.Body, selected ? Ledger.Accent : Ledger.Text, TextAnchor.MiddleCenter);
-                if (GUI.Button(card, GUIContent.none, GUIStyle.none) && !selected) Player.Character.Value = female ? Player.Gender.Female : Player.Gender.Male;
+                var texture = WildWasteland.Modules.PlayerBody.CharacterPortraits.Picture(choice);
+                if (texture != null) GUI.DrawTexture(new Rect(card.x + 6, card.y + 6, card.width - 12, card.height - 12), texture, ScaleMode.ScaleToFit);
+                if (GUI.Button(card, GUIContent.none, GUIStyle.none) && !selected) Player.Character.Value = (Player.Gender)choice;
             }
         }
 
@@ -221,6 +221,8 @@ namespace WildWasteland.Core.UI
 
         static bool DebugSetting(ConfigEntryBase e)
         {
+            if (e.Definition.Section.StartsWith("System /", System.StringComparison.Ordinal)) return false;
+            if (MapFogSetting(e)) return false;
             if (VerboseSetting(e) || ReferenceEquals(e, Plugin.DeveloperMode)) return false;
             if (ReferenceEquals(e, CleanHudSettings.ShowNeeds) || ReferenceEquals(e, CleanHudSettings.ShowHealthNumbers)
                 || ReferenceEquals(e, CleanHudSettings.ShowInsanity) || ReferenceEquals(e, CleanHudSettings.Scale)
@@ -228,7 +230,7 @@ namespace WildWasteland.Core.UI
                 || ReferenceEquals(e, CleanHudSettings.AmbiguousPatrols) || ReferenceEquals(e, CleanHudSettings.AmbiguousLocations)
                 || ReferenceEquals(e, CleanHudSettings.ShowCompass) || ReferenceEquals(e, CleanHudSettings.MapEnabled)
                 || ReferenceEquals(e, CleanHudSettings.MapMarkers) || ReferenceEquals(e, CleanHudSettings.MapRoutes)
-                || ReferenceEquals(e, CleanHudSettings.FogOfWar) || ReferenceEquals(e, CleanHudSettings.MapTrafficMarkers)
+                || ReferenceEquals(e, CleanHudSettings.MapTrafficMarkers)
                 || ReferenceEquals(e, CleanHudSettings.DrivingHudOnlyThirdPerson)) return false;
             if (ReferenceEquals(e, Player.Character) || ReferenceEquals(e, Player.BodyFirstPerson) || ReferenceEquals(e, Player.FullBodyOnlyOnFoot)
                 || ReferenceEquals(e, Player.VehicleHotkeyHint) || ReferenceEquals(e, Player.VehicleStatusHint)
@@ -275,9 +277,12 @@ namespace WildWasteland.Core.UI
         static bool WeatherTuning(ConfigEntryBase e)
         { return e.Definition.Section == "Weather / Storms" && (e.Definition.Key == "Hurricanes per km²" || e.Definition.Key == "Front width (km)" || e.Definition.Key == "Depth (km)"); }
 
+        static bool MapFogSetting(ConfigEntryBase e)
+        { return ReferenceEquals(e, CleanHudSettings.FogOfWar) || ReferenceEquals(e, CleanHudSettings.FogRadius) || ReferenceEquals(e, CleanHudSettings.FogEdge) || ReferenceEquals(e, CleanHudSettings.FogOpacity); }
+
         static bool RetainedDebugSetting(ConfigEntryBase e)
         {
-            if (WeatherTuning(e) || VerboseSetting(e) || ReferenceEquals(e, Patrols.MenuKey) || ReferenceEquals(e, Patrols.TemplateDumpKey)) return true;
+            if (WeatherTuning(e) || MapFogSetting(e) || VerboseSetting(e) || ReferenceEquals(e, Patrols.MenuKey) || ReferenceEquals(e, Patrols.TemplateDumpKey)) return true;
             return e.SettingType == typeof(bool) && DebugSetting(e) && !ReferenceEquals(e, Player.WeaponAdjust)
                 && !ReferenceEquals(e, Patrols.TurretSpotEditor) && !ReferenceEquals(e, Patrols.BusPassengerPoseEditorEnabled);
         }
@@ -309,6 +314,14 @@ namespace WildWasteland.Core.UI
                 var owner = i < 0 ? null : ModuleHost.Entries[i].Module;
                 if (owner != null && !HasDebugSettings(Plugin.Settings, owner) && !HasDebugSettings(Plugin.Tools, owner)) continue;
                 if (!l.Category("Debug/" + (owner != null ? owner.Id : "Core"), CategoryTitle(owner))) continue;
+                if (owner != null && owner.Id == "CleanHUD")
+                {
+                    l.Heading("Map fog of war");
+                    l.Text("These controls affect unexplored areas on the map.");
+                    l.Toggle(CleanHudSettings.FogOfWar, "Fog of war");
+                    l.Entry(CleanHudSettings.FogRadius);
+                    l.Entry(CleanHudSettings.FogEdge); l.Entry(CleanHudSettings.FogOpacity);
+                }
                 if (owner != null && owner.Id == "Weather")
                 {
                     l.Heading("Storm tuning");

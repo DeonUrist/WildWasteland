@@ -32,24 +32,24 @@ namespace WildWasteland.Core
 
         public ConfigEntry<T> Player<T>(string sub, string key, T def, string desc)
         {
-            return Main.Bind(Section(sub), key, def, desc);
+            return TunedSettings.Bind(Main, Section(sub), key, def, desc);
         }
         public ConfigEntry<T> Player<T>(string sub, string key, T def, string desc, AcceptableValueBase range)
         {
-            return Main.Bind(Section(sub), key, def, new ConfigDescription(desc, range));
+            return TunedSettings.Bind(Main, Section(sub), key, def, new ConfigDescription(desc, range));
         }
         public ConfigEntry<T> Tool<T>(string sub, string key, T def, string desc)
         {
-            return Tools.Bind(Section(sub), key, def, desc);
+            return TunedSettings.Bind(Tools, Section(sub), key, def, desc);
         }
         public ConfigEntry<T> Tool<T>(string sub, string key, T def, string desc, AcceptableValueBase range)
         {
-            return Tools.Bind(Section(sub), key, def, new ConfigDescription(desc, range));
+            return TunedSettings.Bind(Tools, Section(sub), key, def, new ConfigDescription(desc, range));
         }
         /// <summary>Rebindable gameplay/editor hotkey, edited in Debug. The menu key lives in the plugin's F6 config.</summary>
         public ConfigEntry<Key> Hotkey(string key, Key def, string desc)
         {
-            return Main.Bind("Keys", key, def, desc);
+            return TunedSettings.Bind(Main, "Keys", key, def, desc);
         }
 
         /// <summary>

@@ -63,6 +63,7 @@ namespace WildWasteland.Core.UI
         { Open(page, GameRefs.Menu != null && GameRefs.Menu.ActiveStateName == "pause"); }
 
         internal static void OpenFromMenu() { Open(CorePages.GamePage, true); }
+        internal static void OpenSaves(bool saving = false) { SaveLibraryPage.Instance.Configure(saving); Open(SaveLibraryPage.Instance, true); }
 
         static void Open(ToolPage page, bool fromMenu)
         {
@@ -83,6 +84,7 @@ namespace WildWasteland.Core.UI
         public static void Close()
         {
             if (!_open) return;
+            if (_current == SaveLibraryPage.Instance) { SaveLibraryPage.Instance.ReleasePictures(); _current = CorePages.GamePage; _scroll = Vector2.zero; }
             _open = false; _session.Close(); Ledger.ClearNumbers(); ToolLayout.CancelRebind();
         }
 
@@ -163,6 +165,7 @@ namespace WildWasteland.Core.UI
 
         static void DrawWindow()
         {
+            if (_current == SaveLibraryPage.Instance) { SaveLibraryPage.Instance.DrawLibrary(); return; }
             Ledger.Label(new Rect(120, 120, 1420, 104), "WILD WASTELAND", Ledger.Brand, Ledger.Accent);
             Ledger.Label(new Rect(126, 228, 900, 36), "CONFIGURATION  /  " + Plugin.VERSION, Ledger.Small, Ledger.Muted);
             Ledger.Window(new Rect(120, 280, 1680, 704));

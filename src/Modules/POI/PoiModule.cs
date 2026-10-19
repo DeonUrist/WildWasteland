@@ -227,10 +227,10 @@ namespace WildWasteland.Modules.POI
             if (!_loaded || _slot != SaveBus.Slot) Load(SaveBus.Slot);
             _sites.RemoveAll(Missing); foreach (var site in _sites) TrySpawn(site);
         }
-        public override void OnSaveEnd(string slot)
+        public override void OnSaveBegin(string slot)
         {
             var snapshot = new List<string>(_spawned).ToArray();
-            SaveBus.AfterSave(() => Write(slot, snapshot));
+            Write(slot, snapshot);
         }
         private void Write(string slot, string[] snapshot)
         {

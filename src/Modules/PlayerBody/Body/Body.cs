@@ -16,6 +16,7 @@ namespace WildWasteland.Modules.PlayerBody
         private Transform _anim;         // clone of Flexa/Anim
         private Ragdoll _ragdoll;
         private Equipment _equipment;
+
         public void LateEquipment(bool on)
         {
             // (WW) [PlayerBody] EquipmentOnBody off: the mounts are hidden (and not updated) until it is on again
@@ -212,6 +213,8 @@ namespace WildWasteland.Modules.PlayerBody
             var flexa = FlexaPrefab();
             if (flexa == null) return null;
             var animSrc = flexa.transform.Find("Anim");
+            var selected = CharacterModels.SelectedSource(); if (selected != null) animSrc = selected.transform;
+            if (CharacterModels.NativeSelection && selected == null) return null;
             if (animSrc == null) { PlayerBodyModule.Error("Flexa prefab has no Anim child"); return null; }
 
             var b = new Body();
@@ -239,8 +242,9 @@ namespace WildWasteland.Modules.PlayerBody
             if (b._smr == null) { PlayerBodyModule.Error("Flexa's body renderer not found"); UnityEngine.Object.Destroy(b.Root); return null; }
             foreach (var t in clone.GetComponentsInChildren<Transform>(true)) { t.gameObject.layer = 0; if (t.name.StartsWith("mixamorig:")) b.Bones[t.name] = t; }
 
-            if (!Model.Build(b._smr)) { UnityEngine.Object.Destroy(b.Root); return null; }
-            b._mat = new Material(b._smr.sharedMaterial) { name = "Apocaplayer body" };
+            var characterMaterial = (int)PlayerBodyModule.Character.Value >= 8 ? Model.CharacterSkin(b._smr, (int)PlayerBodyModule.Character.Value) : null;
+            if (!Model.Build(b._smr)) { if (characterMaterial != null) UnityEngine.Object.Destroy(characterMaterial); UnityEngine.Object.Destroy(b.Root); return null; }
+            b._mat = characterMaterial ?? new Material(b._smr.sharedMaterial) { name = "Apocaplayer body" };
             var tex = Model.Body();
             if (tex != null) b._mat.mainTexture = tex;
             b._smr.sharedMesh = Model.NoArms;
@@ -852,6 +856,7 @@ namespace WildWasteland.Modules.PlayerBody
                 Turn("mixamorig:Spine2", Vector3.right, pitch * 0.3f);
                 Turn("mixamorig:Neck", Vector3.right, pitch * 0.1f);
             }
+            Turn("mixamorig:Head", Vector3.right, camPitch * (1f - _prone) - pitch);
             PoseProp(kind, yaw);
             FitFirstPerson(view, yaw, camPitch);
         }
@@ -885,8 +890,9 @@ namespace WildWasteland.Modules.PlayerBody
         // of her graph; after the Animator wrote them, their local rotations (shoulders, arms, forearms, hands) are kept over the seat pose,
         // so hips, legs and spine stay seated. The gun model sits in her right hand at the weapon's Idle / Fire / Reload pose; shown in third person.
         private static readonly string[] CarArmBones = { "mixamorig:LeftShoulder", "mixamorig:LeftArm", "mixamorig:LeftForeArm", "mixamorig:LeftHand",
-                                                         "mixamorig:RightShoulder", "mixamorig:RightArm", "mixamorig:RightForeArm", "mixamorig:RightHand" };
-        private readonly Quaternion[] _carArms = new Quaternion[8];
+                                                         "mixamorig:RightShoulder", "mixamorig:RightArm", "mixamorig:RightForeArm", "mixamorig:RightHand",
+                                                         "mixamorig:Spine", "mixamorig:Spine1", "mixamorig:Spine2" };
+        private readonly Quaternion[] _carArms = new Quaternion[CarArmBones.Length];
         private bool _carArmsReady;
         private string _carWeapon = "";
         private bool _carTurned, _carTurnedReady;
@@ -940,7 +946,8 @@ namespace WildWasteland.Modules.PlayerBody
         internal void LateWheelArms()
         {
             if (_wheelPoseFrame != Time.frameCount) return;
-            if (WheelArms.MissingWheel) WheelArms.RestPassengerArms(Bones, _wheelArmOwner);
+            if (_wheelArmOwner == "rest") WheelArms.RestPassengerArms(Bones, "wheel");
+            else if (WheelArms.MissingWheel) WheelArms.RestPassengerArms(Bones, _wheelArmOwner);
             else WheelArms.Solve(Bones, _wheelArmOwner);
         }
 
@@ -951,6 +958,18 @@ namespace WildWasteland.Modules.PlayerBody
             if (!_inCar && _mixamo) StartPoseFade(0.3f, false);   // into the driver's seat: the standing pose eases into the seat
             LateCarInner(player, firstPerson);
             if (_mixamo) { ApplyPoseFade(dt, player); CapturePose(player); }
+            if (firstPerson && Game.PlayerCamera != null)
+            {
+                Transform head;
+                if (Bones.TryGetValue("mixamorig:Head", out head))
+                {
+                    var camera = Game.PlayerCamera;
+                    var yaw = Quaternion.Euler(0f, camera.eulerAngles.y, 0f);
+                    var eye = PlayerBodyModule.BodyInCar ? ThirdPerson.CarShiftEye(camera) : camera.position;
+                    // Match the existing model eye height; only the local view moves after the seated pose was captured.
+                    Root.transform.position += eye - yaw * Vector3.forward * PlayerBodyModule.BodyBack.Value - Vector3.up * .075f - head.position;
+                }
+            }
         }
 
         private void LateCarInner(Transform player, bool firstPerson)
@@ -965,6 +984,10 @@ namespace WildWasteland.Modules.PlayerBody
             // throws from the seat: the blast lance's [Attack] FSM and the quick grenade, as on foot (same clips, timing, one play per throw)
             if (_mixamo && _layers.IsValid())
             {
+                if (weapon == "hands" && weapon != _carWeapon && Time.time >= _throwUntil)
+                { _striking = false; _strike = null; _strikeW = _meleeStart = _upperW = _upperWTarget = 0f; _layers.SetInputWeight(_lUpper, 0f); }
+                if (kind == Props.Kind.Melee || weapon == "hands") WatchAttack(kind, weapon, live && Input.GetMouseButtonDown(0));
+                else { _atkFor = ""; _striking = false; _strikeW = 0f; _meleeStart = 0f; }
                 if (kind == Props.Kind.Throw) WatchThrow(weapon, live && Input.GetMouseButtonDown(0)); else _throwFor = "";
                 string gs = Game.GrenadeState;
                 if (gs == "fire" && _grenadeState != "fire") StartThrow(false, true);
@@ -972,15 +995,19 @@ namespace WildWasteland.Modules.PlayerBody
             }
             bool throwing = _mixamo && _layers.IsValid() && Time.time < _throwUntil && Anims.Get(_throwClip) != null;
             bool gun = _mixamo && _layers.IsValid() && (kind == Props.Kind.Rifle || kind == Props.Kind.Pistol);
-            bool arms = gun || throwing;   // the Animator drives her arms (gun clips or the throw)
+            bool melee = _mixamo && _layers.IsValid() && kind == Props.Kind.Melee;
+            bool fists = _mixamo && _layers.IsValid() && weapon == "hands";
+            bool punching = fists && _upperW > .001f;
+            bool arms = gun || melee || fists || throwing || _mixamo && _layers.IsValid() && kind == Props.Kind.Throw;
             _wheelPoseFrame = Time.frameCount;
-            _wheelArmOwner = arms ? (throwing ? "throw" : "gun") : weapon != "" ? "held item" : Game.Binoculars ? "binoculars" : Game.ToolInHand ? "tool" : Game.GameArmsShown ? "native arms" : "wheel";
+            _wheelArmOwner = arms ? (throwing ? "throw" : melee ? "melee" : gun ? "gun" : "held item") : weapon != "" ? "held item" : Game.Binoculars ? "binoculars" : Game.ToolInHand ? "tool" : Game.GameArmsShown ? "native arms" : "wheel";
+            if (!throwing && (fists || _wheelArmOwner == "wheel")) _wheelArmOwner = punching ? "punch" : "rest";
             // the lance leaving her hand / the grenade holstering the gun changes the weapon mid-throw: that must not reset the throw's arms
             if (weapon != _carWeapon) { _carWeapon = weapon; if (!throwing) { _carArmsReady = false; _carTurnedReady = false; _upperClip = ""; } _weaponSince = Time.time; }
 
             // where she aims (the game shoots / throws along the first-person camera), relative to her seat: yaw + = right, pitch + = down
             float aimYaw = 0f, aimPitch = 0f;
-            if (arms && Game.PlayerCamera != null)
+            if (Game.PlayerCamera != null)
             {
                 var l = Quaternion.Inverse(player.rotation) * Game.PlayerCamera.forward;
                 aimYaw = Mathf.Atan2(l.x, l.z) * Mathf.Rad2Deg;
@@ -990,8 +1017,10 @@ namespace WildWasteland.Modules.PlayerBody
             bool turned = arms && (_carTurned ? Mathf.Abs(aimYaw) > 80f : Mathf.Abs(aimYaw) > 95f);
             if (turned != _carTurned) { _carTurned = turned; _carTurnedReady = false; StartPoseFade(0.25f, true); }
             string fixKey = throwing ? "throw:" + _throwClip : _upperClip ?? "";
+            float headYaw = aimYaw, headPitch = aimPitch;
 
             bool animated = arms && _carArmsReady && _animator.enabled;
+            int carBoneCount = melee || fists || throwing ? CarArmBones.Length : 8;
             if (turned && animated && _carTurnedReady)
             {
                 // the whole body from the Animator (crouch idle + gun clip / throw); only the seat's hip position is used
@@ -1007,22 +1036,29 @@ namespace WildWasteland.Modules.PlayerBody
                 if (hasHips) Root.transform.position += seatHips - hips.position;
                 float tcorr = 0f; if (throwing) _carYawFix.TryGetValue(fixKey, out tcorr);
                 AimPitch(aimPitch, tcorr);
+                headYaw = -tcorr; headPitch = aimPitch * (1f - PlayerBodyModule.AimPitchShare.Value);
                 if (throwing) LearnCarThrow(player, aimYaw, true);
             }
             else
             {
                 // seated: the arms the Animator evaluated this frame (from the clip set last frame) over the seat pose, the chest turned to the aim
                 if (animated)
-                    for (int i = 0; i < CarArmBones.Length; i++) { Transform b; if (Bones.TryGetValue(CarArmBones[i], out b)) _carArms[i] = b.localRotation; }
+                    for (int i = 0; i < carBoneCount; i++) { Transform b; if (Bones.TryGetValue(CarArmBones[i], out b)) _carArms[i] = b.localRotation; }
                 CarSeat.Pose(Bones, _bindLocal);
+                if (fists && !throwing && animated) WheelArms.RestPassengerArms(Bones, "wheel");
                 if (animated)
                 {
-                    for (int i = 0; i < CarArmBones.Length; i++) { Transform b; if (Bones.TryGetValue(CarArmBones[i], out b)) b.localRotation = _carArms[i]; }
+                    if (!fists || punching || throwing)
+                        for (int i = 0; i < carBoneCount; i++) { Transform b; if (Bones.TryGetValue(CarArmBones[i], out b)) b.localRotation = fists && !throwing ? Quaternion.Slerp(b.localRotation, _carArms[i], _upperW) : _carArms[i]; }
                     float corr; _carYawFix.TryGetValue(fixKey, out corr);
                     AimPitch(aimPitch, Mathf.Clamp(aimYaw, -90f, 90f) + corr);
+                    headYaw = aimYaw - Mathf.Clamp(aimYaw, -90f, 90f) - corr; headPitch = aimPitch * (1f - PlayerBodyModule.AimPitchShare.Value);
                     if (throwing) LearnCarThrow(player, aimYaw, false);
                 }
             }
+            headYaw = Mathf.Clamp(headYaw, -85f, 85f); headPitch = Mathf.Clamp(headPitch, -65f, 65f);
+            Turn("mixamorig:Neck", Vector3.up, headYaw * .35f); Turn("mixamorig:Head", Vector3.up, headYaw * .65f);
+            Turn("mixamorig:Neck", Vector3.right, headPitch * .35f); Turn("mixamorig:Head", Vector3.right, headPitch * .65f);
             if (!arms)
             {
                 if (_animator.enabled) _animator.enabled = false;
@@ -1038,7 +1074,8 @@ namespace WildWasteland.Modules.PlayerBody
             if (_action.IsValid()) { _actionW = 0f; _layers.SetInputWeight(_lAction, 0f); }
             bool reload = false, fire = false;
             if (throwing) PlayThrow();   // on its own clock: a weapon change mid-throw doesn't start it over
-            else
+            else if (melee || fists) PlayStrike(Time.deltaTime);
+            else if (gun)
             {
                 // next frame's arms
                 reload = ReloadNow(weapon);
@@ -1049,14 +1086,16 @@ namespace WildWasteland.Modules.PlayerBody
                 _reloading = reload;
                 SetUpper(clip, 1f, 1f);
             }
+            else SetUpper("", 0f, 0f);
             _carArmsReady = true;
             // the weapon in her right hand (the gun; the lance until it leaves the hand)
-            UpdateProp(gun || kind == Props.Kind.Throw ? weapon : "");
+            UpdateProp(gun || melee || kind == Props.Kind.Throw ? weapon : "");
             if (_prop != null)
             {
                 var w = _carW; w.Clear();             // (2.2.6) reused, not one per frame
                 string pre = kind == Props.Kind.Pistol ? "Pistol" : "Rifle";
-                w[reload ? pre + "Reload" : fire && Anims.Get(pre + "Fire") != null ? pre + "Fire" : pre + "Idle"] = 1f;
+                if (gun && !throwing) w[reload ? pre + "Reload" : fire && Anims.Get(pre + "Fire") != null ? pre + "Fire" : pre + "Idle"] = 1f;
+                else if (_upperW > .001f && !string.IsNullOrEmpty(_upperClip)) w[_upperClip] = _upperW;
                 Vector3 p; Quaternion r;
                 GunPose.Blend(_propFor, w, _propPos, _propRot, out p, out r);
                 _prop.transform.localPosition = p; _prop.transform.localRotation = r;

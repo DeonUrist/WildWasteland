@@ -246,6 +246,7 @@ namespace WildWasteland.Modules.Guns
         internal static void OriginShift(Vector3 delta)
         {
             for (int i = 0; i < _shots.Count; i++) { var s = _shots[i]; s.Pos += delta; s.Start += delta; s.Prev += delta; _shots[i] = s; }
+            foreach (var b in _landedBolts) if (b.Visual != null && b.Visual.parent == null) b.Visual.position += delta;
             _playerLast += delta;
         }
 

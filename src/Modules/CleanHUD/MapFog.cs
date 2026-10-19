@@ -283,7 +283,7 @@ namespace WildWasteland.Modules.CleanHUD
                 if (File.Exists(path)) File.Replace(path + ".tmp", path, null); else File.Move(path + ".tmp", path);
                 CleanHudModule.Log("Fog of war saved: " + Path.GetFileName(path) + " (" + Chunks.Count + " chunks, " + data.Length + " bytes)");
             }
-            catch (Exception e) { CleanHudModule.Warn("Fog of war could not be saved: " + e.Message); }
+            catch (Exception e) { Core.SaveBus.ReportFailure("Fog of war save failed: " + e.Message); CleanHudModule.Warn("Fog of war could not be saved: " + e.Message); }
         }
 
         // SaveGame (global event) -> wait -> SaveGame -> isPlay. Write when the save starts and again at SaveAll.

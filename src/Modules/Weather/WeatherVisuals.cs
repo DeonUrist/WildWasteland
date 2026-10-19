@@ -250,6 +250,7 @@ namespace WildWasteland.Modules.Weather
             if (_drawing > 0) _localDust.Tick(camera,_clock,_atmosphere.DustStrength,_atmosphere.LocalWind,detail,WeatherPalette.Sand);
         }
         internal void Suspend() { if (_atmosphere != null) _atmosphere.Suspend(); if (_smoke != null) _smoke.Suspend(); if (_vortexSmoke != null) _vortexSmoke.Suspend(); if (_localDust != null) _localDust.Suspend(); if (_debris != null) _debris.Suspend(); }
+        internal void SetGround(int region,int column,float offset) { _groundOffset[region,column]=offset; _hasGround[region,column]=true; }
         internal bool TryGround(int region,int column,out float offset) { offset=_groundOffset[region,column]; return _hasGround[region,column]; }
         internal void ClearGround() { Array.Clear(_hasGround,0,_hasGround.Length); _groundProbe = 0; for (int i=0;i<_strikes.Length;i++) _strikes[i]=int.MinValue; }
         internal void CaptureDiagnostic(WeatherDiagnostics.Snapshot data)

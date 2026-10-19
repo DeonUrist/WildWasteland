@@ -972,8 +972,8 @@ namespace WildWasteland.Modules.Patrols
         internal static int Kind(Transform t)
         {
             if (t == null) return 0;
-            var p = _player;                       // no lookup here; a null player means nothing to ram anyway
-            var car = _playerCar;
+            var p = Player;
+            var car = PlayerCar;
             if (car != null && t.IsChildOf(car.transform)) return 2;
             // the player object may not be parented under its car: anything the player is inside of counts
             if (p != null && car == null)

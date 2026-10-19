@@ -53,7 +53,7 @@ namespace WildWasteland.Core
             {
                 var m = e.Module;
                 var cfg = new ModuleConfig(m.Id, main, tools);
-                cfg.Enabled = main.Bind(m.Id, "Enabled", m.DefaultEnabled,
+                cfg.Enabled = TunedSettings.Bind(main, m.Id, "Enabled", m.DefaultEnabled,
                     m.DisplayName + ": master switch for this whole feature group. Turning it off at runtime stops it immediately (patches removed); turning it on starts it again.");
                 e.Config = cfg;
                 var mb = m as ModuleBase; if (mb != null) mb.Config = cfg;

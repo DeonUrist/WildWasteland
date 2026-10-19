@@ -29,7 +29,9 @@ namespace WildWasteland.Modules.Guns
 
         private static void LaunchBolt(ref Shot s)
         {
-            if (!s.Bolt || _boltMesh == null) return;
+            if (!s.Bolt) return;
+            if (_boltMesh == null) { var arm = PlayerRig.WeaponsArm; if (arm != null) CacheBoltModel(arm); }
+            if (_boltMesh == null) return;
             var go = new GameObject("WildWasteland.Guns.Bolt") { hideFlags = HideFlags.DontSave, layer = 9 };
             go.AddComponent<MeshFilter>().sharedMesh = _boltMesh;
             go.AddComponent<MeshRenderer>().sharedMaterials = _boltMaterials;

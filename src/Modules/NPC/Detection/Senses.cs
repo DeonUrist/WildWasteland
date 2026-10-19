@@ -1998,7 +1998,7 @@ namespace WildWasteland.Modules.NPC
                         if (!string.IsNullOrEmpty(s)) _co = Core.Scheduler.StartCoroutine(Restore(s));
                     }
                 }
-                catch (Exception e) { NpcModule.Log.LogError("Senses persistence: " + e); }
+                catch (Exception e) { Core.SaveBus.ReportFailure("NPC senses persistence failed: " + e.Message); NpcModule.Log.LogError("Senses persistence: " + e); }
             }
 
             private static string Slot()
@@ -2013,6 +2013,7 @@ namespace WildWasteland.Modules.NPC
             {
                 path = null;
                 string name = Path.GetFileName(slot ?? "");
+                if (Core.SaveRuntime.IsSaveFile(name)) { path = Path.Combine(Path.Combine(NpcModule.DataDir ?? Core.Assets.ModuleConfigDir("NPC"), "Saves"), name + ".senses.txt"); return true; }
                 if (string.IsNullOrEmpty(name) || !name.StartsWith("SaveGame", StringComparison.OrdinalIgnoreCase)) return false;
                 foreach (char c in name) if (!(char.IsLetterOrDigit(c) || c == '.')) return false;
                 path = Path.Combine(Path.Combine(NpcModule.DataDir ?? Core.Assets.ModuleConfigDir("NPC"), "Saves"), name + ".senses.txt");

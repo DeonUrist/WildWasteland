@@ -6,11 +6,29 @@ using WildWasteland.Core;
 
 namespace WildWasteland.Modules.NPC
 {
-    internal sealed class WomenFeature : INpcAppearance
+    internal sealed class WomenFeature : INpcAppearance, ICharacterAssets
     {
         internal const string GUID = "com.denis.apocalypter.womenofwasteland";
         internal static bool Active;
         private static WomenFeature _api;
+        static bool _playerAssetsInstalled;
+        internal static void BindPlayerAssets() { Services.CharacterAssets = new WomenFeature(); }
+        public bool TryPaths(string identity, out string model, out string texture)
+        {
+            model = texture = null;
+            if (identity != "Gungirl" && identity != "Shoota") return false;
+            if (!_playerAssetsInstalled) { InstallAssets(Assets.ModuleDir("NPC")); _playerAssetsInstalled = true; }
+            model = PlayerAsset(identity == "Gungirl" ? NpcModule.GungirlModel.Value : NpcModule.ShootaModel.Value);
+            texture = PlayerAsset(identity == "Gungirl" ? NpcModule.GungirlTexture.Value : NpcModule.ShootaTexture.Value);
+            return true;
+        }
+        static string PlayerAsset(string file)
+        {
+            string path = Path.Combine(Assets.ModuleDir("NPC"), file);
+            string legacy = Path.Combine(Assets.LegacyPluginDir("WomenOfWasteland"), file);
+            return File.Exists(path) || !File.Exists(legacy) ? path : legacy;
+        }
+
 
         internal static void Initialize(NpcModule module)
         {

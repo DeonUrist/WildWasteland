@@ -48,8 +48,12 @@ namespace WildWasteland.Modules.PlayerBody
         {
             if (!Game.Ready) { Reset(); return; }
             if (SaveBus.Busy) return;
-            if (Downed && !Game.InCar && !Game.Dead && Game.MovementFsm != null && Game.MoveState != "Crawling") Game.MovementFsm.SetState("Crawling");
+            if (Downed && !Game.InCar && !Game.Dead && Game.MovementFsm != null && Game.MovementFsm.isActiveAndEnabled && Game.MovementFsm.Fsm.Initialized && Game.MovementFsm.ActiveStateName != "Crawling") Game.MovementFsm.SetState("Crawling");
             if (!Active) { _holstered = false; return; }
+            Holster();
+        }
+        static void Holster()
+        {
             if (_camera != Game.PlayerCamera)
             {
                 _camera = Game.PlayerCamera; var weapons = _camera.Find("Weapons");
@@ -63,7 +67,7 @@ namespace WildWasteland.Modules.PlayerBody
             }
         }
         static void Stance(Fsm fsm, FsmState state)
-        { if (Game.MovementFsm != null && fsm == Game.MovementFsm.Fsm && state.Name == "Crawling") Tick(); }
+        { if (Game.MovementFsm != null && fsm == Game.MovementFsm.Fsm && state.Name == "Crawling" && Game.Ready && !SaveBus.Busy) Holster(); }
         static bool HeldButton(GetButton action)
         {
             if (!Active || action.buttonName.Value != "Fire" || action.Owner == null || Game.PlayerCamera == null || !action.Owner.transform.IsChildOf(Game.PlayerCamera)) return true;

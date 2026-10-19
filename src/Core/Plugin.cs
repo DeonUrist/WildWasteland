@@ -13,6 +13,7 @@ namespace WildWasteland
     /// The soft dependencies on the standalone mods only force them to load first, so the conflict check (5.8) sees them.
     /// </summary>
     [BepInPlugin(GUID, NAME, VERSION)]
+    [BepInDependency("com.denis.apocalypter.apocasaver", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.apocasetter", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.apocaplayer", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.denis.apocalypter.apocaclimber", BepInDependency.DependencyFlags.SoftDependency)]
@@ -43,7 +44,7 @@ namespace WildWasteland
     {
         public const string GUID = "com.denis.apocalypter.wildwasteland";
         public const string NAME = "Wild Wasteland";
-        public const string VERSION = "0.1.40";
+        public const string VERSION = "1.0";
 
         public static Plugin Instance;
         public static ConfigFile Main, Settings, Tools;
@@ -75,19 +76,19 @@ namespace WildWasteland
                 // Apocasetter hides its own opt-in entry; only these two settings are shown in F6.
                 string oldKey = Core.Legacy.Get(Path.GetFileName(Main.ConfigFilePath), "Keys", "Tool window");
                 bool hasWindowKey = Core.Legacy.Get(Path.GetFileName(Main.ConfigFilePath), "Keys", "In-Game Settings Button") != null;
-                Main.Bind("General", "Apocasetter", true, "Lists Wild Wasteland in the Apocasetter Mods menu (F6).");
-                ToolWindowKey = Main.Bind("Keys", "In-Game Settings Button", Key.F3,
+                Core.TunedSettings.Bind(Main, "General", "Apocasetter", true, "Lists Wild Wasteland in the Apocasetter Mods menu (F6).");
+                ToolWindowKey = Core.TunedSettings.Bind(Main, "Keys", "In-Game Settings Button", Key.F3,
                     "Opens Wild Wasteland settings: Game, Modules and, when enabled, Debug.");
                 if (!hasWindowKey && oldKey != null) ToolWindowKey.SetSerializedValue(oldKey);
-                EnableDebug = Main.Bind("General", "Enable Debug", false,
+                EnableDebug = Core.TunedSettings.Bind(Main, "General", "Enable Debug", false,
                     "Show Debug in Wild Wasteland settings: logging, switches, patrol editor access and the optional Developer menu.");
 
                 RegisterModules();
                 Core.ModuleHost.BindAll(Settings, Tools);
 
-                VerboseLog = Settings.Bind("Debug", "VerboseLog", false, "Detailed info logging for every module (off for normal play).");
-                DeveloperMode = Settings.Bind("Debug", "Developer mode", false, "Show Developer while Enable Debug is on. Contains advanced settings, editors and diagnostics.");
-                FrameBudgetMs = Tools.Bind("Core", "Frame budget (ms)", 2f, new ConfigDescription("Sliced background work (bakes, scans) stops for the frame once Wild Wasteland used this much time.", new AcceptableValueRange<float>(0.5f, 8f)));
+                VerboseLog = Core.TunedSettings.Bind(Settings, "Debug", "VerboseLog", false, "Detailed info logging for every module (off for normal play).");
+                DeveloperMode = Core.TunedSettings.Bind(Settings, "Debug", "Developer mode", false, "Show Developer while Enable Debug is on. Contains advanced settings, editors and diagnostics.");
+                FrameBudgetMs = Core.TunedSettings.Bind(Tools, "Core", "Frame budget (ms)", 2f, new ConfigDescription("Sliced background work (bakes, scans) stops for the frame once Wild Wasteland used this much time.", new AcceptableValueRange<float>(0.5f, 8f)));
                 Core.Log.Verbose = VerboseLog.Value;
                 VerboseLog.SettingChanged += (s, a) => Core.Log.Verbose = VerboseLog.Value;
                 Core.Scheduler.FrameBudgetMs = FrameBudgetMs.Value;
@@ -102,6 +103,10 @@ namespace WildWasteland
                 Core.ITweenGuard.Init();
                 Core.QuietFsm.Install();
                 Core.VistasWorldGen.Init();
+                Core.SaveRuntime.Install();
+                Core.SaveSystem.Install();
+                Core.SaveSystem.RecoverFiles();
+                Core.ApocasaverExclusion.Install();
                 Core.UI.ToolWindow.Init();
                 SceneManager.sceneLoaded += OnSceneLoaded;
 

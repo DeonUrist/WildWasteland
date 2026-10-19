@@ -20,6 +20,19 @@ namespace WildWasteland.Core
         public delegate void StateChange(string previous, string current);
         /// <summary>Raised on every SaveLoadGame state change (also when the FSM is first found: previous = null).</summary>
         public static event StateChange StateChanged;
+        // Save participants report swallowed IO/serialization failures so the host cannot publish a partial snapshot.
+        public static void ReportFailure(string message) { SaveSystem.Fail(message); }
+        internal static event Action<UI.ToolLayout> CleanupSettings;
+        internal static void DrawCleanupSettings(UI.ToolLayout layout) { var draw = CleanupSettings; if (draw != null) draw(layout); }
+        internal static event Action SaveCancelled;
+        internal static void CancelSave()
+        {
+            _after.Clear(); Saving = false; _saveSlot = null;
+            var cancel = SaveCancelled; if (cancel != null) cancel();
+            var registry = GameRefs.NewGOArrayList != null ? FsmUtil.Find(GameRefs.NewGOArrayList, "Save_NewGO_ArrayList") : null;
+            if (registry != null) registry.Fsm.SetState("off");
+            if (GameRefs.SaveLoadGame != null) GameRefs.SaveLoadGame.Fsm.SetState("isPlay");
+        }
 
         public static string State { get; private set; }
         public static bool Saving { get; private set; }
@@ -27,6 +40,7 @@ namespace WildWasteland.Core
         public static int Generation { get; private set; }
         /// <summary>SaveLoadGame not in isPlay (a save or load is running). Spawns should wait.</summary>
         public static bool Busy { get { return State != null && State != "isPlay"; } }
+        internal static bool PendingAfterSave { get { return _after.Count != 0; } }
 
         static bool _pendingWorldReady = true;
         static string _saveSlot;
@@ -42,11 +56,13 @@ namespace WildWasteland.Core
                 {
                     var p = ES3Settings.defaultSettings.path;
                     var n = string.IsNullOrEmpty(p) ? null : Path.GetFileName(p);
-                    return n != null && SlotRx.IsMatch(n) ? n : null;
+                    return n != null && (SlotRx.IsMatch(n) || SaveRuntime.IsSaveFile(n)) ? n : null;
                 }
                 catch { return null; }
             }
         }
+
+
 
         /// <summary>Run <paramref name="a"/> once, <paramref name="delay"/> unscaled seconds after the next isPlay following a save.</summary>
         public static void AfterSave(Action a, float delay = 1f) { _after.Add(new KeyValuePair<float, Action>(-delay, a)); }

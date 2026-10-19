@@ -36,6 +36,7 @@ namespace WildWasteland.Modules.Patrols
         // and a target on the edge of the arc used to restart it every frame
         private const float FireCheckSeconds = 0.5f;
         private float _nextFireCheck; private bool _canFire;
+        private GameObject _fireTarget;
         private bool _questFollower; private GameObject _questTarget; private float _questBlockedUntil;
         internal void QuestTarget(GameObject target, float blockedUntil)
         { _questFollower = true; _questTarget = target; _questBlockedUntil = blockedUntil; }
@@ -280,11 +281,12 @@ namespace WildWasteland.Modules.Patrols
 
             GameObject target = _questFollower ? _questTarget : _marker!=null?TrafficFactions.ForCar(_car,_marker):FindVanillaTarget();
             if(_targetVars!=null)for(int i=0;i<_targetVars.Length;i++)_targetVars[i].Value=target;
-            if (_turret && target != null && PlayerRef.GodMode) target = null;   // a human turret leaves a god-mode player alone
+            if (_turret && target != null && PlayerRef.Player != null && target == PlayerRef.Player.gameObject && PlayerRef.GodMode) target = null;   // a human turret leaves a god-mode player alone
             Vector3 aimPoint = Vector3.zero;
             if (target != null) { _targetAcquired = true; aimPoint = AimPoint(target); }
-            if (Time.time >= _nextFireCheck || target == null)
+            if (Time.time >= _nextFireCheck || target == null || target != _fireTarget)
             {
+                _fireTarget = target;
                 _nextFireCheck = Time.time + FireCheckSeconds;
                 bool ok = false;
                 if (target != null)

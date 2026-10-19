@@ -937,6 +937,7 @@ namespace WildWasteland.Modules.CleanHUD
 
         private bool BeginLoad(string path)
         {
+            if (Core.SaveSystem.RecoveryError != null) { Confirm(Core.SaveSystem.RecoveryError, null); return false; }
             _loadingScreen.Begin();
             if (Click(path)) return true;
             _loadingScreen.End(); return false;
@@ -945,16 +946,13 @@ namespace WildWasteland.Modules.CleanHUD
         private static string SaveFile(int n) { return Path.Combine(Application.persistentDataPath, "SaveGame" + n + ".es3"); }
         private static bool SlotUsed(int n) { var f = new FileInfo(SaveFile(n)); return f.Exists && f.Length > 1024; }
 
+        private string _latestSaveFile;
         private string LatestSave(out int slot)
         {
-            slot = 0; DateTime best = DateTime.MinValue;
-            for (int n = 1; n <= 10; n++)
-            {
-                if (!SlotUsed(n)) continue;
-                var t = File.GetLastWriteTime(SaveFile(n));
-                if (t > best) { best = t; slot = n; }
-            }
-            return slot > 0 ? SlotLabel(slot, true) : "";
+            _latestSaveFile = Core.SaveRuntime.Latest(); slot = _latestSaveFile == null ? 0 : 1;
+            if (_latestSaveFile == null) return "";
+            string name = Core.SaveSystem.Info(_latestSaveFile).Name;
+            return name.Length > 26 ? name.Substring(0, 25) + "…" : name;
         }
 
         private static readonly Regex SeedPart = new Regex(@"\s*\(Seed:[^)]*\)", RegexOptions.Compiled);
@@ -973,18 +971,10 @@ namespace WildWasteland.Modules.CleanHUD
         }
 
         private void ContinueLatest()
-        {
-            int slot; LatestSave(out slot);
-            if (slot <= 0) return;
-            BeginLoad("LoadGame_Canvas/LoadGame/load slot " + slot + "/load_game_" + slot);
-        }
+        { int slot; LatestSave(out slot); if (_latestSaveFile != null) Core.SinglePlayerSaving.Load(_latestSaveFile); }
 
         private void OpenSave()
-        {
-            var incar = Fsm("Player", "InCar");
-            if (incar != null && incar.ActiveStateName == "InCar") { Confirm("GET OUT OF THE CAR TO SAVE", null); return; }
-            ShowSlots(false);
-        }
+        { if (Core.SaveSystem.Installed) Core.UI.ToolWindow.OpenSaves(true); else Confirm(Core.SaveSystem.RecoveryError ?? "The save manager is unavailable. Check the log.", null); }
 
         // ---------------------------------------------------------------- seed
         private string CurrentSeed()
@@ -1058,6 +1048,7 @@ namespace WildWasteland.Modules.CleanHUD
         // ---------------------------------------------------------------- load / save slots
         private void ShowSlots(bool load)
         {
+            if (Core.SaveSystem.Installed) { Core.UI.ToolWindow.OpenSaves(!load); return; }
             ResetToMain();
             _screen = load ? "load" : "save";
             _main.gameObject.SetActive(false);

@@ -25,6 +25,9 @@ namespace WildWasteland.Modules.Weather
                 if (source==null || force==null || damage==null || storm.Collided[column]==null) continue;
                 Vector3 origin=center+rotation*columns[column];
                 float ground;
+                RaycastHit terrain;
+                if (Physics.Raycast(origin+Vector3.up*2500,Vector3.down,out terrain,5000,1<<14,QueryTriggerInteraction.Ignore))
+                    visuals.SetGround(regionIndex,column,terrain.point.y-center.y-2);
                 if (!visuals.TryGround(regionIndex,column,out ground)) continue;
                 origin.y+=ground;
                 float width=WeatherVortexSmoke.Width(regionIndex*80+column);

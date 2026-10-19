@@ -31,11 +31,13 @@ namespace WildWasteland.Modules.CleanHUD
         private Transform _nativeGame, _nativeTitle, _nativeSlots;
         private ScreenImage _current;
         private string _currentTip = "";
-        private int _width, _height;
+        private float _screenSince, _driftTime;
         private float _nextFind;
         private bool _completed;
         private bool _saving, _autosaving, _saveFinished;
         private bool _nativeLocated;
+        bool _localSaving;
+        static bool _defaultArtInstalled;
         internal bool Active { get; private set; }
 
         internal LoadingScreen()
@@ -49,21 +51,17 @@ namespace WildWasteland.Modules.CleanHUD
             try
             {
                 Directory.CreateDirectory(_dir);
+                InstallArtwork();
                 string config = Path.Combine(_dir, "screens.json");
                 if (!File.Exists(config))
                     using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("CleanHUD.LoadingScreens.screens.json"))
                     using (var reader = new StreamReader(stream)) File.WriteAllText(config, reader.ReadToEnd());
-                var root = Json.Parse(File.ReadAllText(config)) as Dictionary<string, object>;
-                var entries = Json.Arr(root, "screens");
-                if (entries == null) throw new FormatException("screens.json needs a screens array");
                 var tips = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var entry in entries)
-                {
-                    var item = entry as Dictionary<string, object>;
-                    string image = Json.Text(item, "image", "");
-                    if (ScreenNumber(image) > 0) tips[image] = Json.Text(item, "text", "");
-                }
-                _tips = tips;
+                using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("CleanHUD.LoadingScreens.screens.json"))
+                using (var reader = new StreamReader(stream)) ReadTips(reader.ReadToEnd(), tips);
+                _tips = tips; // Missing entries in an older custom JSON still receive the new default tips.
+                ReadTips(File.ReadAllText(config), tips);
+
             }
             catch (Exception e) { CleanHudModule.Warn("Loading screen text: " + e.Message); }
             try
@@ -94,6 +92,30 @@ namespace WildWasteland.Modules.CleanHUD
                 }
             }
             catch (Exception e) { CleanHudModule.Warn("Loading images: " + e.Message); }
+        }
+
+        static void ReadTips(string text, Dictionary<string, string> tips)
+        {
+            var root = Json.Parse(text) as Dictionary<string, object>;
+            var entries = Json.Arr(root, "screens");
+            if (entries == null) throw new FormatException("screens.json needs a screens array");
+            foreach (var entry in entries)
+            {
+                var item = entry as Dictionary<string, object>; string image = Json.Text(item, "image", "");
+                if (ScreenNumber(image) > 0) tips[image] = Json.Text(item, "text", "");
+            }
+        }
+        void InstallArtwork()
+        {
+            if (_defaultArtInstalled) return;
+            var assembly = Assembly.GetExecutingAssembly(); const string prefix = "CleanHUD.LoadingScreens.";
+            foreach (string resource in assembly.GetManifestResourceNames())
+            {
+                if (!resource.StartsWith(prefix, StringComparison.Ordinal) || !resource.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) continue;
+                string path = Path.Combine(_dir, resource.Substring(prefix.Length));
+                if (!File.Exists(path)) using (var input = assembly.GetManifestResourceStream(resource)) using (var output = File.Create(path)) input.CopyTo(output);
+            }
+            _defaultArtInstalled = true;
         }
 
         private static int ScreenNumber(string path)
@@ -157,6 +179,8 @@ namespace WildWasteland.Modules.CleanHUD
             Reload();
             _saving = saving; _autosaving = autosaving; _saveFinished = false;
             _nextProgress = _shownProgress = 0f;
+            _screenSince = Time.unscaledTime;
+            _driftTime = 0f;
             _current = _screens.Count > 0 ? _screens[_random.Next(_screens.Count)] : null;
             _currentTip = "";
             if (_current != null) _tips.TryGetValue(_current.Name, out _currentTip);
@@ -169,7 +193,6 @@ namespace WildWasteland.Modules.CleanHUD
         {
             _background.texture = _current != null ? _current.Texture : null;
             _background.enabled = _background.texture != null;
-            _width = _height = 0;
             _label.Set((_autosaving ? AutosavingLabels : _saving ? SavingLabels : Labels)[0]);
             foreach (var line in _tipLines) { line.Set(""); line.gameObject.SetActive(false); }
             int index = 0; var current = new StringBuilder(); var font = GlyphFont.Get();
@@ -230,6 +253,8 @@ namespace WildWasteland.Modules.CleanHUD
         private bool NativeLoading() { return Visible(_nativeGame) || Visible(_nativeTitle) || Visible(_nativeSlots); }
         internal void Tick()
         {
+            if (Core.SinglePlayerSaving.Serializing) { _localSaving = true; if (!Active) Begin(true, Core.SaveSystem.AutomaticSaving); }
+            else if (_localSaving) { _localSaving = false; End(); }
             if (!CleanHudModule.Running || !CleanHudModule.MenuEnabled.Value) { End(); return; }
             FindNative();
             bool native = NativeLoading();
@@ -241,14 +266,33 @@ namespace WildWasteland.Modules.CleanHUD
             var labels = _autosaving ? AutosavingLabels : _saving ? SavingLabels : Labels;
             _label.Set(labels[(int)(Time.unscaledTime * 2f) % labels.Length]);
             if (Time.unscaledTime >= _nextProgress) { _nextProgress = Time.unscaledTime + .2f; UpdateProgress(); }
-            if (_background.texture != null && (_width != Screen.width || _height != Screen.height))
-            {
-                _width = Screen.width; _height = Screen.height;
-                float imageAspect = _background.texture.width / (float)_background.texture.height, screenAspect = _width / (float)Mathf.Max(1, _height);
-                if (screenAspect > imageAspect) { float h = imageAspect / screenAspect; _background.uvRect = new UnityEngine.Rect(0, (1 - h) / 2, 1, h); }
-                else { float w = screenAspect / imageAspect; _background.uvRect = new UnityEngine.Rect((1 - w) / 2, 0, w, 1); }
-            }
+            UpdateBackground();
         }
+        private void UpdateBackground()
+        {
+            float now = Time.unscaledTime;
+            if (_screens.Count > 1 && now - _screenSince >= 10f)
+            {
+                int index = _random.Next(_screens.Count - 1);
+                if (index >= _screens.IndexOf(_current)) index++;
+                _current = _screens[index];
+                _currentTip = ""; _tips.TryGetValue(_current.Name, out _currentTip);
+                _screenSince = now;
+                ShowScreen();
+            }
+            if (_background.texture == null) return;
+            float imageAspect = _background.texture.width / (float)_background.texture.height;
+            float screenAspect = Mathf.Max(1, Screen.width) / (float)Mathf.Max(1, Screen.height);
+            // A small overscan keeps the slow pan inside the image; the opaque black backing stays full-screen.
+            float w = .96f * Mathf.Min(1f, screenAspect / imageAspect), h = .96f * Mathf.Min(1f, imageAspect / screenAspect);
+            // Keep motion continuous across slides and limit jumps after a loading hitch.
+            _driftTime += Mathf.Min(Time.unscaledDeltaTime, .05f);
+            float phase = _driftTime - (1f - Mathf.Exp(-_driftTime));
+            float x = (1f - w) * .5f + Mathf.Sin(phase * .12f) * .015f;
+            float y = (1f - h) * .5f + Mathf.Sin(phase * .084f) * .01f;
+            _background.uvRect = new UnityEngine.Rect(x, y, w, h);
+        }
+
         private void UpdateProgress()
         {
             float fraction; string detail;

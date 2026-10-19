@@ -16,6 +16,9 @@ namespace WildWasteland.Core
         /// <summary>NPC AI (NPC module, ex NPCAI.Api + Nav structures). Null when NPC is off.</summary>
         public static INpcApi Npc;
         public static INpcAppearance NpcAppearance;
+        public static ICharacterAssets CharacterAssets;
+        internal static Func<bool> VehicleCombatActive;
+        internal static void ReportCombat() { SaveCombat.Activity(); }
         /// <summary>Guns (Guns module, ex Gunplay.Api). Null when Guns is off.</summary>
         public static IGunsApi Guns;
         /// <summary>Hit feedback (HUD module, ex GunplayHUD.Api). Null when HUD is off.</summary>
@@ -121,6 +124,11 @@ namespace WildWasteland.Core
         bool TryRunning(GameObject car, out bool running);
         bool TryStart(GameObject car);
         bool TryStop(GameObject car);
+    }
+
+    public interface ICharacterAssets
+    {
+        bool TryPaths(string identity, out string model, out string texture);
     }
 
     public interface INpcAppearance

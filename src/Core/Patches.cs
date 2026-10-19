@@ -35,6 +35,16 @@ namespace WildWasteland.Core
         }
 
         /// <summary>Applies one [HarmonyPatch] class (attributes) for a module. Returns the number of patched methods, -1 on failure.</summary>
+        internal static void RemoveForeignOwner(string owner)
+        {
+            var methods = new List<MethodBase>(Harmony.GetAllPatchedMethods());
+            foreach (var method in methods)
+            {
+                var patches = Harmony.GetPatchInfo(method);
+                if (patches != null && patches.Owners.Contains(owner)) For(null).Unpatch(method, HarmonyPatchType.All, owner);
+            }
+        }
+
         public static int ApplyClass(IModule m, Type patchClass)
         {
             var owner = m == null ? "Core" : m.Id;

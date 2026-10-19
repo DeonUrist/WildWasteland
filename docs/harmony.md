@@ -237,3 +237,25 @@ CleanHUD also owns the optional `a.u.A(): void` engine HUD prefix through `Vista
 Before installing the Vistas hooks, `VistasWorldGen.ResolveField` prefixes MonoMod.Utils.ReflectionHelper's private `_ResolveReflection(MemberReference, Module[])`. It handles only FieldReference operands whose scope identifies the loaded Vistas assembly; candidate fields must match their declaring type, name and resolved field type (including constructed generics, with modifier wrappers removed). Other references keep MonoMod's original resolver. This corrects the installed MonoMod version's name-only field matching for Vistas' overloaded obfuscated names, which otherwise rewrites valid field accesses with incorrect types and prevents patch activation. The patch is Core-owned and is absent without Vistas; it performs no scene scans or gameplay callbacks.
 
 All obfuscated members resolve by full signature, including return/field types; no game action dispatcher is duplicated. `A.E.A(A.c,float)` observes place entry; `A.E.A(A.y,bool)` suppresses far discoveries and observes successful nearby discoveries; `A.E.d()` suppresses only source banner rendering while CleanHUD owns it. `a.t.A(float)` suppresses summit scouting. `a.y.e()` and `a.y.B(a.f)` veto dust/haboob eligibility while WW Weather is present; `a.y.A(a.f,float)` converts explicit dust/haboob transitions to windy. `A.q.a(double[],double[],int,bool,string)` snapshots real road centreline segments; `A.S.A(A.q,MapMagicObject,TerrainTile,Terrain,TerrainData,A.S+A,int,float)` observes completed main-terrain grading; `WorldAmpDriver.ClearWorld()` clears road snapshots. Harmony patches are installed through Core.Patches with null/Core ownership. Non-Vistas games install none of these hooks. Version mismatches warn and continue installation, including newer releases; only actual missing APIs or hook failures prevent a ready bridge.
+
+
+## 2026-10-19 SP save/vehicle port additions — Testing
+
+This updates earlier ownership descriptions. Native targets are patched through Core.Patches; no module creates a Harmony instance.
+
+| Target | Kind / owner | Purpose and cheap filter |
+| --- | --- | --- |
+| PlayMaker Actions Wait.OnUpdate | shared Core prefix | VehicleLoadPlacement and PatrolLoadPreparation both subscribe; final SaveLoadGame terrain state only. Replaces Patrols private Wait patch. |
+| PlayMaker Actions MouseLook.DoMouseLook | shared Core prefix | SinglePlayerSaving skips during local serialization; Quests retains its NativeOpen/player-owner filter. Replaces Quests private direct look patch. |
+| ES3File.Sync(ES3Settings) | Core prefix | Protect active loaded sources outside a save transaction; native/WW SP filename filter. |
+| ES3Internal.ES3IO.CommitBackup | Core finalizer | Forward disk exceptions into current save transaction. |
+| ES3PlayMaker.ActionBase.HandleError | Core prefix | Forward native serialization failures; WorldHistory filters its scoped capture. |
+| ES3PlayMaker.PMDataWrapper.ApplyVariables | Core postfix | Preserve selected load identity and observe deserialized seated parent. |
+| ES3PlayMaker.Save.Enter | Core prefix/finalizer | Stable saved hinge rotation key for exact saveItemVar/hinge roots; restore borrowed key and report failure. |
+| ES3PlayMaker.Load.Enter | Core prefix/finalizer | Read stable hinge key when present; restore borrowed key and handle loaded PlayerInCar stance. |
+| MapMagic.Terrains.TerrainTile.Move / Remove / ResetTerrain | Core prefixes | Capture static world history before pooling/reset; valid local world and scoped reentrancy guard. |
+| Den.Tools.ObjectsPool.Pool.ClampCount / MoveItems | Core prefix; MoveItems postfix | Capture before pool shrink/move and restore history after native placement. |
+| Existing Fsm.ProcessEvent / EnterState dispatchers | Core save subscribers added | Native menu save/load/exit routing and damage/attack activity observers; event/state/local-world filters first. |
+| Optional Apocasaver plugin/Runner callbacks | Core prefixes | Stand down exact plugin Awake/ApplyPatches/EnsureRunner/OnSceneLoaded and runner Update/LateUpdate/OnGUI/OnDestroy after replacement installs; remove only Apocasaver save/history foreign owners. Exact HandPose.Set/Get are redirected to compatible local metadata. |
+
+Vehicle restore keeps the native terrain wait frozen until supported standing placement, then reanchors the on-foot camera and resets Look; native game objects receive no saved mod components. See the port handover for namespaces, config migration and pending manual tests.

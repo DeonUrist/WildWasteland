@@ -121,6 +121,7 @@ namespace WildWasteland.Modules.CleanHUD
                 string dest = Path.Combine(dir, name), old = Path.Combine(Path.Combine(Paths.ConfigPath, "CleanHUD"), name);
                 if (!File.Exists(dest) && File.Exists(old)) File.Copy(old, dest);
             }
+            Core.TunedSettings.InstallProfiles("CleanHUD");
             Layout = new LayoutFile(Path.Combine(dir, "layout.json"));
             Layout.Poll(true);
             Assets.Preload();
