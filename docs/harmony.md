@@ -259,3 +259,12 @@ This updates earlier ownership descriptions. Native targets are patched through 
 | Optional Apocasaver plugin/Runner callbacks | Core prefixes | Stand down exact plugin Awake/ApplyPatches/EnsureRunner/OnSceneLoaded and runner Update/LateUpdate/OnGUI/OnDestroy after replacement installs; remove only Apocasaver save/history foreign owners. Exact HandPose.Set/Get are redirected to compatible local metadata. |
 
 Vehicle restore keeps the native terrain wait frozen until supported standing placement, then reanchors the on-foot camera and resets Look; native game objects receive no saved mod components. See the port handover for namespaces, config migration and pending manual tests.
+
+## 1.0.4 — terrain save barrier (Testing)
+
+| Target | Hook | Scope / guard |
+| --- | --- | --- |
+| MapMagic.Core.MapMagicObject.Update | Core prefix, SaveTerrain.MapUpdate | Cheap `_held` gate; normal update outside saving. While settling, advance only existing CoroutineManager work, withholding tile admission/moves. While writing, withhold both. |
+| Den.Tools.Tasks.CoroutineManager.Update | Core prefix, SaveTerrain.ApplyUpdate | Cheap `_held` / `_draining` booleans; hold terrain application after pending work settles, including calls outside MapMagicObject.Update. |
+
+Existing save coroutines drain queued workers/applications before Begin, hold through commit/rollback, and release in finally. Existing WorldHistory movement failure and file-integrity checks remain. LocationMarkers and SaveFiles publication use Core.AtomicFile; no extra patch, config or format changes. Runtime save/streaming timing remains Denis's verification.

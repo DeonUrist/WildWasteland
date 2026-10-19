@@ -58,6 +58,8 @@ namespace WildWasteland.Core
                 ES3Settings.defaultSettings.path = file;
                 Serializing = true; Time.timeScale = 0;
                 blocked = !ApocasetterBridge.InputBlocked && ApocasetterBridge.SetInputBlock(true);
+                var terrain = SaveTerrain.Prepare(); while (terrain.MoveNext()) yield return terrain.Current;
+                if (generation != SaveBus.Generation || !SaveSystem.LocalReady) yield break;
                 SaveSystem.Begin(); SaveSystem.Stamp();
                 // Activate objects exactly as the native save menu does before serializing all roots.
                 var activate = FsmUtil.Find(GameRefs.GameManager, "SaveGameActivateItems"); if (activate != null) activate.SendEvent("Activate");
@@ -76,10 +78,13 @@ namespace WildWasteland.Core
             }
             finally
             {
-                if (!completed && (SaveSystem.Busy || SaveSystem.Requested)) SaveSystem.Abort(new IOException("Offline save did not finish; previous files retained"));
-                Serializing = _requested = false;
-                if (blocked) ApocasetterBridge.SetInputBlock(false);
-                if (SaveBus.Generation == generation) Time.timeScale = scale;
+                try { if (!completed && (SaveSystem.Busy || SaveSystem.Requested)) SaveSystem.Abort(new IOException("Offline save did not finish; previous files retained")); }
+                finally
+                {
+                    SaveTerrain.Release(); Serializing = _requested = false;
+                    if (SaveBus.Generation == generation) Time.timeScale = scale;
+                    if (blocked) ApocasetterBridge.SetInputBlock(false);
+                }
                 if (completed) SaveSystem.Notify(SaveSystem.Status);
             }
         }
