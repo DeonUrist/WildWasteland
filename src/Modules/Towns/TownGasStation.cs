@@ -28,6 +28,7 @@ namespace WildWasteland.Modules.Towns
             internal bool Desert;
             internal Vector3 Camp;
             internal float Scale, Radius, Yaw;
+            internal GameObject Prefab; internal Vector3 Offset;   // a native camp test pad (Camp_10) instead of the station
             internal TownPlan Pad;
             internal string Failure;
         }
@@ -36,7 +37,7 @@ namespace WildWasteland.Modules.Towns
             internal string Key; internal bool Desert;
             internal GameObject Root; internal TerrainTile Tile; internal Request Request;
             internal readonly List<PlayMakerFSM> Spawners = new List<PlayMakerFSM>();
-            internal int MapId, CompassId;
+            internal int MapId, CompassId; internal string Label;
             internal Vector3 Position() { return Root == null ? Vector3.zero : Root.transform.position; }
         }
         private const string MarkerOwner = "WildWasteland.Towns.GasStation";
@@ -71,7 +72,7 @@ namespace WildWasteland.Modules.Towns
         internal bool Available { get { if (_model == null && !_failed) { try { LoadModel(); } catch (Exception e) { Fail("model setup", e); } } return _model != null && _materials != null; } }
 
         // ------------------------------------------------------------------ requests (main thread, before the tile is generated)
-        internal List<Request> Capture(TerrainTile tile, TileData data, string key, bool startingChunk)
+        internal List<Request> Capture(TerrainTile tile, TileData data, string key, bool startingChunk, TownAssets assets)
         {
             if (data.isDraft || _failed) return null;
             List<Request> list = null;
@@ -80,6 +81,18 @@ namespace WildWasteland.Modules.Towns
                 int chance = _settings.DesertGasStationChance.Value;
                 if (chance > 0 && !Services.PoiNavSetup && !startingChunk && TownPlanner.Hash(key + "/gasstation") % 100 < chance && Available)
                     (list = new List<Request>()).Add(new Request { Key = key, Desert = true, Scale = 1f, Radius = Radius(1f) });
+                if (_settings.TestCamp10.Value && assets != null)
+                {
+                    Vector3 camp10;
+                    GameObject prefab = null; foreach (var p in assets.NativePoiPrefabs) if (p != null && p.name == "Camp_10") { prefab = p; break; }
+                    Bounds box;
+                    if (prefab != null && CampInArea(tile, data, out camp10) && TownAssets.ColliderBox(prefab.transform, out box))
+                    {
+                        float r = 0; for (int c = 0; c < 4; c++) r = Mathf.Max(r, new Vector2((c & 1) == 0 ? box.min.x : box.max.x, (c & 2) == 0 ? box.min.z : box.max.z).magnitude);
+                        if (list == null) list = new List<Request>();
+                        list.Add(new Request { Key = "camp10", Camp = camp10, Scale = 1f, Radius = r + 3, Prefab = prefab, Offset = Vector3.zero });
+                    }
+                }
                 if (_settings.TestGasStation.Value)
                 {
                     if (_camp == null)
@@ -100,6 +113,18 @@ namespace WildWasteland.Modules.Towns
             }
             catch (Exception e) { Fail("model setup", e); }
             return list;
+        }
+        private bool CampInArea(TerrainTile tile, TileData data, out Vector3 camp)
+        {
+            camp = Vector3.zero;
+            if (_camp == null)
+                foreach (var fsm in PlayMakerFSM.FsmList)
+                    if (fsm != null && fsm.FsmName == "StarterAreaDistance" && fsm.gameObject.scene.IsValid())
+                    { _camp = fsm.transform; break; }
+            if (_camp == null) return false;
+            camp = tile.mapMagic.transform.InverseTransformPoint(_camp.position);
+            var area = data.area.active;
+            return camp.x >= area.worldPos.x && camp.z >= area.worldPos.z && camp.x < area.worldPos.x + area.worldSize.x && camp.z < area.worldPos.z + area.worldSize.z;
         }
         private float Radius(float scale)
         {
@@ -214,6 +239,7 @@ namespace WildWasteland.Modules.Towns
                     else Log.Info("[Towns] desert gas station " + request.Key + " skipped: " + request.Failure);
                     continue;
                 }
+                if (request.Pad != null && request.Prefab != null) { if (_settings.TestCamp10.Value) PlaceCamp(request, tile); continue; }
                 if (request.Pad == null || !Available) continue;
                 if (!request.Desert && (!_settings.TestGasStation.Value || Mathf.Abs(request.Scale - _settings.GasStationScale.Value) > .0001f)) continue;
                 Remove(request.Key, true);
@@ -239,6 +265,28 @@ namespace WildWasteland.Modules.Towns
                 }
                 catch (Exception e) { Log.Warn("[Towns] gas station " + request.Key + " placement: " + e.Message); Remove(request.Key, false); }
             }
+        }
+        // the Camp_10 test pad: the native camp, stripped of its scripts (no spawners, merchant or other logic), on the level pad
+        private void PlaceCamp(Request request, TerrainTile tile)
+        {
+            Remove(request.Key, false);
+            var holder = new GameObject("Towns camp test staging"); holder.SetActive(false);
+            try
+            {
+                var go = Object.Instantiate(request.Prefab, holder.transform, false);   // under an inactive parent: no Awake before stripping
+                go.name = request.Prefab.name + " (WW camp test)";
+                foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true)) if (mb != null) Object.DestroyImmediate(mb);
+                // rigidbodies and colliders stay exactly as authored: the bake must match the town template (same collider set)
+                go.transform.SetParent(tile.objectsPool.transform, false);
+                go.transform.position = tile.mapMagic.transform.TransformPoint(request.Pad.WorldCenter);
+                go.transform.rotation = tile.mapMagic.transform.rotation;
+                go.SetActive(true);
+                Physics.SyncTransforms(); TownBakeBridge.Discover(go);
+                _stations.Add(new Station { Key = request.Key, Root = go, Tile = tile, Request = request, Label = "Camp_10 test" });
+                Log.Always("[Towns] Camp_10 test placed on a level pad at " + request.Pad.WorldCenter + " (geometry only): stand near it until its navigation is baked.");
+            }
+            catch (Exception e) { Log.Warn("[Towns] Camp_10 test placement: " + e.Message); }
+            finally { Object.Destroy(holder); }
         }
         /// <summary>The bare station (render shell + collider), inactive, under `parent`. Used for desert stations and town parking lots.</summary>
         internal GameObject Shell(Transform parent, string name)
@@ -355,7 +403,7 @@ namespace WildWasteland.Modules.Towns
             {
                 if (s.Root == null) continue;
                 Station captured = s;
-                if (_map != null && _map.Markers != MapDetail.Off && !_map.Exists(s.MapId)) s.MapId = _map.Add(MarkerOwner, captured.Position, "building", Color.white, s.Desert ? "Gas station" : "Gas station test");
+                if (_map != null && _map.Markers != MapDetail.Off && !_map.Exists(s.MapId)) s.MapId = _map.Add(MarkerOwner, captured.Position, "building", Color.white, s.Label ?? (s.Desert ? "Gas station" : "Gas station test"));
                 bool near = player != null && (player.transform.position - s.Position()).sqrMagnitude < 400f * 400f;
                 if (_compass != null && near && !_compass.Exists(s.CompassId)) s.CompassId = _compass.Add(MarkerOwner, captured.Position, "building", Color.white);
                 else if (_compass != null && !near && _compass.Exists(s.CompassId)) { _compass.Remove(s.CompassId); s.CompassId = 0; }
@@ -554,7 +602,7 @@ namespace WildWasteland.Modules.Towns
         internal void Draw(ToolLayout l)
         {
             l.Entry(_settings.DesertGasStationChance); l.Entry(_settings.GasStationParking);
-            l.Entry(_settings.TestGasStation); l.Entry(_settings.GasStationScale);
+            l.Entry(_settings.TestGasStation); l.Entry(_settings.GasStationScale); l.Entry(_settings.TestCamp10);
             l.Text("Desert stations: per generated 5 km block, beside a road, with native loot and Scrapyard or animal spawners. Town parking lots use the shell. The test pad (reload after changing) is near the starting camp with three melee raiders.");
             l.Value("Gas stations loaded", _stations.Count.ToString());
             l.Value("Gas station test", _status);

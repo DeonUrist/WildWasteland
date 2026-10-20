@@ -15,7 +15,7 @@ namespace WildWasteland.Modules.Towns
         internal ConfigEntry<bool> PoiNearSpawn;
         internal ConfigEntry<bool> Walls;
         internal ConfigEntry<float> LoadingBudgetMs;
-        internal ConfigEntry<bool> TestGasStation, GasStationParking;
+        internal ConfigEntry<bool> TestGasStation, GasStationParking, TestCamp10;
         internal ConfigEntry<int> DesertGasStationChance;
         internal ConfigEntry<float> GasStationScale;
         internal ConfigEntry<UnityEngine.InputSystem.Key> PoiDresserKey;
@@ -25,6 +25,7 @@ namespace WildWasteland.Modules.Towns
         {
             File = file;
             PoiDresserKey = file.Bind("Towns / Editors", "POI dresser", UnityEngine.InputSystem.Key.None, "Open the static prop dresser for the nearest custom POI within 200 metres. Requires Enable Debug and Developer mode. Layouts are saved with Towns assets and reused by every instance of that POI type.");
+            TestCamp10 = file.Bind("Towns / Debug", "Test Camp_10 spawn", false, "Place the merchant camp (Camp_10, stripped of its spawners and logic) on a level pad near the starting camp, so its NPC navigation can be baked on flat ground (towns need that bake to use it as their merchant lot). Test only, unsaved. Reload the world after enabling or disabling.");
             TestGasStation = file.Bind("Towns / Debug", "Test gas station", false, "Place the supplied gas station as the closest available POI outside the starting camp, on a clear level pad, with three melee Scrapyard raiders after its ground-floor navigation is baked. Test only; excluded from normal town lots and saves. Reload the world after enabling or disabling.");
             GasStationScale = file.Bind("Towns / Debug", "Gas station scale", 1f, new ConfigDescription("Uniform extra scale for the render model and separate gasstation_collider.glb. Use 1 with the supplied models (their authored 1.5 scale gives a 32.19 x 34.28 metre footprint). Reload after changing: the terrain pad and navigation cache must match the scale.", new AcceptableValueRange<float>(.1f, 5f)));
             DesertGasStationChance = file.Bind("Towns / World", "Desert gas station chance (%)", 8, new ConfigDescription("Chance per generated 5 km block of a roadside gas station POI (native loot inside, Scrapyard or animal spawners). Changes affect new/undecided blocks only after a world reload.", new AcceptableValueRange<int>(0, 100)));

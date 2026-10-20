@@ -169,7 +169,7 @@ namespace WildWasteland.Modules.Towns
                     foreach (var lot in input.Saved.Lots) if (!lot.IsParking && !lot.Skipped && !registration.Assets.Buildings.ContainsKey(lot.Prefab))
                         throw new InvalidOperationException("Saved town requires unavailable prefab " + lot.Prefab + "; restore its catalog before loading.");
                 bool startingChunk = tile.coord.x == 0 && tile.coord.z == 0 && !_settings.PoiNearSpawn.Value;
-                _captures[data] = new Capture { Registration = registration, Input = input, Epoch = _epoch, GasStation = _gasStation.Capture(tile, data, key, startingChunk) };
+                _captures[data] = new Capture { Registration = registration, Input = input, Epoch = _epoch, GasStation = _gasStation.Capture(tile, data, key, startingChunk, registration.Assets) };
             }
             catch (Exception e) { Log.Warn("[Towns] skipped terrain preparation: " + e.Message); }
         }
