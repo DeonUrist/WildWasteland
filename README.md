@@ -1,24 +1,24 @@
 # Wild Wasteland
 
-**Wild Wasteland 1.0.4** is a single-player gameplay overhaul for **Apocalypter**, built for BepInEx 5. It brings a visible player body, more capable enemies, travelling vehicle crews, expanded combat, quests, survival features and a unified interface into one configurable mod.
+**Wild Wasteland 1.0.5** is a single-player gameplay overhaul for **Apocalypter**, built for BepInEx 5. It brings a visible player body, more capable enemies, travelling vehicle crews, expanded combat, quests, survival features and a unified interface into one configurable mod.
 
 Saving now waits for pending terrain work and holds streaming through publication. Location-discovery updates use same-directory file replacement on Windows; real write errors still retain the save safety checks.
 
 Choose which modules to use and adjust them through the in-game settings. Wild Wasteland shares their loading, saving and update work so the included systems can interact without running duplicate standalone plugins.
 
-The current unreleased development build also merges **Towns**: toggle it under F3 > Modules, set its chance in WORLD > POI, and tune building/population/loot bounds under Debug > Developer > Towns. Remove the separate WildWastelandTowns DLL before using this build. Existing names/settings/layouts import; parking reservations move outside the buildings. Ownership needs five actual faction spawns. Merchants visit real towns; settled convoys leave a guarded truck and release their travelling slot. [Testing notes and acceptance steps](notes/towns-merge-2026-10-20.md).
+**Towns** adds settlements with faction populations, merchants and gas stations beside separate parking lots. Toggle it under F3 > Modules, set its chance in WORLD > POI, and tune building/population/loot bounds under Debug > Developer > Towns. Remove the separate WildWastelandTowns DLL. Existing names/settings/layouts import; ownership needs five actual faction spawns. Merchants visit real towns; settled convoys leave a guarded truck. Laboratory entrance doors are inactive on town copies; original POI entrances work normally. [Testing notes and acceptance steps](notes/towns-merge-2026-10-20.md).
 
-[Download 1.0.4](https://github.com/DeonUrist/WildWasteland/releases/tag/v1.0.4) · [Feature wiki](https://github.com/DeonUrist/WildWasteland/wiki) · [Report a problem](https://github.com/DeonUrist/WildWasteland/issues)
+[Download 1.0.5](https://github.com/DeonUrist/WildWasteland/releases/tag/v1.0.5) · [Feature wiki](https://github.com/DeonUrist/WildWasteland/wiki) · [Report a problem](https://github.com/DeonUrist/WildWasteland/issues)
 
 ## Player body and movement
 
 See your character in first and third person, with visible equipment, matching inventory portraits and a choice of eight appearances: Male, Merchant, Bodyguard, Sprokka, Organic Mechanic, Female, Gungirl and Shoota. First-person body and arm options, camera distance and weapon poses can be adjusted separately.
 
-Climb obstacles and use Low Crawl to move forward or backward close to the ground, with weapons holstered and standing clearance checked before getting up. Vehicle poses include steering-wheel hands, motorcycle handlebar grips and passenger poses. Looking around turns the head and upper body; wider seated turns let the character face the action. Fists, melee weapons, blast lances and grenades use upper-body attacks while seated, including visible held weapons and throw animations.
+Climb obstacles, climb ladders with weapons stowed, slide down, or jump to let go. Use Low Crawl to move forward or backward close to the ground, with standing clearance checked before getting up. Vehicle poses include steering-wheel hands, motorcycle handlebar grips and passenger poses. Looking around turns the head and upper body; wider seated turns let the character face the action. Fists, melee weapons, blast lances and grenades use upper-body attacks while seated, including visible held weapons and throw animations.
 
 ## Enemies and encounters
 
-NPCs react to sight and sound, investigate the last known position, search, take cover and manage their firing bursts. Their awareness is based on what they can perceive rather than continuous knowledge of the player's position. Camp navigation, idle activities and creature behaviors give settlements and the surrounding wasteland more activity.
+NPCs react to sight and sound, investigate the last known position, search, take cover and manage their firing bursts. Moving players can be heard within five metres with a clear line, regardless of facing. Baked POI navigation lets human NPCs climb, use ladders and reach upper floors. Their awareness is based on what they can perceive rather than continuous knowledge of the player's position. Camp navigation, idle activities and creature behaviors give settlements and the surrounding wasteland more activity.
 
 Female raiders and crew are included, with configurable population settings. Dogs, ambushing and burrowing creatures, pouncing enemies and spider nests add variety to encounters. Camp merchants and mechanics retain their shop locations.
 
@@ -101,7 +101,7 @@ Performance optimizations are optional and experimental. Its presets and measure
 
 ## Compatibility and support
 
-Wild Wasteland 1.0.2 is the **single-player** project. Multiplayer-specific features belong to the separate WWMP build. Mod-created vehicles and components require their supporting modules when loading; removing the mod cannot make the base game restore objects it does not know.
+Wild Wasteland 1.0.5 is the **single-player** project. Multiplayer-specific features belong to the separate WWMP build. Mod-created vehicles and components require their supporting modules when loading; removing the mod cannot make the base game restore objects it does not know.
 
 Some features remain marked **Testing** in the [wiki](https://github.com/DeonUrist/WildWasteland/wiki). The release compiles successfully; that does not establish complete gameplay, save-recovery or performance verification across every setup.
 

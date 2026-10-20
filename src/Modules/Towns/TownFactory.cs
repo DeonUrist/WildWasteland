@@ -53,7 +53,15 @@ namespace WildWasteland.Modules.Towns
             foreach (string path in asset.Strip) { var wall = go.transform.Find(path); if (wall != null) wall.gameObject.SetActive(false); }   // (WW) a camp without its perimeter
             TownMarkers.Building(go.transform);
             // Boss trap FSMs must never close doors or alter global boss progression in towns.
-            foreach (var fsm in go.GetComponentsInChildren<PlayMakerFSM>(true)) if (fsm.FsmName == "BossDoor") fsm.enabled = false;
+            foreach (var fsm in go.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                if (fsm.FsmName == "BossDoor") fsm.enabled = false;
+                // Town copies keep the laboratory door as solid scenery. Retain the exit for saves already inside.
+                if (fsm.FsmName != "BasementDoor" || fsm.transform.parent == null || fsm.transform.parent.name != "to_basement") continue;
+                fsm.enabled = false;
+                var label = FsmUtil.Find(fsm.gameObject, "ItemName"); if (label != null) label.enabled = false;
+                Log.Always("[Towns] laboratory entrance disabled on town copy " + lot.Prefab);
+            }
             foreach (string path in asset.Markers)
             { var icon = go.transform.Find(path); var renderer = icon == null ? null : icon.GetComponent<Renderer>(); if (renderer != null) renderer.forceRenderingOff = true; }
             go.name = lot.Prefab + " (Towns " + TownPlanner.Hash(site.Plan.Key) + "/" + index + ")";
