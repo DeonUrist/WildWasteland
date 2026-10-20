@@ -27,5 +27,6 @@ namespace WildWasteland.Modules.NPC
         public int TravelState(GameObject npc) { return Idle.TravelState(npc); }
         public bool IsIdle(GameObject npc) { return Senses.IsIdle(npc); }
         public void Remember(GameObject npc, GameObject target, float seconds) { Senses.Remember(npc, target, seconds); }
+        public bool CrewOrder(GameObject npc, GameObject enemy, bool boarding) { return Senses.CrewOrder(npc, enemy, boarding); }
     }
 }

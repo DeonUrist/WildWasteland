@@ -11,9 +11,11 @@ namespace WildWasteland.Modules.Patrols
         {
             yield return null;yield return null;
             var health=Patrol.GetHealth(gameObject);if(health<=0f)yield break;
-            Maximum=Saved!=null&&Saved.maxHealth>0f?Saved.maxHealth:health*4f;
-            var value=Saved!=null?Saved.health:Maximum;
+            var prefab=Prefabs.FindAny(TemplateExporter.PrefabName(gameObject.name.Replace("(Rider)","")));
+            Maximum=prefab!=null?Patrol.GetHealth(prefab):health;if(Maximum<=0f)Maximum=health;
+            var value=Saved!=null?Mathf.Clamp(Saved.maxHealth>Maximum?Saved.health*Maximum/Saved.maxHealth:Saved.health,0f,Maximum):Mathf.Min(health,Maximum);
             Patrol.SetHealth(gameObject,value);
+            var late=GetComponent<Patrol.LateHealth>();if(late!=null)late.Value=value;
             GetComponent<RiderGuard>()?.MaxHealth(Maximum);
         }
     }

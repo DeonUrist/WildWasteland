@@ -48,6 +48,9 @@ namespace WildWasteland.Core
 
         /// <summary>Patrols raised: an occupant left a raider car (ex Apocapatrol.Patrol.BailOut). (car, previous passenger object, new on-foot NPC)</summary>
         public static event Action<GameObject, GameObject, GameObject> CrewBailedOut;
+        public static event Action<GameObject, GameObject> NpcHurt;
+        internal static void RaiseNpcHurt(GameObject victim, GameObject attacker)
+        { var h=NpcHurt;if(h==null)return;try{h(victim,attacker);}catch(Exception e){Log.Error("NpcHurt handler",e);} }
         /// <summary>Patrols raised: a raider car exploded (ex Apocapatrol.Explode.Blast).</summary>
         public static event Action<GameObject> VehicleExploded;
 
@@ -64,7 +67,7 @@ namespace WildWasteland.Core
 
         internal static void ClearEvents()
         {
-            CrewBailedOut = null; VehicleExploded = null;
+            CrewBailedOut = null; VehicleExploded = null; NpcHurt = null;
         }
     }
 
@@ -288,6 +291,8 @@ namespace WildWasteland.Core
         /// <summary>Awareness memory: the NPC knows where <paramref name="target"/> is for <paramref name="seconds"/> (it fought it),
         /// so losing sight does not make it forget. Refreshed by the NPC module itself while they keep fighting.</summary>
         void Remember(GameObject npc, GameObject target, float seconds);
+        /// <summary>Assigns a crew's known attacker, or suspends combat while it walks back to board. Null/false releases the order.</summary>
+        bool CrewOrder(GameObject npc, GameObject enemy, bool boarding);
     }
 
     // ------------------------------------------------------------------ Guns

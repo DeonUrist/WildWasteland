@@ -173,7 +173,7 @@ namespace WildWasteland.Modules.Patrols
             FootPatrols = cfg.Player(null, "Foot patrols", true,
                 "World traffic: groups of 2-5 raiders walk between camps over open land (simulated while you are far away). Crew left without a usable car also walk to a nearby camp. Off = no new foot patrols");
             ReturnToCar = cfg.Player(null, "Return to car", true,
-                "Debug: dismounted crew whose fight is over walk back to their car and take their seats again (a passenger or gunner takes the wheel if the driver is dead); the car leaves once every living member is aboard");
+                "Patrol, convoy and merchant crews reboard when their attacker dies or moves beyond 50 m from the car, then resume pursuit or their route. A surviving passenger or gunner can drive; fully stuck cars are abandoned");
             TacticalDriving = cfg.Player(null, "Tactical driving", true, "World traffic: varied attack runs and vehicle-checked camp approaches");
             Migrate(cfg, TacticalDriving, "World traffic prototype", "TacticalDriving");
             WarRig.S.SpawnEnabled = cfg.Player(null, "War Rig spawns", true,

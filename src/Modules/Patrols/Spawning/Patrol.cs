@@ -993,7 +993,7 @@ namespace WildWasteland.Modules.Patrols
         }
 
         // Any occupant gets out on the given side (+1 right, -1 left, 0 = the side its seat is on relative to sitPos).
-        internal static GameObject BailOut(GameObject car, GameObject pax, string prefabName, float side)
+        internal static GameObject BailOut(GameObject car, GameObject pax, string prefabName, float side,bool record=true)
         {
             float health = GetHealth(pax);
             var prefab = Prefabs.FindAny(prefabName);
@@ -1009,7 +1009,9 @@ namespace WildWasteland.Modules.Patrols
             // the Rustliner bus (2.3.8): everybody leaves through the door in the back (hinge_door_parent/hinge_door_L, the rear door), the
             // truck's exit distance behind it - a sideways exit lands them inside the bus
             var rearDoor = TemplateExporter.PrefabName(car.name).Equals("Rustliner", StringComparison.OrdinalIgnoreCase) ? FindChild(car.transform, "hinge_door_parent") : null;
-            if (rearDoor != null)
+            var frontDoor=CrewReturn.FrontDoor(car);
+            if(frontDoor!=null){var crew=car.GetComponent<Crew>();from=CrewReturn.DoorOutside(car,frontDoor)+Vector3.up*1.5f+(crew!=null?crew.FrontExitOffset():Vector3.zero);facing=car.transform.right;}
+            else if (rearDoor != null)
             {
                 from = rearDoor.position - car.transform.forward * VehicleRules.ExitDistance(car.name) + Vector3.up * 1.5f;
                 facing = Vector3.ProjectOnPlane(-car.transform.forward, Vector3.up);
@@ -1050,7 +1052,7 @@ namespace WildWasteland.Modules.Patrols
             PatrolsModule.Verbose("Bail-out: " + mob.name + " got out of " + car.name + " with " + (health > 0f ? health.ToString("0") : "full") + " health at " + pos);
             Core.Services.RaiseCrewBailedOut(car, pax, mob);   // WW: the NPC module subscribes (ex its Harmony postfix on Apocapatrol.Patrol.BailOut)
             // awareness handover + return-to-car membership (pax is destroyed at the end of the frame; its name still tells the seat)
-            CrewReturn.Dismounted(car, mob, pax.name.IndexOf("(Driver)", StringComparison.Ordinal) >= 0 ? CrewReturn.RoleDriver : CrewReturn.RolePassenger, -1,
+            if(record)CrewReturn.Dismounted(car, mob, pax.name.IndexOf("(Driver)", StringComparison.Ordinal) >= 0 ? CrewReturn.RoleDriver : CrewReturn.RolePassenger, -1,
                 CrewAppearance.Identity(mob, prefabName), null, null, false);
             return mob;
         }

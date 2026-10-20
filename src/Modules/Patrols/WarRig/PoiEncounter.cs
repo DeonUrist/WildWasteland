@@ -25,7 +25,7 @@ namespace WildWasteland.Modules.Patrols.WarRig
         {
             if (!PatrolsModule.Running || !CleanupChecks.Contains(__instance)) return true;
             var target = __instance.target != null ? __instance.target.Value : null;
-            if (Protected(target))
+            if (Protected(target) || WorldTraffic.RetainsTown(target))
             { __instance.Fsm.Event("FINISHED"); __instance.Finish(); return false; }
             var player = Core.GameRefs.Player;
             if (target != null && player != null && (target.transform.position - player.transform.position).sqrMagnitude > 5000f * 5000f)

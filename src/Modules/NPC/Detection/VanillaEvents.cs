@@ -174,7 +174,8 @@ namespace WildWasteland.Modules.NPC
                 if (fsm == null || fsm.GameObject == null) return;
                 bool player = fsm.Name == "Attack" && PlayerWeapon(fsm.GameObject);
                 bool ranged = fsm.Name == "Damage Ranged";
-                if (!player && !ranged) return;
+                bool melee = fsm.Name == "Damage";
+                if (!player && !ranged && !melee) return;
                 // Melee stays vanilla with Gunplay installed, and still needs this observer.
                 bool gun = ranged;
                 if (player)
@@ -182,7 +183,8 @@ namespace WildWasteland.Modules.NPC
                 if (gun && WeaponRanges.ProjectilesEnabled) return;
                 var target = fsm.GetOwnerDefaultTarget(__instance.gameObject);
                 if (target == null) return;
-                Senses.Hurt(target, player ? Core.GameRefs.Player : fsm.GameObject.transform.root.gameObject);
+                if(melee&&!player){Core.Services.RaiseNpcHurt(target,fsm.GameObject);return;}
+                Senses.Hurt(target, player ? Core.GameRefs.Player : fsm.GameObject);
             }
             catch (Exception e) { NpcModule.Warn("Vanilla hurt observation: " + e.Message); }
         }

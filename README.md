@@ -6,6 +6,8 @@ Saving now waits for pending terrain work and holds streaming through publicatio
 
 Choose which modules to use and adjust them through the in-game settings. Wild Wasteland shares their loading, saving and update work so the included systems can interact without running duplicate standalone plugins.
 
+The current unreleased development build also merges **Towns**: toggle it under F3 > Modules, set its chance in WORLD > POI, and tune building/population/loot bounds under Debug > Developer > Towns. Remove the separate WildWastelandTowns DLL before using this build. Existing names/settings/layouts import; parking reservations move outside the buildings. Ownership needs five actual faction spawns. Merchants visit real towns; settled convoys leave a guarded truck and release their travelling slot. [Testing notes and acceptance steps](notes/towns-merge-2026-10-20.md).
+
 [Download 1.0.4](https://github.com/DeonUrist/WildWasteland/releases/tag/v1.0.4) · [Feature wiki](https://github.com/DeonUrist/WildWasteland/wiki) · [Report a problem](https://github.com/DeonUrist/WildWasteland/issues)
 
 ## Player body and movement

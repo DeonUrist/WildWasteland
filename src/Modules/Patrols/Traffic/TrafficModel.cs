@@ -53,6 +53,10 @@ namespace WildWasteland.Modules.Patrols
         public string id, name, source, destination;
         public bool convoy, arrived, roaming,merchant,freeRoute;
         public bool reinforcement;
+        public bool townBound, townResident, townParked;
+        public bool townSeedBus;
+        public float townVisitSeconds;
+        public string[] townGuards = new string[0];
         public float waitSeconds;
         internal bool TerrainRoute;
         public Vector3 position;
@@ -70,6 +74,7 @@ namespace WildWasteland.Modules.Patrols
             get
             {
                 var d = route.Length > 1 ? route[Mathf.Clamp(leg, 1, route.Length - 1)] - position : Vector3.forward;
+                if (townBound && d.sqrMagnitude < .01f && route.Length > 1) d = route[route.Length - 1] - route[route.Length - 2];
                 d.y = 0f;
                 return d.sqrMagnitude > 0.01f ? d.normalized : Vector3.forward;
             }

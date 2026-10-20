@@ -259,6 +259,9 @@ namespace WildWasteland.Core
             var copies = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (string path in SaveFiles.Participants(source)) if (File.Exists(path))
             {
+                // The verified embedded record is authoritative; do not create Towns sidecars for new snapshots.
+                if (path.StartsWith(Path.Combine(Assets.ConfigDir, "Towns", "Saves") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                    && ES3.KeyExists("WildWasteland.Towns.World.v1", SaveFiles.Disk(source))) continue;
                 // Native .bak and checkpoint files are recovery history, not the new snapshot's authority.
                 if (path.EndsWith(".wwsave", StringComparison.Ordinal) || path.EndsWith(".wwsave.png", StringComparison.Ordinal) || Path.GetFileName(path).IndexOf(".bak", StringComparison.OrdinalIgnoreCase) >= 0 || path.EndsWith(".player-checkpoint.txt", StringComparison.Ordinal)) continue;
                 copies[SaveFiles.Remap(path, source, target)] = path;

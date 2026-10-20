@@ -61,9 +61,11 @@ namespace WildWasteland.Modules.Patrols
             job.Elevation=nearby.Any(t=>t.Elevation!=null&&(foot||t.FinalGround));
             var lines=PatrolsModule.TrafficRoadRouting.Value?nearby.SelectMany(t=>t.Lines).ToList():new List<Vector3[]>();
             if(PatrolsModule.TrafficRoadRouting.Value&&Core.VistasWorldGen.Present)lines.AddRange(Core.VistasWorldGen.RoadLines);
+            var blocks = new List<Bounds>(_blocks);
+            if (Modules.Towns.TownsApi.Provider != null) Modules.Towns.TownsApi.Provider.TravelBlocks(blocks);
             Queue.Enqueue(new Request{Job=job,A=a,B=b,Hints=hints,
                 Elevation=nearby.Where(t=>t.Elevation!=null&&(foot||t.FinalGround)).Select(t=>t.Elevation).ToArray(),
-                Blocks=_blocks,Influence=PatrolsModule.TrafficRoadConnector.Value,Seed=seed,Lines=lines.ToArray(),Convoy=convoy,Foot=foot,
+                Blocks=blocks.Where(box => bounds.Overlaps(new Rect(box.min.x, box.min.z, box.size.x, box.size.z))).ToArray(),Influence=PatrolsModule.TrafficRoadConnector.Value,Seed=seed,Lines=lines.ToArray(),Convoy=convoy,Foot=foot,
                 Sources=Alternatives(sources,source),Destinations=Alternatives(destinations,destination),Existing=existing});
             Start();return job;
         }

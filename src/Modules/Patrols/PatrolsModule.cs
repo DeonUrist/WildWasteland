@@ -58,6 +58,7 @@ namespace WildWasteland.Modules.Patrols
             Services.FollowerVehicles = new QuestFollowers();
             Services.Camps = new TrafficCamps.Status();
             Services.VehicleCombatActive = VehicleCombatActive;
+            Services.NpcHurt-=Crew.Attacked;Services.NpcHurt+=Crew.Attacked;
             SaveBus.CleanupSettings -= DrawSaveCleanupSettings; SaveBus.CleanupSettings += DrawSaveCleanupSettings;
             SaveBus.SaveCancelled -= PatrolPersistence.CancelPendingSave; SaveBus.SaveCancelled += PatrolPersistence.CancelPendingSave;
             LoadingProgress.Register(this, VehicleBuildCache.LoadWork);
@@ -135,6 +136,8 @@ namespace WildWasteland.Modules.Patrols
         public override void Shutdown()
         {
             Services.VehicleCombatActive = null;
+            Services.NpcHurt-=Crew.Attacked;
+            CrewReturn.Reset();
             SaveBus.CleanupSettings -= DrawSaveCleanupSettings;
             SaveBus.SaveCancelled -= PatrolPersistence.CancelPendingSave;
             Running = false;
@@ -172,7 +175,7 @@ namespace WildWasteland.Modules.Patrols
 
         // Core.Origin (NWH FloatingOrigin.Jump): legacy physics caches of the pilots and PlayerRef move with the world
         public override void OnOriginShift(Vector3 delta) { TrafficSpace.OriginShift(delta); }
-        public override void OnWorldReady() { Prefabs.Refresh(); WarRig.PoiEncounter.Prepare(); }
+        public override void OnWorldReady() { Prefabs.Refresh(); WarRig.PoiEncounter.Prepare(); WorldTraffic.RestoreTownGuards(); }
         internal void SpawnPoi(CarTemplate template, Vector3 position, Quaternion rotation, Action<GameObject> onDone)
         { if (_patrol != null && Running) _patrol.SpawnAt(template, position, rotation, true, onDone); else onDone(null); }
 

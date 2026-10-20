@@ -53,8 +53,9 @@ namespace WildWasteland.Modules.Patrols
             if(_marker==null)_marker=GetComponent<PatrolMarker>();if(_crew==null)_crew=GetComponent<Crew>();
             var marker=_marker;if(marker?.PlayerEntered==true)return;
             var journey=WorldTraffic.Find(marker?.TrafficId);var crew=_crew;
-            bool waiting=Data?.travelling!=true||(journey?.merchant==true&&(journey.arrived||journey.waitSeconds>0f));
-            if(Data?.travelling!=true&&crew!=null)crew.Hold=true;
+            bool pursuing=crew!=null&&crew.CombatPursuit;
+            bool waiting=!pursuing&&(Data?.travelling!=true||(journey?.merchant==true&&(journey.arrived||journey.waitSeconds>0f)));
+            if(Data?.travelling!=true&&crew!=null)crew.Hold=!pursuing;
             if(crew!=null)crew.WaitForMerchant(waiting);if(!waiting)return;
             Nwh.StopEngine(gameObject);
             if(_start==null)_start=Patrol.FindFsm(gameObject,"START","Start");

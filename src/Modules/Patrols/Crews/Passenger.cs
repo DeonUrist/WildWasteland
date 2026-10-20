@@ -42,6 +42,16 @@ namespace WildWasteland.Modules.Patrols
         { _questFollower = true; _questTarget = target; _questBlockedUntil = blockedUntil; }
         internal void QuestRanged() { _rangedPrefab = _ranged = true; _questFollower = true; _nextFireCheck = 0; }
         internal bool QuestCanFire { get { return _canFire && Time.time >= _questBlockedUntil; } }
+        private static readonly RaycastHit[] AnswerHits=new RaycastHit[16];
+        internal bool CanAnswer(GameObject enemy)
+        {
+            if(!_ranged||!CombatAllowed||!_canFire||enemy==null||enemy!=_fireTarget)return false;
+            var from=_passenger.transform.position+_car.transform.up*1.3f;var to=AimPoint(enemy)-from;
+            int count=Physics.RaycastNonAlloc(from,to.normalized,AnswerHits,to.magnitude,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore);
+            if(count==AnswerHits.Length)return false;
+            for(int i=0;i<count;i++){var c=AnswerHits[i].collider;if(c!=null&&!c.transform.IsChildOf(_passenger.transform)&&!c.transform.IsChildOf(enemy.transform))return false;}
+            return true;
+        }
 
         internal static bool IsRangedHuman(GameObject who) { return IsRanged(who); }
 

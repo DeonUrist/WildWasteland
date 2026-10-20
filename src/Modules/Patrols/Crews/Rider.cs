@@ -383,7 +383,7 @@ namespace WildWasteland.Modules.Patrols
         private bool _standing;
         internal bool StandingPose=>_standing||(_bike&&_standAt>=0f);
         internal bool AnimatedPose=>(_body!=null&&PlayerAnims.Alive(_body))||_graphOk;
-        internal void MaxHealth(float health){_maxHealth=Mathf.Max(_maxHealth,health);}
+        internal void MaxHealth(float health){_maxHealth=health;}
         private float _standAt = -1f;                      // a Warboy on a bike stands up (crouch -> stand blend) before the leap
         private float _nextIgnore, _outOfArc;
         private bool _warboyPrefab;                        // Perf: the prefab compare once at Init (was per frame)
@@ -823,11 +823,23 @@ namespace WildWasteland.Modules.Patrols
         {
             if (_mode == Mode.Flying || _mode == Mode.Dismount || _mode == Mode.Done || _car == null) return;
             if (!Alive()) { Die(); return; }
+            if(CrewReturn.FrontDoor(_marker!=null?_marker.gameObject:_car)!=null){CombatDismount();return;}
             // 2.2.3: he becomes a normal NPC at once - a fresh mob of his kind (same health, AI on) takes his place and jumps off with
             // physics, playing Apocaplayer's Jump on its own animator while in the air (was: a kinematic hop, a stiff upright body)
             var vel = _car.transform.right * _side * 3.2f + Vector3.up * 4.2f + CarVel() * 0.7f;
             PatrolsModule.Verbose("Rider: " + name + " jumps off " + _car.name + " (" + why + ")");
             SpawnMob(transform.position, vel);
+        }
+
+        internal void CombatDismount()
+        {
+            if(_mode==Mode.Flying||_mode==Mode.Dismount||_mode==Mode.Done||_car==null)return;
+            if(!Alive()){Die();return;}
+            var owner=_marker!=null?_marker.gameObject:_car;
+            if(CrewReturn.FrontDoor(owner)==null){JumpOff("crew under attack");return;}
+            _mode=Mode.Done;if(_marker!=null)_marker.DropRider(gameObject);
+            var mob=Patrol.BailOut(owner,gameObject,CrewAppearance.Identity(gameObject,_prefab),1f,false);
+            if(mob!=null)Dismounted(mob);
         }
 
         // the fresh mob that replaces this body (jump-off), with the given velocity; this body is removed

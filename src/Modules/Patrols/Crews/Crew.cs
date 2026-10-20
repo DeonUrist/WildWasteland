@@ -10,7 +10,7 @@ namespace WildWasteland.Modules.Patrols
 
     // Lives on the car. Owns the driver: keeps its AI off, drives while it is alive, and keeps the player out of the
     // driver seat until it dies. On death the gas is either released (car rolls out by itself) or stays stuck.
-    internal class Crew : MonoBehaviour
+    internal partial class Crew : MonoBehaviour
     {
         private GameObject _car, _driver;
         private PlayMakerFSM _health;         // driver [Health]
@@ -54,6 +54,52 @@ namespace WildWasteland.Modules.Patrols
         // the builds do not pile up on one frame); the driver sits with the engine running until then.
         internal bool Hold;
         internal bool MerchantWaiting;
+        internal bool TownParking;
+        internal float TownParkedAt;
+        internal void ParkForTown()
+        {
+            if (Marker?.PlayerEntered == true || PlayerRef.PlayerCar == _car) { TownParking = false; return; }
+            if (!TownParking)
+            {
+                TownParking = true; TownParkedAt = Time.time; Hold = true;
+                if (_pilot != null) { _pilot.Detach(); _pilot = null; }
+                if (_ctl != null && _ctl.Taken) _ctl.Release();
+                Nwh.StopEngine(_car); Patrol.Handbrake(_car, true, _handbrake);
+            }
+            var marker = Marker; if (marker == null || marker.PlayerEntered) return;
+            if (_rb != null && _rb.velocity.sqrMagnitude > 1f) return;
+            // One occupant per traffic tick; each native transfer is synchronous and saveable.
+            // Leave the driver until last, so a save during dismount still has a consistent seat state.
+            var pax = marker.Passenger;
+            if (pax != null && Patrol.GetHealth(pax) > 0f) { Patrol.BailOut(_car, pax, marker); return; }
+            for (int i = 0; i < marker.Riders.Length; i++)
+            {
+                var rider = marker.Riders[i]; if (rider == null || Patrol.GetHealth(rider) <= 0f) continue;
+                string identity = CrewAppearance.Identity(rider, TemplateExporter.PrefabName(rider.name.Replace("(Rider)", "")));
+                marker.DropRider(rider);
+                var mob = Patrol.BailOut(_car, rider, identity, i % 2 == 0 ? -1f : 1f, false);
+                if (mob != null) WorldTraffic.TownDismounted(_car, mob);
+                return;
+            }
+            if (_driver != null && DriverAlive())
+            {
+                var driver = _driver; _driver = null; _health = null; _healthVar = null;
+                marker.DriverBailed = true; marker.DriverLeft();
+                Patrol.BailOut(_car, driver, marker.DriverPrefab, -1f);
+            }
+            _dead = _done = _vacated = true; _driving = false; SeatLocked(false);
+        }
+        internal bool TownCrewSeated
+        {
+            get
+            {
+                if (DriverAlive()) return true;
+                var marker = Marker; if (marker == null) return false;
+                if (PassengerAlive(marker, marker.Passenger)) return true;
+                foreach (var rider in marker.Riders) if (rider != null && Patrol.GetHealth(rider) > 0f) return true;
+                return false;
+            }
+        }
         // CrewReturn: the dismounted crew's membership record (null = none) and its boarding phase, during which the crew logic is
         // suspended (a live driver brakes, nobody bails / takes over) until everyone is seated again or the regroup ends.
         internal CrewReturn.Group Regroup;
@@ -112,6 +158,7 @@ namespace WildWasteland.Modules.Patrols
             _rb = car.GetComponent<Rigidbody>();
             _health = driver != null ? driver.GetComponents<PlayMakerFSM>().FirstOrDefault(f => f.FsmName == "Health") : null;
             _healthVar = null;
+            _nextCombat=Time.time+UnityEngine.Random.Range(0f,0.5f);
             var fsms = car.GetComponentsInChildren<PlayMakerFSM>(true);
             _drive = Patrol.FindFsm(car, "DriveTrigger", "Drive", fsms);
             _handbrake = Patrol.FindFsm(car, "handbrake", "Handbrake", fsms);
@@ -333,6 +380,9 @@ namespace WildWasteland.Modules.Patrols
         { if (!PatrolsModule.Running) return;
             if (_car == null) { Destroy(this); return; }
             if (Time.timeScale <= 0f) return;
+            if (TownParking && Marker?.PlayerEntered != true && PlayerRef.PlayerCar != _car) { Nwh.SetInput(_car, 0f, 0f, 1f); Nwh.SetHandbrake(_car, 1f); return; }
+            TownParking = false;
+            if(CombatTick())return;
             if (Regroup != null && Time.time >= _nextRegroup)
             {
                 // 2 Hz with a per-car random phase; next += interval (re-phased after a gap)
@@ -427,6 +477,7 @@ namespace WildWasteland.Modules.Patrols
         private void FixedUpdate()
         { if (!PatrolsModule.Running) return;
             if (_car == null || _done || Time.timeScale <= 0f || Marker?.SetupOnly==true) return;
+            if (TownParking && Marker?.PlayerEntered != true && PlayerRef.PlayerCar != _car) { Nwh.SetInput(_car, 0f, 0f, 1f); Nwh.SetHandbrake(_car, 1f); return; }
             if (Regrouping) { if (!_dead && _driving) Nwh.SetInput(_car, 0f, 0f, 1f); return; }   // waiting for the crew to get back in
             if (!_dead)
             {
@@ -494,6 +545,7 @@ namespace WildWasteland.Modules.Patrols
             {
                 _doorOpened = true;
                 var seat = _paxBails ? pax.transform.position : Patrol.DriverSeatPos(_car);
+                var front=CrewReturn.FrontDoor(_car);if(_paxBails&&front!=null)seat=front.position;
                 if (Patrol.OpenDoorAt(_car, seat)) { _doorWait = Time.time + DoorSeconds; return true; }
             }
             if (Time.time < _doorWait) return true;
@@ -520,15 +572,23 @@ namespace WildWasteland.Modules.Patrols
         // instead of waiting: the car is left standing as an ordinary vehicle. Returns true if the crew left.
         internal bool OnStuck()
         {
-            if(EventBudget.IsConvoy(_car))return false;
             if (_dead || _done) return false;
+            _fullyStuck=true;
             if (UnityEngine.Random.Range(0f, 100f) >= PatrolsModule.StuckBailChance.Value) return false;
+            return ExitCrew(true);
+        }
+
+        private bool ExitCrew(bool stuck)
+        {
             var marker = Marker;
-            PatrolsModule.Verbose("Crew: stuck for good, the crew bails out (" + PatrolsModule.StuckBailChance.Value + " % roll)");
-            if (marker != null) marker.StuckBails++;
+            CombatExit=!stuck;
+            _frontExitIndex=0;
+            if(stuck){PatrolsModule.Verbose("Crew: stuck for good, the crew bails out (" + PatrolsModule.StuckBailChance.Value + " % roll)");if(marker!=null)marker.StuckBails++;}
+            else PatrolsModule.Verbose("Crew: " + _car.name + " under unanswered attack; crew gets out to fight " + (_combatEnemy!=null?_combatEnemy.name:"enemy"));
             CrewReturn.Expect(this, _car, marker);   // before the Released phase is visible to world traffic (the bail-out follows the doors)
             if (_pilot != null) { _pilot.Detach(); _pilot = null; }
-            Nwh.SetInput(_car, 0f, 0f, 0f);
+            Nwh.SetInput(_car, 0f, 0f, 1f);
+            Patrol.Handbrake(_car,true,_handbrake);
             if (_ctl != null && _ctl.Taken) _ctl.Release();
             SeatLocked(false);
             var pax = marker != null ? marker.Passenger : null;
@@ -536,16 +596,17 @@ namespace WildWasteland.Modules.Patrols
             if(marker!=null&&driverGoes)marker.DriverBailed=true;
             // both doors open first; the crew gets out once they have swung open
             bool opened = false;
-            if (paxGoes) opened |= Patrol.OpenDoorAt(_car, pax.transform.position);
-            if (driverGoes) opened |= Patrol.OpenDoorAt(_car, Patrol.DriverSeatPos(_car));
-            StartCoroutine(BailAfter(opened ? DoorSeconds : 0f, marker, paxGoes ? pax : null, driverGoes ? _driver : null));
+            var front=CrewReturn.FrontDoor(_car);
+            if(front!=null)opened=Patrol.OpenDoorAt(_car,front.position);
+            else{if (paxGoes) opened |= Patrol.OpenDoorAt(_car, pax.transform.position);if (driverGoes) opened |= Patrol.OpenDoorAt(_car, Patrol.DriverSeatPos(_car));}
+            StartCoroutine(BailAfter(opened ? DoorSeconds : 0f, marker, paxGoes ? pax : null, driverGoes ? _driver : null,!stuck));
             _driver = null; _health = null;
             _dead = true; _done = true; _driving = false;    // Phase = Released: saved as an empty car
-            Vacated("crew bailed out");
+            if(stuck)Vacated("crew bailed out");else _vacated=true;
             return true;
         }
 
-        private IEnumerator BailAfter(float wait, PatrolMarker marker, GameObject pax, GameObject driver)
+        private IEnumerator BailAfter(float wait, PatrolMarker marker, GameObject pax, GameObject driver,bool combat=false)
         {
             if (wait > 0f) yield return new WaitForSeconds(wait);
             if (_car == null) yield break;
@@ -555,6 +616,7 @@ namespace WildWasteland.Modules.Patrols
                 if (marker != null) marker.DriverLeft();
                 Patrol.BailOut(_car, driver, marker != null ? marker.DriverPrefab : driver.name.Replace("(Driver)", ""), -1f);
             }
+            if(combat&&marker!=null)for(int i=0;i<marker.Riders.Length;i++){var r=marker.Riders[i];var g=r!=null?r.GetComponent<RiderGuard>():null;if(g!=null)g.CombatDismount();}
         }
 
         // Step 2: the passenger climbs onto the driver seat and Crew starts over with it as the driver.

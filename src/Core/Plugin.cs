@@ -136,6 +136,7 @@ namespace WildWasteland
             Core.ModuleHost.Add(new Modules.Quests.QuestsModule());
             Core.ModuleHost.Add(new Modules.EngineSimCompat.EngineSimCompatModule());
             Core.ModuleHost.Add(new Modules.Survival.SurvivalModule());
+            Core.ModuleHost.Add(new Modules.Towns.TownsModule());
             Core.ModuleHost.Add(new Modules.Performance.PerformanceModule());   // last: its PlayMaker hooks run after every gameplay module's
         }
 

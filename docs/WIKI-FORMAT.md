@@ -1,71 +1,63 @@
-# Wiki format (V:\Repos\Apocalypter\WildWastelandWiki)
+# Wild Wasteland player wiki
 
-The wiki is plain Markdown (GitHub-wiki compatible) built from small, independent pages so one feature can be updated
-without touching the rest. `tools/wiki-index.py` regenerates `Home.md`, `_Sidebar.md`, `Feature-Status.md` and `features.json`
-from the page headers; never edit those four by hand. The folder is a separate repo (exact name `WildWastelandWiki`) pushed as the
-GitHub wiki of the WW repo.
+Denis requested a full rewrite for released single-player 1.0 on 2026-10-19,
+explicitly as a wiki of **gameplay features, not technical terms**. This replaces
+the former module/framework/status-table format for the public wiki.
 
-```
-WildWastelandWiki/
-  Home.md                     generated: intro + module table + feature index by module / framework
-  _Sidebar.md                 generated: guides, architecture, modules -> features
-  Feature-Status.md           generated: every feature with status, toggle and tools (mirrors the project board)
-  features.json               generated: board export [{title, page, module, framework, status, f6, f7, since}]
-  Backlog-Candidates.md       hand-written: the remaining candidate mods, one feature entry each (Status Backlog, module "Future")
-  Guides/                     hand-written how-tos (Installation, F6-Settings, F7-Tool-Window, Migration, Troubleshooting, Performance, Saves)
-  Architecture/               Overview, Core-Services, Scheduler-And-Frame-Budget, Harmony-Hooks, Config-And-Tools, Adding-A-Module, Release-Process
-  Modules/<ModuleId>/<ModuleId>-Module.md   module overview (what it replaces, F6 section, F7 pages, services, files, migration)
-  Modules/<ModuleId>/<Feature-Slug>.md      one page per player-visible feature or tool
-```
+## Write for players
 
-**GitHub wikis flatten folders**: every file name must be unique across the whole wiki (that is why the module overview is
-`Guns-Module.md`, not `README.md`, and why pages are prefixed with the module when the name is generic: `Patrols-Cleanup.md`,
-`NPC-Dogs.md`). Links are by file name without folder and without `.md`: `[[Human-Turrets]]` or `[Human Turrets](Human-Turrets)`.
-The index script fails on a duplicate file name or a link to a page that does not exist.
+Each main page explains what players can do, how it works, relevant controls,
+where to change a setting, and practical limitations. Use the current UI labels.
+Explain effects in ordinary language; do not expose class names, save schemas,
+patch hooks, scheduler work, source commits or test handovers in feature pages.
 
-## Feature page template
+Organize topics around character/movement, combat, enemies, road encounters,
+exploration, quests, survival, saving and support. Use a table only when it helps
+compare actions or choices. There is no required technical metadata table.
 
-File name: `Title-Case-With-Dashes.md`. The metadata table MUST be the first table after the title (the index script parses it;
-fields in this order: Module, Framework, Status, F6 toggle, F7 tools, Source, Since):
+Describe the current released state. Read the code and embedded tuned defaults:
+the latter may override an ordinary Bind fallback. Existing player settings and
+bindings survive updates. Distinguish included features from optional external
+mods, and do not turn unverified work into a verified claim. Keep project-board
+status tracking and implementation records in the repository, not the player index.
 
-```markdown
-# Human Turrets
+## Source and navigation
 
-| Field | Value |
-|---|---|
-| Module | Patrols |
-| Framework | Crews |
-| Status | Testing |
-| F6 toggle | `[Patrols] Human turrets` |
-| F7 tools | Seat & turret poses → Turret spot editor |
-| Source | Apocapatrol 2.14.4 (Rider.cs, RiderGuard, RiderAnchorGuard) |
-| Since | 0.1.0 |
+The editable snapshot is `V:/Repos/Apocalypter/WildWastelandWiki`. Canonical guides
+are in `Guides/` and `Features/`; a few retained canonical filenames remain in
+their original folders. Old public slugs remain as short pointers to the relevant
+current guide. They contain no old technical tables or RC history and are not
+listed in the sidebar.
 
-## What it does
-2-6 sentences, player view.
+`_Navigation.json` contains the release version, homepage introduction/scope,
+ordered groups of `[page-slug, gameplay-summary]` pairs and legacy-to-current
+page mappings. Add every canonical page to one group. Register every legacy page
+as an alias. Never reuse a basename, even in a different folder.
 
-## How to use
-Steps or "automatic".
+Links use `[visible words](Page-Slug)` or `[[Page-Slug]]`: no folder, no `.md`.
+GitHub wikis flatten directories. External links use their full HTTPS URL.
 
-## Settings
-| Where | Setting | Default | Meaning |
-|---|---|---|---|
-| F6 | `[Patrols / Combat] WitnessMeChance` | 10 | ... |
-| F7 | `[Patrols / Combat] RiderRange` | 35 | ... |
+Run from the main repository:
 
-## Notes
-Compatibility, performance, known issues. Optional.
+```powershell
+python tools/wiki-index.py ../WildWastelandWiki
 ```
 
-Status values (same as the GitHub project columns): `Backlog`, `Working on`, `Testing`, `Verified`, `Done`.
-For 0.1.0 ported features use `Testing` (ported, compiles, awaiting in-game verification) unless stated otherwise; `Verified` after
-Denis saw it work in the game; `Done` when it shipped in a release. `-` in F6 toggle / F7 tools means none.
-Framework = the logical sub-system inside the module (folder name), e.g. NPC: Detection / Navigation / Brain / Animals / Hazards / Debug;
-`-` on module overview pages.
+With `_Navigation.json` present, `wiki-index.py` delegates to `wiki-gameplay.py`.
+It validates unique names, navigation membership, legacy destinations and internal
+links, then generates `Home.md`, `_Sidebar.md`, `Feature-Status.md` and
+`features.json`. Never edit those generated files by hand. `Feature-Status` is now
+the player feature overview; its old URL is retained. The JSON export now describes
+player guides (title/page/category/summary/version), not project-board rows.
+The old generator remains available for historical snapshots without a navigation
+manifest. The new mode also works on a flattened wiki checkout.
 
-Module overview page (`<Id>-Module.md`): same metadata table (Framework `-`, F6 toggle = `[<Id>] Enabled`, F7 tools = all its pages),
-then What it does / Features (table: page link, framework, F6 toggle) / F6 section / F7 / Services / Files / Saves / Migration.
+## Publish
 
-Backlog entries (`Backlog-Candidates.md`): one `## <Title>` heading per candidate with a short line list `Module: Future`,
-`Framework: <folder it would get>`, `Status: Backlog`, `Source: <repo> <version> / <commit>`; the index script reads those headings
-instead of a metadata table.
+If the snapshot has no `.git`, clone
+`https://github.com/DeonUrist/WildWasteland.wiki.git` to a separate staging folder.
+Check its recent history and compare it with the snapshot before editing. Generate
+the indexes, then copy Markdown files by unique basename plus `_Navigation.json`
+and `features.json` into that checkout. Inspect the diff and run link validation
+before committing/pushing an authorized wiki update. Never push runtime code,
+create a release or change game files as a side effect of a documentation task.

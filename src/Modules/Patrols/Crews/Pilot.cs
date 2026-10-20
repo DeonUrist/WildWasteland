@@ -155,6 +155,8 @@ namespace WildWasteland.Modules.Patrols
             if (_traffic == null) _traffic = _car.GetComponent<TrafficAgent>();
             Vector3 routeGoal = Vector3.zero; float cruise = 0f; bool stop = false, hunt = false;
             bool traffic = _traffic != null && _traffic.Goal(out routeGoal, out cruise, out stop, out hunt);
+            Vector3 pursuitPos,pursuitVel;GameObject pursuitCar;
+            if(_crew!=null&&_crew.PursuitTarget(out pursuitPos,out pursuitVel,out pursuitCar)){tpos=pursuitPos;tvel=pursuitVel;tcar=pursuitCar;traffic=false;_hasTarget=true;}
             bool wasTravelling = _travelling;
             _travelling = traffic && !hunt;
             if (wasTravelling != _travelling) _obstacleCache.Clear();
@@ -211,6 +213,16 @@ namespace WildWasteland.Modules.Patrols
                     StartRecover("hit an obstacle" + (_hitSide != 0f ? (_hitSide > 0f ? " on the right" : " on the left") : " head-on"), _hitSide);
             }
 
+            if (_hasTarget && _state != PilotState.Recover && _state != PilotState.Wait && Modules.Towns.TownsApi.Provider != null)
+            {
+                Vector3 gate; bool hold;
+                if (Modules.Towns.TownsApi.Provider.VehicleWaypoint(_tf.position, tpos, out gate, out hold))
+                {
+                    _ramsTarget = false;
+                    StepTravel(gate, Mathf.Min(cruise > 0 ? cruise : 6f, 6f), hold && Flat(gate - _tf.position).sqrMagnitude < 16f, speed, forwardSpeed, dt, true);
+                    return;
+                }
+            }
             if (_travelling)
             {
                 if (_state != PilotState.Recover && _state != PilotState.Wait && _state != PilotState.Travel) Enter(PilotState.Travel, "destination route");
@@ -254,7 +266,7 @@ namespace WildWasteland.Modules.Patrols
 
         // ------------------------------------------------------------ states
 
-        private void StepTravel(Vector3 goal, float cruise, bool stop, float speed, float forwardSpeed, float dt)
+        private void StepTravel(Vector3 goal, float cruise, bool stop, float speed, float forwardSpeed, float dt, bool gateRoute = false)
         {
             if (stop) { Apply(0f, MoveSteer(0f, dt), 0.7f); return; }
             if (Gear() <= 0) Shift(1);
@@ -267,7 +279,7 @@ namespace WildWasteland.Modules.Patrols
             float steer = MoveSteer(Mathf.Clamp(desired + avoid, -cap, cap), dt);
             float want = Mathf.Min(cruise, Mathf.Lerp(cruise, 4f, Mathf.InverseLerp(20f, 100f, Mathf.Abs(angle))));
             var journey = _traffic != null ? WorldTraffic.Find(_traffic.Journey) : null;
-            if (journey != null && journey.leg == journey.route.Length - 1) want = Mathf.Min(want, Mathf.Sqrt(Mathf.Max(0f, delta.magnitude - 8f) * 3f));
+            if (!gateRoute && journey != null && journey.leg == journey.route.Length - 1) want = Mathf.Min(want, Mathf.Sqrt(Mathf.Max(0f, delta.magnitude - 8f) * 3f));
             float error = want - forwardSpeed;
             float throttle = error > 0f ? PatrolsModule.AiThrottle.Value * Mathf.Clamp01(error * 0.3f) * throttleFactor : 0f;
             float brakes = Mathf.Max(obstacleBrake, error < -1f ? Mathf.Clamp01(-error * 0.12f) : 0f);
@@ -471,8 +483,7 @@ namespace WildWasteland.Modules.Patrols
             bool repeat = Time.time - _lastRecover < PatrolsModule.AiRecoverWindow.Value;
             _recoverCount = repeat ? _recoverCount + 1 : 1;
             _lastRecover = Time.time;
-            bool convoy=EventBudget.IsConvoy(_car);
-            if (_recoverCount > PatrolsModule.AiMaxRecovers.Value && !convoy)
+            if (_recoverCount > PatrolsModule.AiMaxRecovers.Value)
             {
                 Apply(0f, _steer, 0.5f);
                 var crew = _crew;
@@ -480,7 +491,6 @@ namespace WildWasteland.Modules.Patrols
                 Enter(PilotState.Wait, why + " (" + _recoverCount + " recoveries)");
                 return;
             }
-            if(convoy)_recoverCount=Mathf.Min(_recoverCount,4);
             _recoverDur = PatrolsModule.AiReverseSeconds.Value * (1f + 0.5f * (_recoverCount - 1));
             // reversing with the wheels turned to +s swings the nose to -s: away from an obstacle on side s, or toward the target
             float s = obstacleSide != 0f ? Mathf.Sign(obstacleSide) : -Mathf.Sign(_angle == 0f ? 1f : _angle);

@@ -12,9 +12,9 @@ namespace WildWasteland.Modules.Patrols
         {internal int Role;internal string Name,Faction,Type;internal RoadJob Incoming,Outgoing;internal TrafficVehicle[] Vehicles;}
         private readonly List<NearbyDeparture> _nearDepartures=new List<NearbyDeparture>();
         private float _nextMerchant;private PlayMakerFSM _hornFsm;private GameObject _hornCar;private bool _hornOn;
-        private int RoleCount(int role)=>_journeys.Count(j=>!j.foot&&(j.merchant?2:j.convoy?1:0)==role)+_nearDepartures.Count(d=>d.Role==role)+(role==0&&_roamingDeparture!=null?1:0)+(role<2&&_departures.ContainsKey(role==1)?1:0);
+        private int RoleCount(int role)=>_journeys.Count(j=>!j.foot&&!j.townParked&&!j.townResident&&(j.merchant?2:j.convoy?1:0)==role)+_nearDepartures.Count(d=>d.Role==role)+_townDepartures.Count(d=>(d.Journey.merchant?2:1)==role&&(!_journeys.Contains(d.Journey)||d.Journey.townResident))+(role==0&&_roamingDeparture!=null?1:0)+(role<2&&_departures.ContainsKey(role==1)?1:0);
         internal static bool MerchantTypeInUse(string type)
-        {return MerchantHost.All.Any(h=>h!=null&&h.Data!=null&&MerchantCatalog.Selected(h.Data.types)==type)||(_instance!=null&&(_instance._journeys.Any(j=>j.merchant&&j.vehicles.Any(v=>MerchantCatalog.Selected(v.merchantTypes)==type))||_instance._nearDepartures.Any(d=>d.Role==2&&d.Type==type)));}
+        {return MerchantHost.All.Any(h=>h!=null&&h.Data!=null&&Find(h.GetComponent<PatrolMarker>()?.TrafficId)?.townResident!=true&&MerchantCatalog.Selected(h.Data.types)==type)||(_instance!=null&&(_instance._journeys.Any(j=>j.merchant&&!j.townResident&&j.vehicles.Any(v=>MerchantCatalog.Selected(v.merchantTypes)==type))||_instance._nearDepartures.Any(d=>d.Role==2&&d.Type==type)||_instance._townDepartures.Any(d=>d.Journey.merchant&&d.Journey.vehicles.Any(v=>MerchantCatalog.Selected(v.merchantTypes)==type))));}
         internal static bool DebugDeparture(SpawnGroup group,int role)
         {if(_instance==null||group==null||role<0||role>2||!PatrolsModule.ConvoyEnabled.Value){Core.Log.Warn("[Patrols] " + "Select New arrival or Fury road in Game > World > Enemy Vehicles and select a group before creating a route.");return false;}return _instance.QueueNearby(group,role);}
         private bool QueueNearby(SpawnGroup group,int role)
@@ -29,6 +29,7 @@ namespace WildWasteland.Modules.Patrols
             var roster=role==2?group.Templates.Select(CarTemplate.Find).Where(t=>t!=null&&t.Available&&CrewFactions.Compatible(t,group.Faction)).OrderBy(t=>UnityEngine.Random.value).Take(1).Select(t=>t.CloneForSpawn()).ToList():EditorStore.ComposeFull(group,role==1,()=>UnityEngine.Random.value);
             if(roster.Count==0)return false;
             if(role==2)foreach(var car in roster){MerchantRuntime.Configure(car,group);car.MerchantTravelling=true;car.ReleaseHandbrake=true;}
+            if (TownTravel && role > 0) return QueueTownDeparture(group, role, roster);
             var center=TrafficSpace.World(player.position);float angle=UnityEngine.Random.Range(0f,Mathf.PI*2f);
             var direction=new Vector3(Mathf.Cos(angle),0f,Mathf.Sin(angle));var side=Vector3.Cross(direction,Vector3.up)*UnityEngine.Random.Range(-120f,120f);
             float edge=Mathf.Max(PatrolsModule.TrafficUnloadRange.Value,PatrolsModule.TrafficLoadRange.Value)+250f;
@@ -55,6 +56,7 @@ namespace WildWasteland.Modules.Patrols
         }
         private void PopulateMerchants()
         {
+            if (TownTravel) return; // Settlement buses provide the persistent fleet and depart after their visits.
             if(_nextMerchant<=0f){NextMerchant();return;}if(Time.time<_nextMerchant)return;
             NextMerchant();
             // WW: F6 [Patrols] Merchants off = the "Max merchants 0" path (no automatic merchant routes; a loaded bus finishes its visit)
@@ -64,7 +66,7 @@ namespace WildWasteland.Modules.Patrols
             {if(RoleCount(2)+manual<=desired)break;_nearDepartures.Remove(pending);}
             // Removing excess virtual routes is necessary for the fractional roll to average correctly.
             // A physically loaded bus retains its stock and visit until the player leaves.
-            foreach(var journey in _journeys.Where(j=>j.merchant).Reverse().ToArray())
+            foreach(var journey in _journeys.Where(j=>j.merchant&&!j.townResident&&!j.townBound).Reverse().ToArray())
             {if(RoleCount(2)+manual<=desired)break;if(!_live.ContainsKey(journey.id))Remove(journey);}
             var groups=EditorStore.Data.Merchants.Where(g=>g.Chance>0f).ToList();
             while(RoleCount(2)+manual<desired)

@@ -131,6 +131,12 @@ def main():
         root = cand if os.path.isdir(cand) else os.path.normpath(os.path.join(here, "..", "wiki"))
     if not os.path.isdir(root):
         die("wiki folder not found: " + root)
+    # Player-guide navigation replaces the former development-board front page.
+    if os.path.isfile(os.path.join(root, "_Navigation.json")):
+        import runpy
+        guide = runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), "wiki-gameplay.py"))
+        guide["generate"](root)
+        return
 
     pages = {}      # name -> {path, rel, folder, text, lines}
     errors = []

@@ -22,6 +22,54 @@ namespace WildWasteland.Modules.NPC
             internal float RefOffset;
         }
 
+        // (WW perf) decoded templates kept in memory per map key: a second instance of the same prefab clones the arrays
+        // (plus its areas) instead of re-reading the .wwnav and re-flooding. Instance arrays are copies; the template is never edited.
+        private sealed class MapTemplate
+        {
+            internal float[] Y; internal byte[] Why; internal bool[] Open, Near; internal byte[] Edges; internal int[] Comp, CompSize; internal byte[] Floors;
+            internal float RefOffset; internal bool Vanilla; internal string Source; internal int Walkable;
+        }
+        private static readonly Dictionary<ulong, MapTemplate> _templates = new Dictionary<ulong, MapTemplate>();
+        private const int TemplateLimit = 96;
+        internal static int TemplateCount { get { return _templates.Count; } }
+        private static void RememberTemplate(Structure s)
+        {
+            if (!(s.LoadedMap || s.MapSaved) || s.MapKey == 0 || s.MapFile == null || s.Root == null || s.FloorY == null || s.Comp == null || s.CompSize == null || s.Near == null) return;
+            if (_templates.ContainsKey(s.MapKey)) return;
+            if (_templates.Count >= TemplateLimit) _templates.Clear();
+            int n = s.W * s.H; float rootY = s.Root.position.y;
+            var t = new MapTemplate { Y = new float[n], Why = (byte[])s.Why.Clone(), Open = (bool[])s.Open.Clone(), Near = (bool[])s.Near.Clone(), Edges = (byte[])s.Edges.Clone(),
+                Comp = (int[])s.Comp.Clone(), CompSize = (int[])s.CompSize.Clone(), RefOffset = s.RefY - rootY, Vanilla = s.LoadedVanilla, Source = s.MapSource ?? s.MapFile, Walkable = s.Walkable };
+            for (int i = 0; i < n; i++) t.Y[i] = s.FloorY[i] - rootY;
+            var colliders = s.MapColliders; t.Floors = new byte[colliders == null ? 0 : colliders.Length];
+            if (colliders != null && s.FloorHits != null)
+                for (int i = 0; i < colliders.Length; i++)
+                { int count; t.Floors[i] = (byte)(colliders[i] != null && s.FloorHits.TryGetValue(colliders[i].GetInstanceID(), out count) && count >= FloorColCells ? 1 : 0); }
+            _templates[s.MapKey] = t;
+        }
+        private static bool CloneTemplate(Structure s)
+        {
+            MapTemplate t; int n = s.W * s.H;
+            if (s.ReplaceMap || !_templates.TryGetValue(s.MapKey, out t) || t.Y.Length != n || (s.SkipVanilla && t.Vanilla)
+                || s.MapColliders == null || t.Floors.Length != s.MapColliders.Length) return false;
+            float rootY = s.Root.position.y;
+            for (int i = 0; i < n; i++) s.FloorY[i] = t.Y[i] + rootY;
+            Array.Copy(t.Why, s.Why, n); Array.Copy(t.Open, s.Open, n); Array.Copy(t.Edges, s.Edges, n);
+            s.Near = (bool[])t.Near.Clone(); s.Comp = (int[])t.Comp.Clone(); s.CompSize = (int[])t.CompSize.Clone();
+            for (int i = 0; i < t.Floors.Length; i++) if (t.Floors[i] != 0 && s.MapColliders[i] != null) s.FloorHits[s.MapColliders[i].GetInstanceID()] = FloorColCells;
+            s.RefY = rootY + t.RefOffset; s.Walkable = t.Walkable; s.Next = n;
+            s.LoadedMap = true; s.LoadedVanilla = t.Vanilla; s.MapSource = t.Source; s.LoadedTemplate = true; s.Phase = 2;
+            RememberCapturedMap(s);
+            if (NpcModule.NavLog.Value) NpcModule.Log.LogInfo("Nav: cloned map " + s.Name + " from memory (" + (t.Vanilla ? "vanilla" : "custom cache") + "); " + t.Source);
+            return true;
+        }
+        internal static void ForgetTemplates(bool vanillaToo)
+        {
+            if (vanillaToo) { _templates.Clear(); return; }
+            var keys = new List<ulong>(); foreach (var kv in _templates) if (!kv.Value.Vanilla) keys.Add(kv.Key);
+            foreach (ulong key in keys) _templates.Remove(key);
+        }
+
         private static string CustomMapDir { get { return System.IO.Path.Combine(NpcModule.DataDir, "NavMaps", "Custom"); } }
         private static string VanillaMapDir { get { return System.IO.Path.Combine(Core.Assets.ModuleDir("NPC"), "NavMaps", "Vanilla"); } }
         internal static string MapActionStatus;
@@ -128,6 +176,8 @@ namespace WildWasteland.Modules.NPC
         {
             if (s.MapFile == null) return false;
             if (s.MapStep != Mathf.Max(0.1f, NpcModule.NavMaxStep.Value)) { s.MapFile = null; return false; }
+            s.LoadedTemplate = false;
+            if (CloneTemplate(s)) return true;
             try
             {
                 s.MapJob = new MapIo(); var job = s.MapJob; Stream stream = null;
@@ -240,7 +290,7 @@ namespace WildWasteland.Modules.NPC
                 if (job.Next < n) return false;
                 w.Write(job.Checksum); w.Dispose(); job.Writer = null;
                 if (File.Exists(s.MapFile)) File.Replace(job.Temp, s.MapFile, null); else File.Move(job.Temp, s.MapFile);
-                job.Temp = null; CloseMap(s); s.Phase = 2;
+                job.Temp = null; CloseMap(s); s.Phase = 2; s.MapSaved = true;
                 RememberCapturedMap(s);
                 NpcModule.Log.LogInfo("Nav: saved map " + s.Name + ": " + s.W + " x " + s.H + ", " + s.Walkable + " walkable; " + s.MapFile);
             }

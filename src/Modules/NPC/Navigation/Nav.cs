@@ -34,6 +34,7 @@ namespace WildWasteland.Modules.NPC
             public string MapFile, VanillaMapFile, LegacyMapFile, MapSource; public ulong MapKey; public Collider[] MapColliders;
             public float MapStep;
             public MapIo MapJob; public bool LoadedMap, LoadedVanilla, SkipVanilla, ReplaceMap;
+            public bool LoadedTemplate, MapSaved;   // (WW perf) arrays cloned from the in-memory template of the same map; map written this session
             public float[] FloorY;                  // NaN = blocked
             public bool Baked; public int Next;     // bake progress (cell index)
             public int Walkable, NoFloor, Tight, Solid, ScanLimit; public float BakeMs; public int BakeFrames;
@@ -453,6 +454,7 @@ namespace WildWasteland.Modules.NPC
                 s.Baked = true; _baking = null;
                 QueueMasks(s);
                 if (!s.LoadedMap) _msPerCell = Mathf.Clamp(_msPerCell + (s.BakeMs / Math.Max(1, n) - _msPerCell) * 0.5f, 0.005f, 0.2f);   // learned for the next estimates
+                RememberTemplate(s);
                 int floorCols = 0;
                 foreach (var kv in s.FloorHits) if (kv.Value >= FloorColCells && _floorCols.Add(kv.Key)) floorCols++;
                 s.FloorHits = null;
@@ -479,6 +481,7 @@ namespace WildWasteland.Modules.NPC
         private static bool ComponentsStep(Structure s, float budget)
         {
             int n = s.W * s.H;
+            if (s.LoadedTemplate && s.CompStack == null && s.Comp != null && s.CompSize != null) return true;   // cloned with its areas
             if (s.CompStack == null)
             {
                 s.Comp = new int[n];

@@ -36,6 +36,7 @@ namespace WildWasteland.Modules.NPC
             }
             for (int i = _maskQueue.Count - 1; i >= 0; i--) if (removed.Contains(_maskQueue[i])) _maskQueue.RemoveAt(i);
             PickReset(); _compRing.Clear(); _outPlans.Clear(); _outMemo.Clear(); _exits.Clear(); _relaxedFields.Clear(); _debug.Clear();
+            ForgetTemplates(false);
             _sweep.Clear(); _sweepAdded = 0; _swept = false; _nextSweep = _nextPick = 0f;
             Needed = _baking != null && _baking == _needed; _urgent = false;
             int deleted = 0, failed = 0;

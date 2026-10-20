@@ -67,6 +67,7 @@ namespace WildWasteland.Modules.NPC
             public float AmbushDist; public int Cone; public bool Burrowed;      // (1.3.0) vision group (0 human, 1 insect, 2 beast, 3 brute, 4 boss, 5 burrower); a burrowed creature sees all around
             public HashSet<string> BaseHostile; public PlayMakerFSM PlayerIsEnemy;   // the prefab's own enemies, and its faction-relation FSM (Coyotes)
             public State State; public GameObject Target; public Ghost Ghost; public Src GhostPrio;
+            public bool CrewBoarding; public GameObject CrewEnemy; public FsmFloat CrewEnemyHealth;
             public float SeenFor, UnseenFor, SearchUntil, NextLook, Stagger, LastLog, InvestigateUntil, InvestigateSince; public Vector3 LastSeen;
             public string SightMiss;
             public float UnseenSince = -1f;
@@ -140,6 +141,7 @@ namespace WildWasteland.Modules.NPC
                 if (now >= _nextIgnoredClear) { _nextIgnoredClear = now + 120f; _ignored.Clear(); }   // ids of parented / unfinished NPCs: re-evaluated, never kept for the whole session
                 if (_handover.Count > 0) { _dead.Clear(); foreach (var kv in _handover) if (now - kv.Value.Value > 30f) _dead.Add(kv.Key); foreach (var k in _dead) _handover.Remove(k); }
                 if (_remember.Count > 0) { _dead.Clear(); foreach (var kv in _remember) if (now >= kv.Value.Value || kv.Value.Key == null) _dead.Add(kv.Key); foreach (var k in _dead) _remember.Remove(k); }
+                PruneCrewOrders(now);
                 for (int i = _ghosts.Count - 1; i >= 0; i--)
                 {
                     var g = _ghosts[i];
@@ -220,6 +222,12 @@ namespace WildWasteland.Modules.NPC
         // ---------- sight ----------
         private static void Look(Agent a, float interval, float now)
         {
+            if(a.CrewBoarding)return;
+            if(!ReferenceEquals(a.CrewEnemy,null))
+            {
+                if(a.CrewEnemy==null||!a.CrewEnemy.activeInHierarchy||(a.CrewEnemyHealth!=null&&a.CrewEnemyHealth.Value<=0f))CrewOrder(a.Owner,null,false);
+                else{Engage(a,a.CrewEnemy);if(a.DetectedVar!=null)a.DetectedVar.Value=a.CrewEnemy;return;}
+            }
             if(a.Tag=="MutantSanity"||(SimpleBandits.Has(a.Owner)&&a.Ghost==null&&a.State!=State.Search)){SimpleLook(a,now);return;}
             // shoved by a tornado: it forgets what it was doing unless it sees the player right now (sight still works, hearing doesn't)
             if (a.Blown && a.State != State.Idle && !(a.State == State.Combat && a.Target == _player && a.UnseenFor < 0.5f))
@@ -797,7 +805,7 @@ namespace WildWasteland.Modules.NPC
         // check a shout about the player; the player now shoots elsewhere: that is where the player is). Never while it sees its target.
         private static bool Assign(Agent a, Ghost g, Src prio, float now)
         {
-            if(a.Tag=="MutantSanity"||(SimpleBandits.Has(a.Owner)&&!SimpleBandits.Fighting(a.Owner)))return false;
+            if(a.CrewBoarding||a.Tag=="MutantSanity"||(SimpleBandits.Has(a.Owner)&&!SimpleBandits.Fighting(a.Owner)))return false;
             if (g == null || a.State == State.Combat || a.State == State.Hide || g.Retired || a.AmbushDist > 0f) return false;      // (1.3.2) an ambusher in wait ignores sounds
             float doneAt;
             if (a.Done.TryGetValue(g.Id, out doneAt) && g.Moved <= doneAt + 0.01f) return false;   // been there, nothing new about it
@@ -1321,8 +1329,10 @@ namespace WildWasteland.Modules.NPC
             if (!On || victim == null || attacker == null) return;
             var hit=victim.transform;while(hit!=null&&!hit.CompareTag("Coyotes"))hit=hit.parent;
             if(hit!=null&&IsPlayer(attacker)){var relation=CoyoteRelation();if(relation!=null&&relation.Fsm.Initialized)relation.SendEvent("FactionCoyotesEnemy");}
+            Core.Services.RaiseNpcHurt(victim,attacker);
             var a = Get(victim.transform.root.gameObject);
             if (a == null) return;
+            if(a.CrewBoarding)return;
             if (IsPlayer(attacker)) { FoughtFor(a, _player, Time.time, "hit by him"); if (SimpleBandits.Has(a.Owner)) a.NextLook = Time.time; }   // (crew AI)
             if(SimpleBandits.Has(a.Owner))return; // Combat dismounts take the player through the memory (SimpleLook); seated crew runs no senses.
             a.AmbushDist = 0f;      // (1.3.2) a hit ends the ambush: it comes up and fights
@@ -1524,6 +1534,7 @@ namespace WildWasteland.Modules.NPC
 
         private static GameObject Known(Agent a)
         {
+            if(a.CrewBoarding)return null;
             if(a.Tag=="MutantSanity"&&(a.State!=State.Combat||a.Target!=_player))SimpleLook(a,Time.time);
             switch (a.State)
             {
@@ -1667,6 +1678,7 @@ namespace WildWasteland.Modules.NPC
             Gungirl.Registered(a.Owner);
             Handover(a);
             Recall(a);
+            RecallCrewOrder(a);
         }
         // (crew AI) Remember: registered now if its FSMs are up; never marked ignored (asked again when its Detection FSM first runs)
         private static Agent TryRegister(GameObject owner)
@@ -1880,7 +1892,7 @@ namespace WildWasteland.Modules.NPC
             _ghosts.Clear(); _agents.Clear();
             if (_ghostRoot != null) { UnityEngine.Object.Destroy(_ghostRoot.gameObject); _ghostRoot = null; }
             if (_voiceSrc != null) { UnityEngine.Object.Destroy(_voiceSrc.gameObject); _voiceSrc = null; }
-            _handover.Clear(); _remember.Clear(); _thrown = null; _grabFsm = null; _grabState = null;
+            _handover.Clear(); _remember.Clear(); _crewOrders.Clear(); _thrown = null; _grabFsm = null; _grabState = null;
         }
 
         // (WW) floating origin: ghost / flank objects live under the DontDestroyOnLoad root the game does not move; positions are scene space

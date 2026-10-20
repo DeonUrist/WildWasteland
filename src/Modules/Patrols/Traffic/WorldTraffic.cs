@@ -24,6 +24,8 @@ namespace WildWasteland.Modules.Patrols
             var battle=GetComponent<BattleCar>();if(battle!=null)return battle.Goal(out goal,out cruise,out stop,out hunt);
             var journey = WorldTraffic.Find(Journey);
             if (journey == null || !PatrolsModule.ConvoyEnabled.Value) return false;
+            if (journey.townParked || journey.townResident) return true;
+            if (WorldTraffic.TownPlanning(journey.id)) return true;
             if (!journey.TerrainRoute) return true;
             if(journey.merchant)
             {goal=TrafficSpace.Scene(journey.arrived?journey.route[journey.route.Length-1]:RoadPath.Target(journey.route,journey.leg,TrafficSpace.World(transform.position),journey.speed));cruise=journey.speed;stop=journey.arrived||journey.waitSeconds>0f;return true;}
@@ -192,6 +194,7 @@ namespace WildWasteland.Modules.Patrols
             _instance._gameMap=null;_instance._gameMapImage=null;_instance._mapCheat=null;_instance._nextMapScan=0f;_instance._mapWasOpen=false;
             _instance._nextRoadRefresh = 0f;
             _instance.ResetFoot();
+            _instance.ResetTownTraffic();
         }
 
         private int RealCars
@@ -201,7 +204,7 @@ namespace WildWasteland.Modules.Patrols
         internal void Tick()
         {
             if (_patrol == null) _patrol = GetComponent<Patrol>();
-            if (_patrol == null || !_patrol.InGame() || PatrolPersistence.Restoring) return;
+            if (_patrol == null || !_patrol.InGame() || PatrolPersistence.Restoring || Core.SaveSystem.Busy) return;
             MerchantSignals();
             if (!PatrolsModule.ConvoyEnabled.Value)
             {
@@ -232,6 +235,7 @@ namespace WildWasteland.Modules.Patrols
             ExcludeClearedBases();
             TrimPopulation(player);
             RefreshRoadRoutes();
+            PumpTownRoutes();
             PumpPatrolCalls();
             float load = PatrolsModule.TrafficLoadRange.Value;
             float unload = Mathf.Max(load + 100f, PatrolsModule.TrafficUnloadRange.Value);
@@ -240,6 +244,7 @@ namespace WildWasteland.Modules.Patrols
             for (int jn = 0; jn < _tickJourneys.Count; jn++)
             {
                 var journey = _tickJourneys[jn];
+                if (TownVisit(journey, seconds, player)) continue;
                 if(journey.merchant&&journey.waitSeconds>0f)journey.waitSeconds=Mathf.Max(TrafficLocations.FlatDistance(journey.position,TrafficSpace.World(player.position))<=100f?1f:0f,journey.waitSeconds-seconds);
                 if(!string.IsNullOrEmpty(journey.battle))continue;
                 if(journey.foot){FootStep(journey,seconds,player);continue;}
@@ -278,7 +283,7 @@ namespace WildWasteland.Modules.Patrols
                         journey.Follow(TrafficSpace.World(leader.transform.position), reach);
                         bool far = TrafficLocations.FlatDistance(journey.position, TrafficSpace.World(player.position)) > unload;
                         if (far) foreach (var c in live.Cars.Values) if (c != null && !(Vector3.Distance(c.transform.position, player.position) > unload)) { far = false; break; }
-                        if (far) Unload(journey, live);
+                        if (far && (!journey.townBound || journey.unseenSeconds >= 120f)) Unload(journey, live);
                     }
                     else
                     {
@@ -286,11 +291,15 @@ namespace WildWasteland.Modules.Patrols
                         if (allRetired) { Remove(journey); continue; }
                     }
                 }
-                if (!_live.ContainsKey(journey.id)&&journey.waitSeconds<=0f&&journey.TerrainRoute) journey.Advance(seconds);
+                if (!_live.ContainsKey(journey.id)&&journey.waitSeconds<=0f&&journey.TerrainRoute&&!TownPlanning(journey.id)) journey.Advance(seconds);
                 bool nearDestination = TrafficLocations.FlatDistance(journey.position, TrafficSpace.World(player.position)) <= load;
                 bool nearMember = false;
                 if (live != null) foreach (var c in live.Cars.Values) if (c != null && Vector3.Distance(c.transform.position, player.position) <= load) { nearMember = true; break; }
-                if (journey.Expire(seconds, nearDestination || nearMember, PatrolsModule.TrafficDestinationGrace.Value)) { Remove(journey); continue; }
+                if (journey.townBound)
+                {
+                    if (!journey.arrived) journey.unseenSeconds = SameMapArea(journey.position) ? 0f : journey.unseenSeconds + seconds;
+                }
+                else if (journey.Expire(seconds, nearDestination || nearMember, PatrolsModule.TrafficDestinationGrace.Value)) { Remove(journey); continue; }
                 if ((nearby>0||journey.roaming||journey.merchant||journey.freeRoute) && !_live.ContainsKey(journey.id) && nearDestination && !Convoy.AutosaveSoon(30f)
                     && RealCars < PatrolsModule.TrafficMaxRealCars.Value && EventBudget.Available(journey.id)>0)
                 {
@@ -349,12 +358,12 @@ namespace WildWasteland.Modules.Patrols
             {
                 bool convoy=role==1,roaming=role==2;int camps=TrafficLocations.NearbyCount(TrafficSpace.World(player.position),PatrolsModule.CampTrafficRange.Value);
                 int cap=roaming?RoamingCap:convoy?Mathf.Min(PatrolsModule.MaxConvoys.Value,camps):Mathf.Min(Mathf.Max(0,PatrolsModule.MaxPatrols.Value-RoamingCap),camps);
-                int count=_journeys.Count(j=>!j.merchant&&!j.foot&&j.convoy==convoy&&j.roaming==roaming);
+                int count=_journeys.Count(j=>!j.merchant&&!j.foot&&!j.townParked&&!j.townResident&&j.convoy==convoy&&j.roaming==roaming);
                 if(count<=cap)continue;
                 foreach(var journey in _journeys.ToArray())
                 {
                     if(count<=cap)break;
-                    if(journey.merchant||journey.foot||journey.freeRoute||journey.convoy!=convoy||journey.roaming!=roaming||!string.IsNullOrEmpty(journey.battle)||_live.ContainsKey(journey.id)||(cap>0&&TrafficLocations.FlatDistance(journey.position,TrafficSpace.World(player.position))<=PatrolsModule.TrafficLoadRange.Value))continue;
+                    if(journey.merchant||journey.foot||journey.townParked||journey.freeRoute||journey.convoy!=convoy||journey.roaming!=roaming||!string.IsNullOrEmpty(journey.battle)||_live.ContainsKey(journey.id)||(cap>0&&TrafficLocations.FlatDistance(journey.position,TrafficSpace.World(player.position))<=PatrolsModule.TrafficLoadRange.Value))continue;
                     Remove(journey);count--;
                 }
             }
@@ -362,6 +371,7 @@ namespace WildWasteland.Modules.Patrols
 
         private void Populate(bool convoy, int desired)
         {
+            if (convoy && TownTravel) { PopulateTownConvoys(); return; }
             var bases = TrafficLocations.Known.Values.Where(b=>!b.cleared&&b.faction!="Coyotes").ToArray();
             if(bases.Length<(convoy?2:1)){_departures.Remove(convoy);return;}
             int existing = _journeys.Count(j => !j.merchant&&!j.foot&&j.convoy == convoy&&!j.roaming)+_nearDepartures.Count(d=>d.Role==(convoy?1:0))+(convoy?0:CallReservations);
@@ -420,6 +430,7 @@ namespace WildWasteland.Modules.Patrols
             foreach (var journey in _journeys)
             {
                 if (journey.foot || journey.TerrainRoute || _routeJobs.ContainsKey(journey.id)
+                    || journey.townBound
                     || (_routeAttempts.TryGetValue(journey.id,out int attempted)&&attempted==TrafficRoads.Revision)) continue;
                 if(_live.TryGetValue(journey.id,out var live)&&!journey.convoy&&live.Cars.Values.Any(c=>c!=null&&c.GetComponent<TrafficAgent>()?.SeenUntil>Time.time))continue;
                 if(live!=null&&live.Building)continue;
@@ -693,6 +704,9 @@ namespace WildWasteland.Modules.Patrols
                 {
                     if (j.roadLegs == null || j.roadLegs.Length != j.route.Length) j.roadLegs = new bool[j.route.Length];
                     j.faction=TrafficFactions.Normalize(j.faction);if(!_instance._battles.Any(b=>b.id==j.battle))j.battle="";
+                    // Town routes are admitted only after final-ground certification. Their saved
+                    // approach/parking legs must survive reload (TerrainRoute itself is runtime-only).
+                    if (j.townBound) j.TerrainRoute = true;
                     if (j.walkers == null || !j.foot) j.walkers = new TrafficWalker[0];
                     if (j.foot) { j.battle=""; _instance._journeys.Add(j); continue; }   // walkers: no vehicle templates to thaw
                     foreach(var record in j.vehicles){record.faction=j.faction;var template=Thaw(record);if(template!=null)record.strength=TrafficBattles.Strength(template);}
