@@ -17,9 +17,9 @@ namespace WildWasteland.Modules.Towns
             {
                 string file = Path.Combine(directory, faction + ".txt");
                 if (!File.Exists(file))
-                    using (var stream = typeof(TownNames).Assembly.GetManifestResourceStream("Towns.Names." + faction + ".txt"))
+                    using (var stream = WildWasteland.Core.DiskResources.Open("Towns.Names." + faction + ".txt"))
                     {
-                        if (stream == null) throw new InvalidDataException("Missing embedded town names: " + faction);
+                        if (stream == null) throw new InvalidDataException("Missing packaged town names: " + faction);
                         using (var reader = new StreamReader(stream)) File.WriteAllText(file, reader.ReadToEnd());
                     }
                 var names = new List<string>(); var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

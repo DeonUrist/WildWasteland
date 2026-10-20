@@ -14,6 +14,7 @@ namespace WildWasteland.Modules.Patrols
         internal float Radius;
         internal bool CanTravel;
         internal bool MerchantSeeded;
+        internal bool Lane;   // (WW) a gas station parking lot: vehicles park one behind the other in its canopy lane, not side by side
         internal Vector3 Approach
         {
             get
@@ -128,7 +129,10 @@ namespace WildWasteland.Modules.Patrols
             return true;
         }
         private static Vector3 ParkPoint(TownStop stop, bool resident)
-        { return stop.Parking + Vector3.Cross(Vector3.up, stop.Heading) * (resident ? -6f : 5f); }
+        {
+            if (stop.Lane) return stop.Parking + stop.Heading * (resident ? -Towns.TownGasStation.LaneSpread : Towns.TownGasStation.LaneSpread);   // the bus deep under the canopy, visitors by its open end
+            return stop.Parking + Vector3.Cross(Vector3.up, stop.Heading) * (resident ? -6f : 5f);
+        }
         private static void AdoptTownRoute(TownDeparture pending)
         {
             var j = pending.Journey; var route = new List<Vector3>(); var roads = new List<bool>();

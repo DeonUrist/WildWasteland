@@ -21,7 +21,7 @@ namespace WildWasteland.Modules.NPC
         internal static ConfigEntry<float> TurnRate, CrouchChance, ReactionTime, FeelerLength, MeleeFeelerLength, FeelerAngle, AdvanceChance, AdvanceMin, AdvanceMax, StuckBackupSeconds, StuckMemorySeconds, MaxDistance;
         internal static ConfigEntry<int> FeelerCount, StuckGiveUpCount, Guesses;
         internal static ConfigEntry<bool> SensesEnabled, SensesLog, ShowGhosts, BailOutAware;
-        internal static ConfigEntry<float> SightCone, SightRange, DarkSightRange, NoticeSeconds, LoseSeconds, SearchSeconds, GhostTimeout, LookInterval, ArriveDistance, AllClearRange, StormSight, StormHearing, StormRadius, ShotRangePistol, ShotRangeSmg, ShotRangeRifle, ShotRangeSniper, ShotRangeShotgun, ShotRangeCrossbow, TauntRange, EngineMinRange, EngineMaxRange, EngineMinHp, EngineMaxHp, EngineIdleFactor, ThrowRange, BailOutAwareRange, ExplosionRange, BlastRange, PlayerShoutRange, ShoutCooldown, ShoutVolume;
+        internal static ConfigEntry<float> SightCone, SightRange, DarkSightRange, FootstepRadius, NoticeSeconds, LoseSeconds, SearchSeconds, GhostTimeout, LookInterval, ArriveDistance, AllClearRange, StormSight, StormHearing, StormRadius, ShotRangePistol, ShotRangeSmg, ShotRangeRifle, ShotRangeSniper, ShotRangeShotgun, ShotRangeCrossbow, TauntRange, EngineMinRange, EngineMaxRange, EngineMinHp, EngineMaxHp, EngineIdleFactor, ThrowRange, BailOutAwareRange, ExplosionRange, BlastRange, PlayerShoutRange, ShoutCooldown, ShoutVolume;
         internal static ConfigEntry<Key> ShoutKey, ShoutModifier;
         internal static ConfigEntry<string> ShoutBlocksButtons;
         internal static ConfigEntry<string> NpcShotRanges, HumanFactions, BlastPrefabs, Trackers, NightHours;
@@ -111,6 +111,7 @@ namespace WildWasteland.Modules.NPC
             SightCone = V("Detection", "SightCone", 100f, new ConfigDescription("Width of an NPC's field of view, degrees.", new AcceptableValueRange<float>(10f, 360f)), "Detection", "SightCone");
             SightRange = V("Detection", "SightRange", 100f, new ConfigDescription("How far an NPC sees in daylight, m (and at any light if your flashlight is on).", new AcceptableValueRange<float>(5f, 300f)), "Detection", "SightRange");
             DarkSightRange = V("Detection", "DarkSightRange", 5f, new ConfigDescription("How far an NPC sees in full darkness, m.", new AcceptableValueRange<float>(0f, 100f)), "Detection", "DarkSightRange");
+            FootstepRadius = V("Detection", "FootstepRadius", 5f, new ConfigDescription("An NPC hears you walking this close, m: with a clear line between you it notices you whatever way it faces and however dark it is (standing still makes no footsteps). 0 = off.", new AcceptableValueRange<float>(0f, 30f)), "Detection", "FootstepRadius");
             ScaleWithActors = V("Pathfinding", "ScaleWithActors", false, "With many NPCs around, each one thinks less often (saves CPU in big fights).", "Pathfinding", "ScaleWithActors");
             // ---------------- [Keys] ----------------
             // renamed from "NPC shout" / "NPC shout modifier": read the old values before the new keys are bound (and saved)
@@ -333,6 +334,7 @@ namespace WildWasteland.Modules.NPC
             NavEnabled = BrainEnabled;
             NavLog = SensesLog = BrainLog = VerboseLog;
             ShowGhosts = ShowNav;
+            PoiNav.Bind(cfg);   // (WW) POI navigation: pathfinding switch, setup / display developer options, editor key
         }
     }
 }

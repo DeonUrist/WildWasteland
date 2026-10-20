@@ -26,7 +26,7 @@ namespace WildWasteland.Modules.PlayerBody
                 try
                 {
                     if (!File.Exists(path))
-                        using (var source = typeof(CharacterPortraits).Assembly.GetManifestResourceStream("PlayerBody.CharacterPortraits." + Names[i] + ".png"))
+                        using (var source = WildWasteland.Core.DiskResources.Open("PlayerBody.CharacterPortraits." + Names[i] + ".png"))
                             if (source != null) using (var output = File.Create(path)) source.CopyTo(output);
                     if (!File.Exists(path)) continue;
                     var modified = File.GetLastWriteTimeUtc(path);

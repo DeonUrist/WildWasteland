@@ -63,7 +63,7 @@ namespace WildWasteland.Modules.Patrols.WarRig
             if (_zombie == null) Core.Log.Warn("[Patrols] War Rig POI: Zombie_Runner prefab is missing.");
             if (_deadLugnut == null) Core.Log.Warn("[Patrols] War Rig POI: Lugnut_Dead prefab is missing.");
             if (_template != null) { VehicleBuildCache.Warm(_template); return; }
-            using (var stream = typeof(PoiEncounter).Assembly.GetManifestResourceStream("Patrols.DefaultTemplates.Truck_War_Rig.json"))
+            using (var stream = WildWasteland.Core.DiskResources.Open("Patrols.DefaultTemplates.Truck_War_Rig.json"))
             using (var reader = new StreamReader(stream))
             {
                 var file = TemplateFile.FromJson(reader.ReadToEnd());

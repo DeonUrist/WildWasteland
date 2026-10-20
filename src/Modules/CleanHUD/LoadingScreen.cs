@@ -54,10 +54,10 @@ namespace WildWasteland.Modules.CleanHUD
                 InstallArtwork();
                 string config = Path.Combine(_dir, "screens.json");
                 if (!File.Exists(config))
-                    using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("CleanHUD.LoadingScreens.screens.json"))
+                    using (var stream = WildWasteland.Core.DiskResources.Open("CleanHUD.LoadingScreens.screens.json"))
                     using (var reader = new StreamReader(stream)) File.WriteAllText(config, reader.ReadToEnd());
                 var tips = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("CleanHUD.LoadingScreens.screens.json"))
+                using (var stream = WildWasteland.Core.DiskResources.Open("CleanHUD.LoadingScreens.screens.json"))
                 using (var reader = new StreamReader(stream)) ReadTips(reader.ReadToEnd(), tips);
                 _tips = tips; // Missing entries in an older custom JSON still receive the new default tips.
                 ReadTips(File.ReadAllText(config), tips);
@@ -109,11 +109,11 @@ namespace WildWasteland.Modules.CleanHUD
         {
             if (_defaultArtInstalled) return;
             var assembly = Assembly.GetExecutingAssembly(); const string prefix = "CleanHUD.LoadingScreens.";
-            foreach (string resource in assembly.GetManifestResourceNames())
+            foreach (string resource in WildWasteland.Core.DiskResources.Names)
             {
                 if (!resource.StartsWith(prefix, StringComparison.Ordinal) || !resource.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) continue;
                 string path = Path.Combine(_dir, resource.Substring(prefix.Length));
-                if (!File.Exists(path)) using (var input = assembly.GetManifestResourceStream(resource)) using (var output = File.Create(path)) input.CopyTo(output);
+                if (!File.Exists(path)) using (var input = WildWasteland.Core.DiskResources.Open(resource)) using (var output = File.Create(path)) input.CopyTo(output);
             }
             _defaultArtInstalled = true;
         }

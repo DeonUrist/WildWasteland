@@ -30,6 +30,10 @@ namespace WildWasteland.Modules.Patrols
         private static GameObject _holder;
         private static bool _warmRequested = true, _reported;
         private const int ReserveCount = 2;
+        private const double LoadingBudgetMs = 12;
+        private static readonly System.Diagnostics.Stopwatch LoadTime = new System.Diagnostics.Stopwatch(), LoadSlice = new System.Diagnostics.Stopwatch();
+        private static double _loadWorkMs;
+        private static bool Loading { get { return Core.SaveBus.Busy && !Core.SaveBus.Saving && !Core.SaveSystem.Busy; } }
         internal static bool Warming { get { return _warmRequested || _active != null || Pending.Count > 0; } }
 
         internal static float LoadFraction
@@ -102,7 +106,32 @@ namespace WildWasteland.Modules.Patrols
 
         internal static bool Step()
         {
-            if (!PatrolsModule.Running || Core.Scheduler.FrameMs >= Core.Scheduler.FrameBudgetMs) return false;
+            if (Loading || Core.Scheduler.FrameMs >= Core.Scheduler.FrameBudgetMs) return false;
+            return StepCore();
+        }
+
+        internal static void LoadBurst()
+        {
+            if (!PatrolsModule.Running || !Loading || !Warming) return;
+            // Loading spends its own bounded slice; normal reserve refills retain the shared gameplay budget.
+            if (!LoadTime.IsRunning)
+            {
+                LoadTime.Start();
+                Core.Log.Always("[Patrols] Vehicle load preparation started: " + LoadingBudgetMs + " ms/frame budget; " + ReserveCount + " reserves per variant.");
+            }
+            LoadSlice.Restart();
+            while (LoadSlice.Elapsed.TotalMilliseconds < LoadingBudgetMs && StepCore()) { }
+            _loadWorkMs += LoadSlice.Elapsed.TotalMilliseconds;
+            if (!Warming)
+            {
+                Core.Log.Always("[Patrols] Vehicle load preparation finished: " + Entries.Count + " structural variant(s); " + LoadTime.ElapsedMilliseconds + " ms elapsed, " + (long)_loadWorkMs + " ms work.");
+                LoadTime.Reset(); _loadWorkMs = 0;
+            }
+        }
+
+        private static bool StepCore()
+        {
+            if (!PatrolsModule.Running) return false;
             if (_warmRequested)
             {
                 if (Core.GameRefs.NewGOArrayList == null) return false;
@@ -212,6 +241,7 @@ namespace WildWasteland.Modules.Patrols
 
         internal static void Reset()
         {
+            LoadTime.Reset(); LoadSlice.Reset(); _loadWorkMs = 0;
             if (_active != null && _active.Build != null) ((IDisposable)_active.Build).Dispose();
             _active = null; Pending.Clear(); Entries.Clear();
             if (_holder != null) UnityEngine.Object.Destroy(_holder);

@@ -17,6 +17,7 @@ namespace WildWasteland.Modules.Towns
         internal string[] Spawners;
         internal string[] Markers;
         internal TownPopulation.NativeBudget[] Budgets;
+        internal string[] Strip = new string[0];   // (WW) a camp's perimeter fences/walls, switched off on town clones
     }
     internal sealed class TownAssets
     {
@@ -96,11 +97,15 @@ namespace WildWasteland.Modules.Towns
                         CarShells.Add(new CarShell { Mesh = mesh, Materials = renderer.sharedMaterials });
                     }
                     // Favor the ruined building and container compound over roadside vehicle piles.
-                    bool merchant = prefab != null && prefab.name == "Camp_10";
-                    if (prefab == null || (!merchant && !prefab.name.StartsWith("Building_", StringComparison.Ordinal) && !(wreck && (prefab.name == "Wreck_8" || prefab.name == "Wreck_7"))) || Buildings.ContainsKey(prefab.name)) continue;
-                    if (!merchant && !wreck && allowed.Count > 0 && !allowed.Contains(prefab.name)) continue;
+                    // (WW) every native camp may stand in a town too (its perimeter walls stripped); camps with a merchant are merchant lots
+                    bool camp = prefab != null && prefab.name.StartsWith("Camp_", StringComparison.Ordinal);
+                    bool merchant = prefab != null && (prefab.name == "Camp_10" || camp && HasMerchant(prefab));
+                    if (prefab == null || (!merchant && !camp && !prefab.name.StartsWith("Building_", StringComparison.Ordinal) && !(wreck && (prefab.name == "Wreck_8" || prefab.name == "Wreck_7"))) || Buildings.ContainsKey(prefab.name)) continue;
+                    if (!merchant && !wreck && !camp && allowed.Count > 0 && !allowed.Contains(prefab.name)) continue;
+                    if (camp && BossCamp(prefab)) { Log.Always("[Towns] camp " + prefab.name + " left out of towns: boss camp"); continue; }
                     var spec = Measure(prefab); if (spec == null) continue;
-                    spec.Wreck = wreck; spec.Crane = prefab.name == "Building_4"; spec.Merchant = merchant;
+                    spec.Wreck = wreck; spec.Crane = prefab.name == "Building_4"; spec.Merchant = merchant; spec.Camp = camp;
+                    if (merchant) TownLot.Merchants.Add(prefab.name);
                     foreach (var child in prefab.GetComponentsInChildren<Transform>(true)) if (child.name.IndexOf("crane_big", StringComparison.OrdinalIgnoreCase) >= 0) spec.Crane = true;
                     spec.Bake = TownBakeData.Load(spec, margin, cell);
                     if (spec.Bake == null || !spec.Bake.FindEntry(spec))
@@ -119,11 +124,17 @@ namespace WildWasteland.Modules.Towns
                     foreach (var t in prefab.GetComponentsInChildren<Transform>(true)) if (t.name == "mapIcon") markers.Add(Path(prefab.transform, t));
                     spec.Frontages = new[] { TownFrontage.Make(spec, 0), TownFrontage.Make(spec, 1) };
                     spec.TiltedFrontages = new[] { TownFrontage.Make(spec, 0, -9), TownFrontage.Make(spec, 0, 9), TownFrontage.Make(spec, 1, -9), TownFrontage.Make(spec, 1, 9) };
-                    Buildings.Add(prefab.name, new BuildingAsset { Prefab = prefab, Spec = spec, Spawners = paths.ToArray(), Markers = markers.ToArray(), Budgets = budgets.ToArray() });
+                    if (camp) foreach (var b in budgets) if (b.Kind == 6) { Log.Always("[Towns] camp " + prefab.name + " left out of towns: boss spawner"); goto nextPrefab; }
+                    var strip = camp ? Walls(prefab, spec) : new string[0];
+                    if (strip.Length > 0) Log.Always("[Towns] camp " + prefab.name + " in towns without its walls: " + string.Join(", ", strip));
+                    Buildings.Add(prefab.name, new BuildingAsset { Prefab = prefab, Spec = spec, Spawners = paths.ToArray(), Markers = markers.ToArray(), Budgets = budgets.ToArray(), Strip = strip });
                     Log.Always("[Towns] entrance " + spec.Name + ": local=" + spec.Entry + ", outward=" + spec.Outward + "; " + spec.Bake.Source);
+                nextPrefab:;
                 }
             }
             WallKit.Load(NativePoiPrefabs);
+            bool anyMerchant = false; foreach (var b in Buildings.Values) if (b.Spec.Merchant) anyMerchant = true;
+            if (!anyMerchant) Log.Warn("[Towns] no merchant camp in the town catalog (Camp_10 needs a bake): Coyotes towns keep only their merchant bus.");
             if (Buildings.Count == 0) throw new InvalidOperationException("No configured Building_N prefabs with solid geometry in the current graph.");
             if (allowed.Count > 0) foreach (string name in allowed)
                 if (!Buildings.ContainsKey(name)) throw new InvalidOperationException("Configured building missing from current graph: " + name);
@@ -181,6 +192,7 @@ namespace WildWasteland.Modules.Towns
                     else if (prefab.CompareTag("Scrapyard")) faction = TownFaction.Scrapyard;
                     else if (prefab.CompareTag("Coyotes")) faction = TownFaction.Coyotes;
                     else continue;
+                    NativePoiPopulation.Catalog(prefab, faction);
                     if (faction == TownFaction.Scrapyard || faction == TownFaction.Coyotes)
                     {
                         // Keep accompanying Yard Hounds separate so a base cannot roll only dogs.
@@ -196,6 +208,79 @@ namespace WildWasteland.Modules.Towns
                     List<GameObject> pool; if (!Population.TryGetValue(faction, out pool)) Population.Add(faction, pool = new List<GameObject>());
                     if (!pool.Contains(prefab)) pool.Add(prefab);
                 }
+        }
+        // (WW) a camp with a merchant (a merchant NPC among its spawn lists or a node named after one)
+        private static bool HasMerchant(GameObject camp)
+        {
+            foreach (var proxy in camp.GetComponentsInChildren<PlayMakerArrayListProxy>(true))
+                if (proxy.preFillGameObjectList != null) foreach (var p in proxy.preFillGameObjectList)
+                    if (p != null && p.name.IndexOf("Merchant", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            foreach (var t in camp.GetComponentsInChildren<Transform>(true)) if (t.name.IndexOf("merchant", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+        private bool BossCamp(GameObject camp)
+        {
+            if (IsBoss(camp)) return true;
+            foreach (var fsm in camp.GetComponentsInChildren<PlayMakerFSM>(true)) if (fsm.FsmName == "BossDoor" || fsm.FsmName == "BossUI") return true;
+            foreach (var proxy in camp.GetComponentsInChildren<PlayMakerArrayListProxy>(true))
+                if (proxy.preFillGameObjectList != null) foreach (var p in proxy.preFillGameObjectList) if (p != null && IsBoss(p)) return true;
+            return false;
+        }
+        // The perimeter of a camp: long thin fence / wall / gate / barricade pieces standing on the ground in the outer band of its
+        // footprint (railings on platforms and anything in the middle stay). Topmost matching nodes only, as paths from the root.
+        private static string[] Walls(GameObject camp, BuildingSpec spec)
+        {
+            var root = camp.transform; var found = new List<Transform>();
+            float ground = float.PositiveInfinity; var boxes = new Dictionary<Transform, Bounds>();
+            foreach (var t in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (t == root) continue;
+                Bounds b; if (!Box(root, t, out b)) continue;
+                boxes[t] = b; ground = Mathf.Min(ground, b.min.y);
+            }
+            foreach (var kv in boxes)
+            {
+                var t = kv.Key; string n = t.name.ToLowerInvariant();
+                if (!(n.Contains("fence") || n.Contains("wall") || n.Contains("gate") || n.Contains("barricade") || n.Contains("palisade") || n.Contains("barrier"))) continue;
+                if (n.Contains("small") || n.Contains("rail") || n.Contains("door") || n.Contains("ladder")) continue;
+                bool under = false; for (var p = t.parent; p != null && p != root; p = p.parent) if (found.Contains(p)) { under = true; break; }
+                if (under) continue;
+                var b = kv.Value;
+                if (b.min.y > ground + 1.2f) continue;                                   // up on a platform or roof
+                float wide = Mathf.Max(b.size.x, b.size.z), thin = Mathf.Min(b.size.x, b.size.z);
+                if (wide < 2.5f || thin > 2f) continue;                                    // a long thin piece, not a hut
+                float dx = Mathf.Abs(b.center.x - spec.Center.x) / Mathf.Max(1f, spec.HalfX), dz = Mathf.Abs(b.center.z - spec.Center.z) / Mathf.Max(1f, spec.HalfZ);
+                if (Mathf.Max(dx, dz) < .6f) continue;                                    // inside the camp, not its edge
+                found.RemoveAll(f => f.IsChildOf(t));
+                found.Add(t);
+            }
+            var paths = new string[found.Count];
+            for (int i = 0; i < paths.Length; i++) paths[i] = Path(root, found[i]);
+            return paths;
+        }
+        // root-local bounds of a node's own renderer mesh and solid colliders
+        private static bool Box(Transform root, Transform t, out Bounds bounds)
+        {
+            bounds = new Bounds(); bool any = false;
+            var shapes = new List<Bounds>();
+            var mf = t.GetComponent<MeshFilter>(); if (mf != null && mf.sharedMesh != null) shapes.Add(mf.sharedMesh.bounds);
+            foreach (var c in t.GetComponents<Collider>())
+            {
+                if (c.isTrigger) continue;
+                var mesh = c as MeshCollider; var box = c as BoxCollider;
+                if (mesh != null && mesh.sharedMesh != null) shapes.Add(mesh.sharedMesh.bounds); else if (box != null) shapes.Add(new Bounds(box.center, box.size));
+            }
+            if (shapes.Count == 0) return false;
+            var matrix = Matrix4x4.identity;
+            for (var p = t; p != root; p = p.parent) matrix = Matrix4x4.TRS(p.localPosition, p.localRotation, p.localScale) * matrix;
+            matrix = Matrix4x4.Scale(root.localScale) * matrix;
+            foreach (var shape in shapes)
+                for (int i = 0; i < 8; i++)
+                {
+                    var q = matrix.MultiplyPoint3x4(shape.center + Vector3.Scale(shape.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1)));
+                    if (!any) { bounds = new Bounds(q, Vector3.zero); any = true; } else bounds.Encapsulate(q);
+                }
+            return any;
         }
         private static bool RoadInput(Generator generator)
         {

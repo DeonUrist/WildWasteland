@@ -23,8 +23,8 @@ namespace WildWasteland.Modules.Patrols
         internal static void Load()
         {
             _defaults.Clear(); var asm = Assembly.GetExecutingAssembly();
-            foreach (string resource in asm.GetManifestResourceNames().Where(n => n.StartsWith(Prefix, StringComparison.Ordinal) && n.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
-                using (var stream = asm.GetManifestResourceStream(resource)) using (var reader = new StreamReader(stream)) _defaults[resource.Substring(Prefix.Length, resource.Length - Prefix.Length - 5)] = reader.ReadToEnd();
+            foreach (string resource in WildWasteland.Core.DiskResources.Names.Where(n => n.StartsWith(Prefix, StringComparison.Ordinal) && n.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
+                using (var stream = WildWasteland.Core.DiskResources.Open(resource)) using (var reader = new StreamReader(stream)) _defaults[resource.Substring(Prefix.Length, resource.Length - Prefix.Length - 5)] = reader.ReadToEnd();
             foreach (var pair in _defaults) { string path = EditorStore.SafePath(Folder, pair.Key + ".json"); if (!File.Exists(path)) EditorStore.AtomicWrite(path, pair.Value); }
             MigrateLegacy(); Refresh(true);
         }

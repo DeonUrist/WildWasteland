@@ -30,6 +30,7 @@ namespace WildWasteland.Modules.Towns
         private static bool _havePlayer;
         internal static void Install(TownsModule module)
         {
+            NativePoiPopulation.Install(module);
             var senses = typeof(Services).Assembly.GetType("WildWasteland.Modules.NPC.Senses", true);
             var agent = senses.GetNestedType("Agent", BindingFlags.NonPublic);
             _owner = agent.GetField("Owner"); _ambush = agent.GetField("AmbushDist"); _hostile = agent.GetField("Hostile");
@@ -192,7 +193,7 @@ namespace WildWasteland.Modules.Towns
                 Log.Always("[Towns] interior hearing: " + (_near >= 3 ? "3+ enemies within 50 m; sounds ignored" : _near + " enemies within 50 m; nearby hearing enabled"));
         }
         internal static void Clear()
-        { Groups.Clear(); Pending.Clear(); Members.Clear(); Fresh.Clear(); Names.Clear(); _next = _near = 0; _havePlayer = false; }
+        { NativePoiPopulation.Clear(); Groups.Clear(); Pending.Clear(); Members.Clear(); Fresh.Clear(); Names.Clear(); _next = _near = 0; _havePlayer = false; }
         internal static void Load(string path)
         { RestoreNames(File.Exists(path) ? File.ReadAllLines(path) : new string[0]); }
         internal static void RestoreNames(string[] names)

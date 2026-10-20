@@ -108,9 +108,15 @@ namespace WildWasteland.Modules.PlayerBody
             l.Value("Can climb here", YesNo(ModAPI.PlayerCanTraverse));
             l.Value("Last climb", string.IsNullOrEmpty(ClimbingController.LastResult) ? "-" : ClimbingController.LastResult);
             l.Value("Last rejection", string.IsNullOrEmpty(ClimbingController.LastReject) ? "-" : ClimbingController.LastReject);
+            l.Value("Last ladder", string.IsNullOrEmpty(LadderController.LastResult) ? "-" : LadderController.LastResult);
             l.Heading("Settings");
             l.Toggle(PlayerBodyModule.ClimbingOn);
             l.Toggle(PlayerBodyModule.JumpTriggersClimbing);
+            l.Toggle(PlayerBodyModule.Ladders);
+            l.Entry(PlayerBodyModule.LadderSpeed);
+            l.Entry(PlayerBodyModule.LadderOffset);
+            l.Entry(PlayerBodyModule.LadderEyeForward);
+            l.Entry(PlayerBodyModule.LadderNeckBack);
             l.Entry(PlayerBodyModule.ClimbKey);
         }
 

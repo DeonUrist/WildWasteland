@@ -84,7 +84,7 @@ namespace WildWasteland.Modules.NPC
             }
             const string prefix = "NPC.WomenOfWasteland.";
             var assembly = typeof(WomenFeature).Assembly;
-            foreach (var resource in assembly.GetManifestResourceNames())
+            foreach (var resource in WildWasteland.Core.DiskResources.Names)
             {
                 if (!resource.StartsWith(prefix, StringComparison.Ordinal)) continue;
                 string file = resource.Substring(prefix.Length), relative;
@@ -96,7 +96,7 @@ namespace WildWasteland.Modules.NPC
                 Directory.CreateDirectory(Path.GetDirectoryName(target));
                 string legacy = Path.Combine(Assets.LegacyPluginDir("WomenOfWasteland"), relative);
                 if (File.Exists(legacy)) File.Copy(legacy, target);
-                else using (var input = assembly.GetManifestResourceStream(resource))
+                else using (var input = WildWasteland.Core.DiskResources.Open(resource))
                     using (var output = File.Create(target)) input.CopyTo(output);
             }
         }

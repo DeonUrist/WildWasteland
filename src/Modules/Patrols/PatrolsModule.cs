@@ -207,6 +207,7 @@ namespace WildWasteland.Modules.Patrols
             Scheduler.Interval(this, "Patrols.Prefab cache", .5f, Prefabs.Refresh).RunNow();
             Scheduler.Sliced(this, "Patrols.Build", 1000, BuildQueue.Step);
             Scheduler.Sliced(this, "Patrols.Vehicle build cache", 500, VehicleBuildCache.Step);
+            Scheduler.EveryFrame(this, "Patrols.Vehicle load preparation", VehicleBuildCache.LoadBurst);
             TrafficCompass.Clear();
             Scheduler.Interval(this, "Compass markers", .5f, TrafficCompass.Tick);
             Scheduler.EveryFrame(this, "Patrol.Tick", () => { if (_patrol != null) _patrol.Tick(); });

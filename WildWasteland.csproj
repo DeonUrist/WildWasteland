@@ -27,10 +27,13 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="src\**\*.cs" />
-    <!-- Embedded resources: same naming as build.sh: src/Modules/<Module>/Embedded/<path> -> "<Module>.<path with / as .>" -->
-    <EmbeddedResource Include="src\Modules\*\Embedded\**\*">
-      <LogicalName>$([System.String]::Copy('%(RecursiveDir)%(Filename)%(Extension)').Replace('/','\').Replace('\Embedded\','.').Replace('\','.'))</LogicalName>
-    </EmbeddedResource>
+    <!-- Source folders retain their authoring paths; all payloads ship as external files, never DLL resources. -->
+    <Content Include="src\Modules\*\Embedded\**\*" Exclude="src\Modules\*\Embedded\**\*.md">
+      <ResourceName>$([System.String]::Copy('%(Identity)').Replace('/','\').Replace('src\Modules\','').Replace('\Embedded\','.').Replace('\','.'))</ResourceName>
+      <RuntimePath>$([System.String]::Copy('%(Identity)').Replace('/','\').Replace('src\Modules\','').Replace('\Embedded\','\').Replace('NPC\WomenOfWasteland\','NPC\').Replace('CleanHUD\LoadingScreens\','LoadingScreens\').Replace('PlayerBody\Portraits\','PlayerBody\LegacyPortraits\').Replace('PlayerBody\CharacterPortraits\','PlayerBody\Portraits\').Replace('PlayerBody\Textures\female_kick.png','PlayerBody\Models\Player2_female_kick.png'))</RuntimePath>
+      <Link>RuntimeAssets\%(RuntimePath)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib"><HintPath>$(ManagedDir)\mscorlib.dll</HintPath><Private>false</Private></Reference>
@@ -72,7 +75,13 @@
     <Reference Include="MapMagic"><HintPath>$(ManagedDir)\MapMagic.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Den.Tools"><HintPath>$(ManagedDir)\Den.Tools.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
-  <Target Name="DeployToGame" AfterTargets="Build" Condition="'$(Deploy)' == 'true'">
+  <Target Name="StageRuntimeAssetIndex" AfterTargets="Build" BeforeTargets="DeployToGame">
+    <WriteLinesToFile File="$(OutDir)RuntimeAssets\asset-index.tsv" Lines="@(Content->'%(ResourceName)&#x9;%(RuntimePath)')" Overwrite="true" WriteOnlyWhenDifferent="true" Encoding="UTF-8" />
+  </Target>
+  <Target Name="DeployToGame" AfterTargets="Build" DependsOnTargets="StageRuntimeAssetIndex" Condition="'$(Deploy)' == 'true'">
+    <!-- Preserve editable files. Release packaging owns fresh installations and deliberate default replacement. -->
+    <Copy SourceFiles="@(Content)" DestinationFiles="@(Content->'$(GameDir)\BepInEx\plugins\WildWasteland\%(RuntimePath)')" Condition="!Exists('$(GameDir)\BepInEx\plugins\WildWasteland\%(Content.RuntimePath)')" />
+    <Copy SourceFiles="$(OutDir)RuntimeAssets\asset-index.tsv" DestinationFolder="$(GameDir)\BepInEx\plugins\WildWasteland" />
     <Copy SourceFiles="$(OutDir)$(AssemblyName).dll" DestinationFolder="$(GameDir)\BepInEx\plugins\WildWasteland" />
     <Message Importance="high" Text="Deployed $(AssemblyName).dll to $(GameDir)\BepInEx\plugins\WildWasteland. md5 it and check the Loading line." />
   </Target>

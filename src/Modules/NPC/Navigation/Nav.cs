@@ -25,6 +25,9 @@ namespace WildWasteland.Modules.NPC
     // (shared by every NPC heading there) for FieldSeconds. Outside any footprint nothing runs.
     internal static partial class Nav
     {
+        // (WW) the roots of every known structure (POI navigation instances follow them)
+        internal static void Roots(List<Transform> into) { into.Clear(); foreach (var t in _structures) if (t.Root != null) into.Add(t.Root); }
+
         internal sealed class Structure
         {
             public Transform Root; public string Name;
@@ -856,6 +859,8 @@ namespace WildWasteland.Modules.NPC
             next = goal; pathLeft = 0f; LastReason = "";
             _tS = null; _tFrom = _tGoal = _tExit = _tPick = -1; _tD0 = float.NaN; _tRelaxed = false;
             if (!On) return false;
+            // (WW) pre-recorded POI navigation (every surface, ladders, climbs) for human NPCs inside a POI that has it
+            { bool poiResult; if (PoiNav.TryNext(owner, pos, goal, out next, out pathLeft, out poiResult)) return poiResult; next = goal; pathLeft = 0f; }
             // footprints overlap (4 m margins): of the structures containing the NPC take the one whose floor is nearest its feet
             Structure s = null; int from = -1; float bestDy = float.MaxValue;
             foreach (var t in _structures)

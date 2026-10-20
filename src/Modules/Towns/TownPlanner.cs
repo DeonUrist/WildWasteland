@@ -51,7 +51,7 @@ namespace WildWasteland.Modules.Towns
         private static void BuildLayout(TownPlan plan, GenerationInput input, System.Random random, int count)
         {
             var lots = new List<TownLot>(); var specs = new List<BuildingSpec>(); var sides = new List<int>();
-            float[] cursor = { 0, 0 }; bool crane = false; int wrecks = 0;
+            float[] cursor = { 0, 0 }; bool crane = false, big = false; int wrecks = 0, camps = 0;
             var frontiers = new[] { new Dictionary<int, float>(), new Dictionary<int, float>() };
             for (int i = 0; i < count; i++)
             {
@@ -63,13 +63,18 @@ namespace WildWasteland.Modules.Towns
                 }
                 bool wantWreck = wrecks < 2 && (i == 3 || count >= 8 && i == count - 1);
                 var choices = new List<BuildingSpec>();
-                foreach (var candidate in input.Buildings) if (!candidate.Merchant && (!crane || !candidate.Crane) && candidate.Wreck == wantWreck) choices.Add(candidate);
-                if (choices.Count == 0) foreach (var candidate in input.Buildings) if (!candidate.Merchant && (!crane || !candidate.Crane) && !candidate.Wreck) choices.Add(candidate);
+                // (WW) camps mix in (at most two per town, one of them large)
+                foreach (var candidate in input.Buildings) if (!candidate.Merchant && (!crane || !candidate.Crane) && candidate.Wreck == wantWreck && Fits(candidate, big, camps)) choices.Add(candidate);
+                if (choices.Count == 0) foreach (var candidate in input.Buildings) if (!candidate.Merchant && (!crane || !candidate.Crane) && !candidate.Wreck && Fits(candidate, big, camps)) choices.Add(candidate);
                 if (i != 2 && choices.Count == 0) break;
                 var spec = i == 2 ? TownParking.Spec : choices[random.Next(choices.Count)];
-                if (i == 0 && plan.Faction == TownFaction.Coyotes && random.Next(2) == 0)
-                    foreach (var candidate in input.Buildings) if (candidate.Merchant) { spec = candidate; break; }
-                crane |= spec.Crane; if (spec.Wreck) wrecks++;
+                // (WW) a Coyotes town ALWAYS has a merchant lot when any merchant camp is in the catalog
+                if (i == 0 && plan.Faction == TownFaction.Coyotes)
+                {
+                    var merchants = new List<BuildingSpec>(); foreach (var candidate in input.Buildings) if (candidate.Merchant) merchants.Add(candidate);
+                    if (merchants.Count > 0) spec = merchants[random.Next(merchants.Count)];
+                }
+                crane |= spec.Crane; if (spec.Wreck) wrecks++; if (spec.Camp) camps++; big |= spec.Camp && spec.Big;
                 int row = i < 2 ? i : cursor[0] <= cursor[1] ? 0 : 1, side = row == 0 ? -1 : 1;
                 int tilt = i == 2 ? 0 : random.Next(3) - 1;
                 float yaw = (row == 0 ? 0 : 180) - Mathf.Atan2(spec.Outward.x, spec.Outward.z) * Mathf.Rad2Deg + tilt * 9;
@@ -119,6 +124,7 @@ namespace WildWasteland.Modules.Towns
             plan.Lots = lots.ToArray();
             TownParking.Outside(plan);
         }
+        private static bool Fits(BuildingSpec c, bool big, int camps) { return !c.Camp || camps < 2 && (!big || !c.Big); }
         internal static Vector3 Entrance(TownLot lot)
         { return lot.LocalPosition + Quaternion.Euler(0, lot.Yaw, 0) * lot.Entry; }
         internal static void Measure(MatrixWorld h, float scale, float x, float z, float radius,

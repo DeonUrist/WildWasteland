@@ -32,6 +32,7 @@ namespace WildWasteland.Modules.Towns
             internal TownPlan Plan;
             internal GenerationInput Input;
             internal int Epoch;
+            internal List<TownGasStation.Request> GasStation;
 
         }
         private sealed class Live
@@ -46,6 +47,9 @@ namespace WildWasteland.Modules.Towns
         }
         private readonly TownSettings _settings = new TownSettings();
         private readonly TownNames _names = new TownNames();
+        private TownGasStation _gasStation;
+        private PoiDressing _dressing;
+        private PoiDresser _dresser;
         private readonly Dictionary<Graph, Registration> _graphs = new Dictionary<Graph, Registration>();
         private readonly ConcurrentDictionary<TileData, Capture> _captures = new ConcurrentDictionary<TileData, Capture>();
         private readonly ConcurrentQueue<Capture> _planned = new ConcurrentQueue<Capture>();
@@ -70,8 +74,11 @@ namespace WildWasteland.Modules.Towns
         {
             if (_running) return;
             _running = true; TownsApi.Provider = this;
+            _gasStation = new TownGasStation(_settings);
             _names.Load(); _names.Begin(_records);
             TownBakeBridge.Install(this);
+            _dressing = new PoiDressing(); _dressing.Install(this);
+            _dresser = new PoiDresser(_dressing); _dresser.Install(this, _settings);
             InteriorPopulation.Install(this);
             TownMarkers.Install(this);
 
@@ -90,6 +97,7 @@ namespace WildWasteland.Modules.Towns
             Scheduler.EveryFrame(this, "Load construction", LoadBurst).Wants = LoadWanted;
             Scheduler.Interval(this, "Spawner state", .5f, Refresh, Phase.Update, true);
             Scheduler.Interval(this, "Town discovery", .25f, TownMarkers.Refresh, Phase.Update, true);
+            Scheduler.Interval(this, "Gas stations", .25f, _gasStation.Tick, Phase.Update, true);
             foreach (var old in _resume)
             {
                 if (old.Tile == null || old.Tile.mapMagic == null || old.Tile.mapMagic.graph == null) continue;
@@ -156,10 +164,12 @@ namespace WildWasteland.Modules.Towns
                 // An unseen draft stays natural; it never invents a differently positioned town.
                 if (data.isDraft && input.Saved == null) input.Chance = 0;
                 if (Services.Poi == null) input.Chance = 0;
+                if (Services.PoiNavSetup) input.Chance = 0;   // NPC POI pathfinding setup: no new towns while it runs
                 if (input.Saved != null && input.Saved.HasTown)
                     foreach (var lot in input.Saved.Lots) if (!lot.IsParking && !lot.Skipped && !registration.Assets.Buildings.ContainsKey(lot.Prefab))
                         throw new InvalidOperationException("Saved town requires unavailable prefab " + lot.Prefab + "; restore its catalog before loading.");
-                _captures[data] = new Capture { Registration = registration, Input = input, Epoch = _epoch };
+                bool startingChunk = tile.coord.x == 0 && tile.coord.z == 0 && !_settings.PoiNearSpawn.Value;
+                _captures[data] = new Capture { Registration = registration, Input = input, Epoch = _epoch, GasStation = _gasStation.Capture(tile, data, key, startingChunk) };
             }
             catch (Exception e) { Log.Warn("[Towns] skipped terrain preparation: " + e.Message); }
         }
@@ -183,6 +193,7 @@ namespace WildWasteland.Modules.Towns
                 }
                 var assets = capture.Registration.Assets;
                 var roads = new TownWorldRoads(assets.Roads == null ? null : data.ReadOutletProduct(assets.Roads), data);
+                TownGasStation.Plan(capture.GasStation, data, avoid, assets, capture.Input.Saved, roads, stop);
                 capture.Plan = TownPlanner.Make(capture.Input, data, data.heights, avoid, roads, stop);
                 if (capture.Plan == null || !capture.Plan.HasTown || (stop != null && stop.stop))
                 { if (capture.Input.Progress != null) capture.Input.Progress.Finish(capture.Plan == null ? "Cancelled" : capture.Plan.Decision == "chance" ? "No town selected for this block" : capture.Plan.Decision); return; }
@@ -206,6 +217,8 @@ namespace WildWasteland.Modules.Towns
             if (data != null) TownPoiSettings.Forget(data);
             if (data == null || !_captures.TryRemove(data, out capture)) return;
             if (!_running || _blocked || data.isDraft || tile == null || capture.Epoch != _epoch || (stop != null && stop.stop)) return;
+            try { _gasStation.Applied(capture.GasStation, tile, capture.Registration.Assets, _dressing); }
+            catch (Exception e) { Log.Warn("[Towns] gas station placement stopped: " + e.Message); }
             if (capture.Input.Error != null) { Log.Warn("[Towns] skipped generation: " + capture.Input.Error); return; }
             if (capture.Plan == null) return;
             try
@@ -409,6 +422,7 @@ namespace WildWasteland.Modules.Towns
         }
         private void Moved(TerrainTile tile)
         {
+            if (_gasStation != null) _gasStation.Moved(tile);
             Remove(tile, true);
             string key = ChunkKey(tile.mapMagic.graph.random.Seed, tile.coord.x, tile.coord.z);
             if (tile.main != null) ForgetMoved(tile.main.data, key);
@@ -479,12 +493,15 @@ namespace WildWasteland.Modules.Towns
             foreach (var record in _records.Values)
             {
                 var plan = record.Plan;
-                if (!plan.HasTown || !plan.Owned || plan.Condition != TownCondition.Inhabited || plan.PathsVersion < 3) continue;
+                // (WW) a Coyotes town always takes part (its merchant bus must be there), others once their faction holds it
+                if (!plan.HasTown || plan.PathsVersion < 3) continue;
+                if (plan.Faction != TownFaction.Coyotes && (!plan.Owned || plan.Condition != TownCondition.Inhabited)) continue;
+                bool lane = _settings.GasStationParking.Value && _gasStation != null && _gasStation.Available;
                 foreach (var lot in plan.Lots) if (lot.IsParking && !lot.Skipped)
                 {
                     into.Add(new Patrols.TownStop { Id = plan.Key, Name = plan.Name, Faction = plan.Faction.ToString(),
                         Parking = plan.World(lot.LocalPosition), Heading = Quaternion.Euler(0, plan.Yaw + lot.Yaw, 0) * Vector3.forward,
-                        Center = plan.WorldCenter, Radius = plan.Radius, MerchantSeeded = plan.MerchantSeeded, CanTravel = plan.AccessPath.Length > 1,
+                        Center = plan.WorldCenter, Radius = plan.Radius, MerchantSeeded = plan.MerchantSeeded, CanTravel = plan.AccessPath.Length > 1, Lane = lane,
                         RoadApproach = plan.AccessPath.Length > 1 ? (Vector3?)plan.World(plan.AccessPath[plan.AccessPath.Length - 1]) : null }); break;
                 }
             }
@@ -539,6 +556,7 @@ namespace WildWasteland.Modules.Towns
             try
             {
                 foreach (var live in _sites) TownFactory.Capture(live.Site, _records[live.Site.Plan.Key], live.Registration.Assets);
+                try { _gasStation.Save(slot); } catch (Exception e) { Log.Warn("[Towns] gas station spawner states not saved: " + e.Message); }
                 TownSaveRecord.Save(slot, _records);
             }
             catch (Exception e) { SaveBus.ReportFailure("Towns save failed: " + e.Message); Block("saving", e); }
@@ -547,11 +565,12 @@ namespace WildWasteland.Modules.Towns
         public override void OnLoadBegin(string slot)
         {
             ClearSites(); _resume.Clear(); _epoch++; _blocked = false;
+            if (_gasStation != null) _gasStation.Load(slot);
             try { _records = string.IsNullOrEmpty(slot) ? new Dictionary<string, TownRecord>(StringComparer.Ordinal) : TownSaveRecord.Load(slot, SavePath(slot)); _names.Begin(_records); InteriorPopulation.DiscoverExisting(); }
             catch (Exception e) { _records.Clear(); Block("loading (saved data retained on disk)", e); }
         }
         public void NewWorld()
-        { ClearSites(); _resume.Clear(); _epoch++; _blocked = false;  _records.Clear(); _names.Begin(_records); InteriorPopulation.DiscoverExisting(); }
+        { ClearSites(); if (_gasStation != null) _gasStation.NewWorld(); _resume.Clear(); _epoch++; _blocked = false;  _records.Clear(); _names.Begin(_records); InteriorPopulation.DiscoverExisting(); }
         private void StateChanged(string previous, string current)
         { if (current == "setSeed" || current == "Start") NewWorld(); }
         public override void OnWorldReady() { Refresh(); }
@@ -563,7 +582,7 @@ namespace WildWasteland.Modules.Towns
             // Keep graph registrations until shutdown: the native generator graph can survive scene changes.
         }
         private void ClearSites()
-        { foreach (var live in _sites) TownFactory.Destroy(live.Site); _sites.Clear(); _captures.Clear();  TownPoiSettings.Clear(); InteriorPopulation.Clear(); _next = 0; _waitingForTowns = false; TownRoadBridge.Clear(); TownLoading.Clear("World changed"); }
+        { if (_dressing != null) _dressing.Clear(); if (_gasStation != null) _gasStation.Clear(true); foreach (var live in _sites) TownFactory.Destroy(live.Site); _sites.Clear(); _captures.Clear();  TownPoiSettings.Clear(); InteriorPopulation.Clear(); _next = 0; _waitingForTowns = false; TownRoadBridge.Clear(); TownLoading.Clear("World changed"); }
         private void Block(string stage, Exception e)
         { _blocked = true; TownLoading.Failed(e.Message); Log.Error("[Towns] blocked during " + stage + "; no replacement layout will be invented", e); }
         private static void Undo(Registration registration)
@@ -589,13 +608,24 @@ namespace WildWasteland.Modules.Towns
                 _resume.Add(live);
             }
             ClearSites(); _captures.Clear();
+            if (_dressing != null) _dressing.Dispose(); _dressing = null; _dresser = null;
 
             foreach (var r in _graphs.Values) Undo(r); _graphs.Clear();
             if (_staging != null) UnityEngine.Object.Destroy(_staging); _staging = null;
-            Scheduler.RemoveAll(this); Hooks.RemoveAll(this); TownBakeBridge.Uninstall(this);
+            Scheduler.RemoveAll(this); Hotkeys.RemoveAll(this); Hooks.RemoveAll(this); TownBakeBridge.Uninstall(this);
             if (ReferenceEquals(TownsApi.Provider, this)) TownsApi.Provider = null;
         }
-        public override IEnumerable<ToolPage> ToolPages() { return null; }
+        public override IEnumerable<ToolPage> ToolPages()
+        { return new ToolPage[] { new ActionPage(this, ToolGroups.Debug, "Gas stations", DrawGasStation) { DebugOnly = true, IsTool = true },
+            new ActionPage(this, ToolGroups.Debug, "POI dresser", DrawDresser) { DebugOnly = true, IsTool = true } }; }
+        private void DrawDresser(ToolLayout l)
+        { if (_dresser != null) _dresser.DrawPage(l, _settings); else l.Entry(_settings.PoiDresserKey); }
+        private void DrawGasStation(ToolLayout l)
+        {
+            if (_gasStation != null) _gasStation.Draw(l);
+            else { l.Entry(_settings.DesertGasStationChance); l.Entry(_settings.TestGasStation); l.Entry(_settings.GasStationScale); }
+        }
+        public override void OnOriginShift(Vector3 delta) { if (_gasStation != null) _gasStation.Shift(delta); if (_dresser != null) _dresser.Shift(delta); }
         internal void Draw(ToolLayout layout)
         {
             layout.Value("Towns", _sites.Count.ToString()); layout.Value("Saved chunk decisions", _records.Count.ToString());

@@ -34,17 +34,17 @@ namespace WildWasteland.Modules.Quests
 
             var assembly = typeof(QuestContent).Assembly;
             const string prefix = "Quests.Defaults.";
-            foreach (string resource in assembly.GetManifestResourceNames())
+            foreach (string resource in WildWasteland.Core.DiskResources.Names)
             {
                 if (!resource.StartsWith(prefix, StringComparison.Ordinal)) continue;
                 string target = Path.Combine(destination, resource.Substring(prefix.Length));
                 if (File.Exists(target)) continue;
                 Directory.CreateDirectory(destination);
-                using (var input = assembly.GetManifestResourceStream(resource))
+                using (var input = WildWasteland.Core.DiskResources.Open(resource))
                 using (var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write)) input.CopyTo(output);
                 yield return target;
             }
-            using (var index = assembly.GetManifestResourceStream("Quests.voice-files.txt"))
+            using (var index = WildWasteland.Core.DiskResources.Open("Quests.voice-files.txt"))
             {
                 if (index == null) yield break;
                 using (var reader = new StreamReader(index))
@@ -54,7 +54,7 @@ namespace WildWasteland.Modules.Quests
                     {
                         string target = Path.Combine(destination, relative.Replace('/', Path.DirectorySeparatorChar));
                         if (File.Exists(target)) continue;
-                        using (var input = assembly.GetManifestResourceStream("Quests." + relative.Replace('/', '.')))
+                        using (var input = WildWasteland.Core.DiskResources.Open("Quests." + relative.Replace('/', '.')))
                         {
                             if (input == null) continue;
                             Directory.CreateDirectory(Path.GetDirectoryName(target));

@@ -99,6 +99,7 @@ namespace WildWasteland.Modules.NPC
         private static readonly Dictionary<int, string> _prefabOf = new Dictionary<int, string>();
         private static float _nextMaint, _nextEngine, _nextLightLog, _lightCache, _lightAt = -10f;
         private static GameObject _player, _playerHead, _playerCar; private static Transform _flashlight; private static float _nextPlayerFind;
+        private static Vector3 _playerPrev; private static bool _playerMoving;   // (WW) footsteps: the player moved on foot since the last tick (horizontal speed over 0.3 m/s)
         private static bool _playerInStorm;
         private static PlayMakerFSM _inCarFsm, _grabFsm; private static FsmGameObject _inCarVar, _grabItemVar; private static string _grabState;
         private static Rigidbody _thrown; private static float _thrownRest, _thrownSince;
@@ -162,6 +163,7 @@ namespace WildWasteland.Modules.NPC
             float baseLook = Mathf.Max(0.05f, NpcModule.LookInterval.Value);
             int looks = 0, lookCap = Mathf.Max(1, Mathf.CeilToInt(_agents.Count * dt / baseLook) + 1);
             Vector3 ppos = _player.transform.position;
+            { Vector3 mv = ppos - _playerPrev; mv.y = 0f; float sp = dt > 0f ? mv.magnitude / dt : 0f; _playerMoving = sp > 0.3f && sp < 30f && _playerCar == null; _playerPrev = ppos; }   // (WW) footsteps: a teleport / origin jump does not count, nor driving
             float sr = Mathf.Max(NpcModule.SightRange.Value, NpcModule.DarkSightRange.Value), f2 = Mathf.Max(80f, sr + 20f), f4 = Mathf.Max(150f, sr + 50f), far2 = f2 * f2, far4 = f4 * f4;
             foreach (var kv in _agents)
             {
@@ -376,8 +378,11 @@ namespace WildWasteland.Modules.NPC
                 }
             }
             if (a.CaveWeb) { if ((tp - a.T.position).sqrMagnitude > 9f) return false; range = Mathf.Max(range, 3f); }
-            if (d > range) { if (tracked) a.SightMiss = "outside light/storm sight range"; return false; }
-            if (!tracked && Vector3.Angle(a.T.forward, flat) > Mathf.Clamp(ConeOf(a), 10f, 360f) * 0.5f) return false;
+            // (WW) footsteps: the player walking within [Detection] FootstepRadius is heard whatever way the NPC faces and whatever the light,
+            // as long as the usual sight lines are clear (the same obstruction check: a wall still hides him)
+            bool steps = isPlayer && _playerMoving && d <= NpcModule.FootstepRadius.Value && !a.CaveWeb;
+            if (d > range && !steps) { if (tracked) a.SightMiss = "outside light/storm sight range"; return false; }
+            if (!tracked && !steps && Vector3.Angle(a.T.forward, flat) > Mathf.Clamp(ConeOf(a), 10f, 360f) * 0.5f) return false;
             Transform troot = target.transform.root;
             Vector3 head, body;
             Points(target, isPlayer, out head, out body);

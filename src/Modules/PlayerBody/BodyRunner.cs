@@ -36,6 +36,8 @@ namespace WildWasteland.Modules.PlayerBody
             Crawling.Reset();
             WheelArms.Clear();
             ClimbingController.ResetInstance();
+            LadderController.ResetInstance();
+            NpcTraversal.Clear();
             DestroyBody();
             CarSeat.Detach();
             ThirdPerson.Off();
@@ -73,6 +75,7 @@ namespace WildWasteland.Modules.PlayerBody
         public static void CharacterChanged()
         {
             ClimbingController.StopInstance();
+            LadderController.StopInstance();
             try
             {
                 DestroyBody();

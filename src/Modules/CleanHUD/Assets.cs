@@ -83,7 +83,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (Embedded.TryGetValue(name, out t) && t != null) return t;
             if (Missing.Contains(name)) return null;
             var asm = Assembly.GetExecutingAssembly();
-            using (var s = asm.GetManifestResourceStream("CleanHUD." + name + ".png"))
+            using (var s = WildWasteland.Core.DiskResources.Open("CleanHUD." + name + ".png"))
             {
                 if (s == null) { Missing.Add(name); return null; }
                 var buf = new byte[s.Length];
@@ -233,7 +233,7 @@ namespace WildWasteland.Modules.CleanHUD
         {
             MapIcons.Preload();
             const string prefix = "CleanHUD.";
-            foreach (string name in Assembly.GetExecutingAssembly().GetManifestResourceNames())
+            foreach (string name in WildWasteland.Core.DiskResources.Names)
                 if (name.StartsWith(prefix, StringComparison.Ordinal) && name.EndsWith(".png", StringComparison.Ordinal))
                     Tex(name.Substring(prefix.Length, name.Length - prefix.Length - 4));
             var white = White; VGradient(.75f); VGradient(.72f); CompassLine(); CompassShadow(); Caret();

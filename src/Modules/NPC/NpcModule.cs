@@ -103,6 +103,15 @@ namespace WildWasteland.Modules.NPC
 
             Hotkeys.Register(this, ShoutKey, Senses.ShoutPressed, Senses.ShoutAllowed);
 
+            // (WW) POI navigation: setup mode + bake queue, link traversals, the data view and its editor
+            Scheduler.EveryFrame(this, "PoiNav.Setup", PoiNavSetup.Tick);
+            Scheduler.EveryFrame(this, "PoiNav.Traverse", PoiNavTraverse.Tick, Phase.EarlyFixedUpdate);
+            Scheduler.EveryFrame(this, "PoiNav.View", PoiNavView.Tick);
+            Scheduler.EveryFrame(this, "PoiNav.Editor", PoiNavEditor.Tick);
+            Scheduler.EveryFrame(this, "PoiNav.EditorCamera", PoiNavEditor.CameraTick, Phase.LateUpdateLast);
+            Scheduler.Gui(this, "PoiNav.EditorGui", PoiNavEditor.Draw, PoiNavEditor.WantsGui);
+            Hotkeys.Register(this, PoiNav.EditorKey, PoiNavEditor.Toggle, PoiNavEditor.CanToggle, true);
+
             Running = true;
             Log.LogInfo("NPC Overhaul 1.9.15 port started");
         }
@@ -123,6 +132,7 @@ namespace WildWasteland.Modules.NPC
                 _subscribed = false;
             }
             if (Services.Npc is NpcApi) Services.Npc = null;
+            Step("POI navigation", PoiNavShutdown);
             Step("Women of Wasteland", WomenFeature.Shutdown);
             // hand every NPC back to the game, in reverse dependency order
             Step("Pounce", Pounce.Shutdown);
@@ -141,6 +151,8 @@ namespace WildWasteland.Modules.NPC
             Instance = null;
         }
 
+        static void PoiNavShutdown() { PoiNavEditor.Close(true); PoiNavView.Unhook(); PoiNavSetup.Reset(); PoiNav.Reset(); }
+
         static void Step(string what, Action a)
         {
             try { a(); } catch (Exception e) { Core.Log.Error("[NPC] shutdown " + what, e); }
@@ -151,6 +163,7 @@ namespace WildWasteland.Modules.NPC
         {
             Aim.OnSceneLoaded(); WeaponRanges.OnSceneLoaded(); VanillaEvents.OnSceneLoaded(); Brain.OnSceneLoaded(); Senses.OnSceneLoaded(); Nav.OnSceneLoaded(); Idle.OnSceneLoaded();
             Passthrough.OnSceneLoaded(); Burrow.OnSceneLoaded(); Pounce.OnSceneLoaded(); Webs.OnSceneLoaded(); Nests.OnSceneLoaded(); Ambush.OnSceneLoaded(); DogBite.OnSceneLoaded();
+            PoiNavEditor.Close(true); PoiNavSetup.Reset(); PoiNav.Reset();
         }
 
         public override void OnSceneLoaded(Scene scene, LoadSceneMode mode) { ResetAll(); Gungirl.OnSceneLoaded(); }
@@ -170,6 +183,7 @@ namespace WildWasteland.Modules.NPC
             Step("Pounce.Shift", () => Pounce.Shift(delta));
             Step("Nests.Shift", () => Nests.Shift(delta));
             Step("Webs.Shift", () => Webs.Shift(delta));
+            Step("PoiNav.Shift", () => { PoiNav.Shift(delta); PoiNavSetup.Shift(delta); PoiNavEditor.Shift(delta); });
         }
 
         // ------------------------------------------------------------------ Patrols events (ex Apocapatrol postfixes)

@@ -456,7 +456,8 @@ namespace WildWasteland.Modules.NPC
             if (n.OnNav)
             {
                 hopLeg = Nav.HopAhead(n.T.position, navNext);         // the route climbs a low lip / kerb (a hop edge) right ahead
-                if (!NavLegClear(n, navNext, hopLeg)) { n.OnNav = false; vetoed = true; }
+                // (WW) a POI route already went round everything solid: no leg gate (it used to drop the route at the ladder / a prop corner)
+                if (!PoiNav.Guiding(n.Owner) && !NavLegClear(n, navNext, hopLeg)) { n.OnNav = false; vetoed = true; }
                 else if (hopLeg) TryHop(n, now, true);
             }
             if (trace != null)
@@ -696,6 +697,7 @@ namespace WildWasteland.Modules.NPC
             float driven = n.BlkDriven, covered = mv.magnitude;
             BlkReset(n, now);
             if (driven < 0.6f || covered >= driven * NpcModule.BlockedRatio.Value) return false;
+            if (PoiNav.Guiding(n.Owner)) return false;     // (WW) on a POI route its own watchdog slides the body on (no step back, no feelers)
             if (NpcModule.BrainLog.Value) NpcModule.Log.LogInfo("Brain: " + n.Owner.name + " blocked (covered " + covered.ToString("0.0") + " of " + driven.ToString("0.0") + " m)" + (n.OnNav ? " on its map route" : ""));
             OnStuck(n);
             return true;
@@ -713,7 +715,7 @@ namespace WildWasteland.Modules.NPC
         {
             float want = Mathf.Atan2(toWp.x, toWp.z) * Mathf.Rad2Deg, chosen = want;
             n.Side = 0; n.Flipped = false; n.HasWaypoint = false;
-            if (n.Col != null)
+            if (n.Col != null && !PoiNav.Guiding(n.Owner))   // (WW) a POI route: straight at its waypoint (the route is walkable; a stuck body is slid on)
             {
                 var b = n.Col.bounds;
                 float r = Mathf.Clamp(Mathf.Min(b.extents.x, b.extents.z), 0.15f, 0.35f);
@@ -757,6 +759,7 @@ namespace WildWasteland.Modules.NPC
         // progress on a map route (path length left): 2.5 s without getting nearer -> a hop; 5 s -> full feelers for 3 s, then the map again
         private static void NavProgress(Npc n, float pathLeft, float now)
         {
+            if (PoiNav.Guiding(n.Owner)) { n.BestDist = pathLeft; n.NoProgressSince = now; return; }   // (WW) no hops / map-off on a POI route
             if (Senses.Blown(n.Owner) || pathLeft < n.BestDist - 0.5f) { n.BestDist = Mathf.Min(n.BestDist, pathLeft); n.NoProgressSince = now; return; }
             float stall = now - n.NoProgressSince;
             if (stall >= 5f * R)
@@ -1632,6 +1635,7 @@ namespace WildWasteland.Modules.NPC
         }
 
         // (1.4.0) Burrow: a hunter dives (held still, no thinking) / is up again (the stuck and progress judgements start over)
+        internal static bool IsRanged(GameObject owner) { var n = Get(owner); return n != null && n.Ranged; }
         internal static bool SetTravel(GameObject owner, bool on)
         {
             var n = Get(owner);
@@ -1812,19 +1816,24 @@ namespace WildWasteland.Modules.NPC
                 if (z > n.RunZ) n.RunZ = z;    // (1.4.0) its run speed: how long a run would take (Burrow's travel time)
                 if (z <= 0f) return true;      // the Idle / attack states' "stop": vanilla
                 if (n.Rb == null) return true;
+                Vector3 poiDir = Vector3.zero; bool poi = false;
                 float speed = n.Mode == Mode.BackUp ? -Mathf.Min(z, 2.5f) : (n.Mode == Mode.Hold || n.Mode == Mode.Rest || n.Mode == Mode.Search || (n.Mode == Mode.Cover && n.CoverArrived)) ? 0f : z * n.SpeedScale;
                 if (n.Mode == Mode.Chase || n.Mode == Mode.Advance || n.Mode == Mode.Cover)
                 {
                     // deliberate movement only: no heading yet (the first think after the alert) -> stand; facing away from the heading -> slow
                     // down while turning (full speed within 30 deg, 40 % at 90, 10 % from 120: a big turn is made nearly on the spot, not as an arc)
-                    if (!n.HasHeading) speed = 0f;
+                    // (WW) on a POI route the body goes straight along it at full speed; only the turn it shows is smoothed
+                    poi = speed > 0f && PoiNav.SteerDir(n.Owner, n.T.position, out poiDir);
+                    if (poi) { if (poiDir == Vector3.zero) speed = 0f; else { n.Heading = Mathf.Atan2(poiDir.x, poiDir.z) * Mathf.Rad2Deg; n.HasHeading = true; } }
+                    else if (!n.HasHeading) speed = 0f;
                     else if (n.StrafeDev == 0f) speed *= TurnSpeedFactor(Mathf.Abs(Mathf.DeltaAngle(n.T.eulerAngles.y, n.Heading)));
                 }
                 if (n.Body != null && n.SpeedCap > 0f) speed = Mathf.Clamp(speed, -n.SpeedCap, n.SpeedCap);   // (1.1.1) no faster than the clip can carry the feet
                 if (n.BoostUntil > 0f && speed > 0f) { if (Time.time < n.BoostUntil) speed *= n.Boost; else n.BoostUntil = 0f; }   // (1.7.0) a nest alarm
                 n.CmdSpeed = Mathf.Max(0f, speed);
                 // (1.1.1) strafing round a small detour: the legs go along the heading while the body faces the target
-                Vector3 fwd = n.StrafeDev != 0f && n.HasHeading ? Quaternion.Euler(0f, n.Heading, 0f) * Vector3.forward : n.T.forward;
+                if (poi) { if (!PoiNav.Walk(n.Owner, n.CmdSpeed)) { Vector3 pv = poiDir * speed; pv.y = n.Rb.velocity.y; n.Rb.velocity = pv; } return false; }   // (WW) carried along the POI route
+                Vector3 fwd = poi ? poiDir : n.StrafeDev != 0f && n.HasHeading ? Quaternion.Euler(0f, n.Heading, 0f) * Vector3.forward : n.T.forward;
                 Vector3 v = fwd * speed;
                 v.y = n.Rb.velocity.y;
                 n.Rb.velocity = v;

@@ -3,8 +3,7 @@
 # Usage: MANAGED=<Apocalypter_Data/Managed> BEPCORE=<BepInEx/core> sh build.sh [outdir]
 # The assembly is named after the -out file, so the file is always <outdir>/WildWasteland.dll.
 # Sources are every .cs under src/ (same set as the csproj glob), so no file list to keep in sync.
-# Embedded resources: every file under src/Modules/<Module>/Embedded/ is embedded with the logical name
-#   <Module>.<path below Embedded with / replaced by .>   e.g. Embedded/DefaultTemplates/Bike.json -> Patrols.DefaultTemplates.Bike.json
+# Runtime assets retain their authoring source folders but ship separately in RuntimeAssets, with a startup index.
 set -e
 cd "$(dirname "$0")"
 M=${MANAGED:-/e/SteamLibrary/steamapps/common/Apocalypter/Apocalypter_Data/Managed}
@@ -13,11 +12,16 @@ OUTDIR=${1:-bin}
 mkdir -p "$OUTDIR"
 SRC=$(find src -name '*.cs' | sort)
 [ -n "$SRC" ] || { echo "build.sh: no .cs files under src/" >&2; exit 1; }
-RES=""
-for f in $(find src/Modules -path '*/Embedded/*' -type f | sort); do
-  mod=$(echo "$f" | cut -d/ -f3)
-  rel=$(echo "$f" | sed -e "s#^src/Modules/$mod/Embedded/##" -e 's#/#.#g')
-  RES="$RES -resource:$f,$mod.$rel"
+mkdir -p "$OUTDIR/RuntimeAssets"
+: > "$OUTDIR/RuntimeAssets/asset-index.tsv"
+find src/Modules -path '*/Embedded/*' ! -name '*.md' -type f | sort | while IFS= read -r f; do
+  mod=$(printf '%s' "$f" | cut -d/ -f3)
+  rel=${f#src/Modules/$mod/Embedded/}
+  key=$(printf '%s' "$mod.$rel" | tr / .)
+  target=$(printf '%s' "$mod/$rel" | sed -e 's#^NPC/WomenOfWasteland/#NPC/#' -e 's#^CleanHUD/LoadingScreens/#LoadingScreens/#' -e 's#^PlayerBody/Portraits/#PlayerBody/LegacyPortraits/#' -e 's#^PlayerBody/CharacterPortraits/#PlayerBody/Portraits/#' -e 's#^PlayerBody/Textures/female_kick.png$#PlayerBody/Models/Player2_female_kick.png#')
+  mkdir -p "$OUTDIR/RuntimeAssets/$(dirname "$target")"
+  cp "$f" "$OUTDIR/RuntimeAssets/$target"
+  printf '%s\t%s\n' "$key" "$target" >> "$OUTDIR/RuntimeAssets/asset-index.tsv"
 done
 REFS=""
 for d in mscorlib System System.Core netstandard \
@@ -30,5 +34,5 @@ for d in mscorlib System System.Core netstandard \
   NWH.Common NWH.VehiclePhysics2 NWH.WheelController MapMagic Den.Tools \
   Assembly-CSharp Assembly-CSharp-firstpass; do REFS="$REFS -r:$M/$d.dll"; done
 mcs -nostdlib -noconfig -target:library -langversion:latest -optimize+ -nowarn:649,414,169,219,162,618,108,114,67,168,1717,429,665 \
-  -out:"$OUTDIR/WildWasteland.dll" $REFS -r:$B/BepInEx.dll -r:$B/0Harmony.dll -r:$B/Mono.Cecil.dll -r:$B/MonoMod.Utils.dll $RES $SRC
+  -out:"$OUTDIR/WildWasteland.dll" $REFS -r:$B/BepInEx.dll -r:$B/0Harmony.dll -r:$B/Mono.Cecil.dll -r:$B/MonoMod.Utils.dll $SRC
 echo "built $OUTDIR/WildWasteland.dll"

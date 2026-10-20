@@ -187,7 +187,7 @@ namespace WildWasteland.Modules.Towns
                 int kind = asset.Budgets[n].Kind;
                 if (kind == 4)
                 {
-                    if (item.IsMerchant && Get(f, "OnOff") == 0) f.enabled = site.Plan.Owned && site.Plan.Faction == TownFaction.Coyotes;
+                    if (item.IsMerchant && Get(f, "OnOff") == 0) f.enabled = site.Plan.Faction == TownFaction.Coyotes;   // (WW) a Coyotes town always keeps its merchant
                     continue; // Authored shopkeepers and paid sale stock retain native placement/counts.
                 }
                 if (kind == 6) { Set(f, "OnOff", 1); f.enabled = false; continue; }
@@ -235,6 +235,35 @@ namespace WildWasteland.Modules.Towns
             }
 
         }
+        // (WW) one stand-alone native spawner (the gas station's): exactly `count` spawns, actors drawn from `pool` (null = items)
+        internal static void Force(PlayMakerFSM f, int count, List<GameObject> pool)
+        {
+            if (f == null) return;
+            if (count <= 0 || Get(f, "OnOff") > 0 || Get(f, "numberEnd") > 0 && Get(f, "number") >= Get(f, "numberEnd")) { Set(f, "OnOff", 1); f.Fsm.SetState("spawned"); return; }
+            if (pool != null)
+                foreach (var proxy in f.GetComponents<PlayMakerArrayListProxy>())
+                    if (proxy.referenceName != null && proxy.referenceName.StartsWith("EnemySpawn", StringComparison.Ordinal))
+                    {
+                        proxy.preFillGameObjectList = new List<GameObject>(pool); proxy.preFillCount = pool.Count;
+                        if (proxy.arrayList != null) { proxy.arrayList.Clear(); foreach (var prefab in pool) proxy.arrayList.Add(prefab); }
+                    }
+            foreach (var state in f.FsmStates) foreach (var action in state.Actions)
+            {
+                var roll = action as RandomInt;
+                if (roll != null && roll.storeResult != null && roll.storeResult.Name == "numberEnd")
+                { roll.min = new FsmInt(count); roll.max = new FsmInt(count); roll.inclusiveMax = true; }
+                var select = action as SelectRandomInt;
+                if (pool != null && select != null && select.storeInt != null && select.storeInt.Name == "index")
+                {
+                    select.ints = new FsmInt[pool.Count]; select.weights = new FsmFloat[pool.Count];
+                    for (int i = 0; i < pool.Count; i++) { select.ints[i] = new FsmInt(i); select.weights[i] = new FsmFloat(1); }
+                }
+            }
+            Set(f, "numberEnd", count);
+            if (!f.enabled) f.enabled = true;
+        }
+        internal static int Read(PlayMakerFSM f, string name) { return f == null ? 0 : Get(f, name); }
+        internal static void Write(PlayMakerFSM f, string name, int value) { if (f != null) Set(f, name, value); }
         private static int Get(PlayMakerFSM f, string name) { var v = f.FsmVariables.FindFsmInt(name); return v == null ? 0 : v.Value; }
         private static void Set(PlayMakerFSM f, string name, int value) { var v = f.FsmVariables.FindFsmInt(name); if (v != null) v.Value = value; }
     }

@@ -70,9 +70,9 @@ namespace WildWasteland.Modules.Towns
                 {
                     if (!File.Exists(path))
                     {
-                        using (var embedded = typeof(TownWallKit).Assembly.GetManifestResourceStream("Towns.Perimeter." + file))
+                        using (var embedded = WildWasteland.Core.DiskResources.Open("Towns.Perimeter." + file))
                         {
-                            if (embedded == null) throw new InvalidDataException("Missing embedded gate texture: " + file);
+                            if (embedded == null) throw new InvalidDataException("Missing packaged gate texture: " + file);
                             Directory.CreateDirectory(Path.GetDirectoryName(path));
                             using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write)) embedded.CopyTo(output);
                         }

@@ -13,6 +13,16 @@ namespace WildWasteland.Core
     {
         /// <summary>Animation framework (PlayerBody module, ex Apocaplayer.ModAPI). Null when PlayerBody is off.</summary>
         public static IAnimationApi Animation;
+        /// <summary>(NPC) "Setup POI pathfinding" developer mode is on: Towns plans no new towns while it is (saved towns are kept).</summary>
+        public static volatile bool PoiNavSetup;
+        /// <summary>(PlayerBody ladders) the ladder trigger the player climbs right now, else null. NPCs follow / wait for him there.</summary>
+        public static Collider PlayerLadder;
+        /// <summary>(PlayerBody ladders) while PlayerLadder is set: the horizontal direction from the rung line to the player (his climbing side).</summary>
+        public static Vector3 PlayerLadderSide;
+        /// <summary>(PlayerBody ladders) sliding down a ladder: the held pose (fraction of the climb cycle) and the top speed, m/s. NPCs slide the same.</summary>
+        public static float LadderSlidePhase = 0f, LadderSlideSpeed = 6f;
+        /// <summary>(NPC POI navigation) feet of the NPCs on ladders right now (refreshed every physics step): the player cannot climb through them.</summary>
+        public static readonly List<Vector3> LadderClimbers = new List<Vector3>();
         /// <summary>NPC AI (NPC module, ex NPCAI.Api + Nav structures). Null when NPC is off.</summary>
         public static INpcApi Npc;
         public static INpcAppearance NpcAppearance;
@@ -194,6 +204,23 @@ namespace WildWasteland.Core
         /// <summary>Drives an NPC/turret Animator with the player animation set. Null when another owner animates it.</summary>
         IAnimatedCharacter Attach(Animator animator);
         IAnimatedCharacter Find(Animator animator);
+        /// <summary>(WW) A scripted traversal animation on a humanoid NPC Animator: "Ladder" (looping; Phase in cycles, one cycle = two
+        /// rungs) or "ClimbWaist" / "ClimbHigh" (Phase 0..1 of the clip). Suspends that Animator's ModAPI graph until Dispose. Null when the
+        /// rig is not humanoid or the animation is missing.</summary>
+        INpcTraversalAnimation BeginNpcTraversal(Animator animator, string kind);
+        /// <summary>(WW) The ladder animation: height climbed per cycle (two rungs) and hips-to-rung distance in the source, metres.</summary>
+        float LadderCycleRise { get; }
+        float LadderToeDepth { get; }
+    }
+
+    /// <summary>(WW) One NPC's ladder / climb animation lease (see IAnimationApi.BeginNpcTraversal).</summary>
+    public interface INpcTraversalAnimation
+    {
+        bool Valid { get; }
+        float Phase { get; set; }
+        /// <summary>Natural length of one cycle / of the climb clip, seconds.</summary>
+        float Length { get; }
+        void Dispose();
     }
 
     /// <summary>Mirror of Apocaplayer.ModAPI.Character.</summary>

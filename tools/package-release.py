@@ -24,8 +24,30 @@ def main():
     if digest(args.base.read_bytes()) != args.base_sha256.lower():
         raise SystemExit("Base archive does not match the published SHA256")
 
+    # The same external payload paths as the Windows/cloud builds; no personal config/save files are collected.
+    payloads, index, destinations = {}, [], set()
+    aliases = (("NPC/WomenOfWasteland/", "NPC/"), ("CleanHUD/LoadingScreens/", "LoadingScreens/"),
+               ("PlayerBody/Portraits/", "PlayerBody/LegacyPortraits/"),
+               ("PlayerBody/CharacterPortraits/", "PlayerBody/Portraits/"),
+               ("PlayerBody/Textures/female_kick.png", "PlayerBody/Models/Player2_female_kick.png"))
+    for source in sorted((repo / "src/Modules").glob("*/Embedded/**/*")):
+        if not source.is_file() or source.suffix.lower() == ".md":
+            continue
+        module, relative = source.relative_to(repo / "src/Modules").as_posix().split("/Embedded/", 1)
+        key, target = module + "." + relative.replace("/", "."), module + "/" + relative
+        for old, new in aliases:
+            if target.startswith(old):
+                target = new + target[len(old):]
+                break
+        name = "WildWasteland/" + target
+        if name.lower() in destinations:
+            raise ValueError("Duplicate runtime asset destination: " + name)
+        destinations.add(name.lower())
+        payloads[name] = source.read_bytes()
+        index.append(key + "\t" + target)
+    payloads["WildWasteland/asset-index.tsv"] = ("\n".join(index) + "\n").encode("utf-8")
     runtime_roots = {"theme", "PlayerBody", "NPC", "Guns", "HUD", "CleanHUD",
-                     "Patrols", "Survival", "Weather", "LoadingScreens", "Quests"}
+                     "Patrols", "Survival", "Weather", "LoadingScreens", "Quests", "Towns"}
 
     def runtime(name):
         path = PurePosixPath(name)
@@ -35,6 +57,8 @@ def main():
             raise ValueError("Unexpected installation root: " + name)
         if name.endswith("/"):
             return False
+        if name in payloads:
+            return True
         if path.name in {"WildWasteland.dll", "icon.png"} and len(path.parts) == 2:
             return True
         if len(path.parts) < 3 or path.parts[1] not in runtime_roots:
@@ -52,6 +76,7 @@ def main():
     dll = args.dll.read_bytes()
     replacements = {"WildWasteland/WildWasteland.dll": dll,
                     "WildWasteland/icon.png": (repo / "icon.png").read_bytes()}
+    replacements.update(payloads)
     for name in ("camp.png", "building.png"):
         replacements["WildWasteland/CleanHUD/Icons/" + name] = (repo / "src/Modules/CleanHUD/Icons" / name).read_bytes()
     artwork = repo / "src/Modules/CleanHUD/Embedded/LoadingScreens"

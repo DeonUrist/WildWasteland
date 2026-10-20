@@ -22,12 +22,32 @@ namespace WildWasteland.Modules.Towns
         {
             var lot = site.Plan.Lots[index]; BuildingAsset asset;
             if (lot.Skipped) { site.Spawners[index] = new PlayMakerFSM[0]; if (staged != null) UnityEngine.Object.Destroy(staged); return; }
+            if (lot.IsParking)
+            {
+                // (WW) the parking lot is the gas station shell (outside the walls); vehicles park in its canopy lane
+                site.Spawners[index] = new PlayMakerFSM[0]; if (staged != null) UnityEngine.Object.Destroy(staged);
+                if (site.Buildings[index] != null) { site.Buildings[index].transform.SetParent(parent, true); site.Buildings[index].SetActive(true); return; }
+                var station = TownGasStation.Current;
+                if (settings.GasStationParking.Value && station != null && station.Available)
+                {
+                    var shell = station.Shell(staging, "TownsGasStation (Towns " + TownPlanner.Hash(site.Plan.Key) + "/" + index + ")");
+                    var rotation = site.Anchor.rotation * Quaternion.Euler(0, site.Plan.Yaw + lot.Yaw + 180, 0);   // the open lane end faces out, toward arriving vehicles
+                    shell.transform.position = site.Scene(lot.LocalPosition) - rotation * TownGasStation.LaneCenter + Vector3.up * .05f;
+                    shell.transform.rotation = rotation;
+                    shell.transform.SetParent(parent, true); shell.SetActive(true);
+                    site.Buildings[index] = shell;
+                    Physics.SyncTransforms(); TownBakeBridge.Discover(shell);
+                    Log.Always("[Towns] lot " + site.Plan.Key + "/" + index + ": gas station parking lot outside the walls");
+                }
+                else Log.Always("[Towns] lot " + site.Plan.Key + "/" + index + ": reserved 24 x 40 m ground parking slot");
+                return;
+            }
             if (site.Buildings[index] != null)
             { if (staged != null) UnityEngine.Object.Destroy(staged); site.Buildings[index].transform.SetParent(parent, true); site.Buildings[index].SetActive(true); TownPopulation.Configure(site, index, assets, settings); InteriorPopulation.OwnTown(site, index); TownBakeBridge.Discover(site.Buildings[index]); return; }
-            if (lot.IsParking) { site.Spawners[index] = new PlayMakerFSM[0]; if (staged != null) UnityEngine.Object.Destroy(staged); Log.Always("[Towns] lot " + site.Plan.Key + "/" + index + ": reserved 24 x 40 m ground parking slot"); return; }
             if (!assets.Buildings.TryGetValue(lot.Prefab, out asset)) throw new InvalidOperationException("Saved town prefab unavailable: " + lot.Prefab);
             var go = staged != null ? staged : UnityEngine.Object.Instantiate(asset.Prefab, staging, false);
             site.Buildings[index] = go;
+            foreach (string path in asset.Strip) { var wall = go.transform.Find(path); if (wall != null) wall.gameObject.SetActive(false); }   // (WW) a camp without its perimeter
             TownMarkers.Building(go.transform);
             // Boss trap FSMs must never close doors or alter global boss progression in towns.
             foreach (var fsm in go.GetComponentsInChildren<PlayMakerFSM>(true)) if (fsm.FsmName == "BossDoor") fsm.enabled = false;

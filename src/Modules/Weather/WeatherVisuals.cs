@@ -54,19 +54,7 @@ namespace WildWasteland.Modules.Weather
             _audio=audio; for (int i=0;i<_strikes.Length;i++) _strikes[i]=int.MinValue;
             try
             {
-                using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Weather.weather.bundle"))
-                {
-                    if (stream == null) throw new IOException("Embedded Weather.weather.bundle missing");
-                    byte[] bytes = new byte[checked((int)stream.Length)];
-                    int offset = 0;
-                    while (offset < bytes.Length)
-                    {
-                        int read = stream.Read(bytes, offset, bytes.Length - offset);
-                        if (read == 0) throw new EndOfStreamException("Weather asset stream ended early");
-                        offset += read;
-                    }
-                    _bundle = AssetBundle.LoadFromMemory(bytes);
-                }
+                _bundle = AssetBundle.LoadFromFile(DiskResources.FilePath("Weather.weather.bundle"));
                 if (_bundle == null) throw new IOException("Weather bundle could not be loaded");
                 _funnel[0] = Load<Mesh>("vortex-low.asset"); _funnel[1] = Load<Mesh>("vortex.asset"); _funnel[2] = Load<Mesh>("vortex-max.asset");
                 _canopies[0] = Load<Mesh>("canopy-low.asset"); _canopies[1] = Load<Mesh>("canopy.asset"); _canopies[2] = Load<Mesh>("canopy-max.asset");

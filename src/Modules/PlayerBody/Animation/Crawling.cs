@@ -22,14 +22,7 @@ namespace WildWasteland.Modules.PlayerBody
             Reset();
             if (Clip == null)
             {
-                using (var stream = typeof(PlayerBodyModule).Assembly.GetManifestResourceStream("PlayerBody.Crawl.low-crawl.bundle"))
-                {
-                    if (stream == null) throw new InvalidOperationException("Embedded Low Crawl bundle missing");
-                    var bytes = new byte[(int)stream.Length]; int read = 0, count;
-                    while (read < bytes.Length && (count = stream.Read(bytes, read, bytes.Length - read)) > 0) read += count;
-                    if (read != bytes.Length) throw new InvalidOperationException("Incomplete Low Crawl bundle");
-                    _bundle = AssetBundle.LoadFromMemory(bytes);
-                }
+                _bundle = AssetBundle.LoadFromFile(DiskResources.FilePath("PlayerBody.Crawl.low-crawl.bundle"));
                 if (_bundle != null) foreach (var clip in _bundle.LoadAllAssets<AnimationClip>()) if (clip.name == "LowCrawl") Clip = clip;
                 if (Clip == null || !Clip.humanMotion) throw new InvalidOperationException("Low Crawl humanoid clip unavailable");
             }

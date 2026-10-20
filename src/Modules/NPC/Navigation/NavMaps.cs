@@ -186,7 +186,7 @@ namespace WildWasteland.Modules.NPC
                     job.Vanilla = true;
                     string resource = "NPC.NavMaps.Vanilla." + System.IO.Path.GetFileName(s.MapFile);
                     job.Source = "embedded:" + resource;
-                    stream = typeof(Nav).Assembly.GetManifestResourceStream(resource);
+                    stream = WildWasteland.Core.DiskResources.Open(resource);
                     if (stream == null)
                     {
                         job.Source = s.VanillaMapFile;

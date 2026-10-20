@@ -66,6 +66,7 @@ namespace WildWasteland.Modules.PlayerBody
             catch (Exception e) { PlayerBodyModule.Error("Climbing animation bundle: " + e.Message); waist = high = null; }
         }
         internal static bool ClipsLoaded { get { return waist != null && high != null; } }
+        internal static AnimationClip Clip(bool highClimb) { return highClimb ? high : waist; }
         internal bool Climbing { get { return climbing; } }
 
         // the scheduler jobs (was ClimbRunner, [DefaultExecutionOrder(-1000)]: Update -> Phase.EarlyUpdate, FixedUpdate -> EarlyFixedUpdate)
@@ -95,6 +96,15 @@ namespace WildWasteland.Modules.PlayerBody
             return jumpConsumed;
         }
 
+        // (WW ladders) the top of a ladder: mantle onto the platform the ladder faces
+        Vector3 mantleForward;
+        internal bool TryMantle(Vector3 forward)
+        {
+            mantleForward = forward;
+            try { return TryStart(true); }
+            finally { mantleForward = Vector3.zero; }
+        }
+
         bool TryStart(bool allowAirborne)
         {
             if (climbing || !PlayerBodyModule.Running || !enabledMod.Value || waist == null || high == null
@@ -104,7 +114,7 @@ namespace WildWasteland.Modules.PlayerBody
             if (rb == null) return false;
             if (body != rb) { body = rb; geometry = new ClimbGeometry(rb); }
             var camera = Game.PlayerCamera;
-            var forward = camera != null ? camera.forward : player.transform.forward;
+            var forward = mantleForward.sqrMagnitude > 0f ? mantleForward : camera != null ? camera.forward : player.transform.forward;
             if (!geometry.Find(forward, minHeight.Value, Mathf.Max(minHeight.Value, maxHeight.Value), reach.Value, allowAirborne, out target))
             { if (LastReject != geometry.Rejection) Reject(geometry.Rejection); return false; }
             Begin();

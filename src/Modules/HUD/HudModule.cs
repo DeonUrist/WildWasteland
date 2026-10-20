@@ -142,14 +142,14 @@ namespace WildWasteland.Modules.HUD
             return File.Exists(legacy) ? legacy : null;
         }
 
-        /// <summary>Asset bytes: the file (see <see cref="AssetPath"/>) wins, else the copy embedded in the DLL (HUD.&lt;sub&gt;.&lt;name&gt;).</summary>
+        /// <summary>Asset bytes: the current/legacy file wins, otherwise use the packaged disk-asset index.</summary>
         internal static byte[] ReadAsset(string sub, string name)
         {
             string p = AssetPath(sub, name);
             if (p != null) return File.ReadAllBytes(p);
-            using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("HUD." + sub + "." + name))
+            using (var s = WildWasteland.Core.DiskResources.Open("HUD." + sub + "." + name))
             {
-                if (s == null) throw new FileNotFoundException("not found in " + Path.Combine(Dir ?? "", sub) + " nor embedded", name);
+                if (s == null) throw new FileNotFoundException("not found in " + Path.Combine(Dir ?? "", sub) + " or the packaged disk assets", name);
                 var buf = new byte[s.Length];
                 int read = 0;
                 while (read < buf.Length) { int n = s.Read(buf, read, buf.Length - read); if (n <= 0) break; read += n; }

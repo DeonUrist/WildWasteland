@@ -68,7 +68,7 @@ namespace WildWasteland.Modules.NPC
                     System.IO.Path.Combine(NpcModule.DataDir, "NavMaps", "VanillaExport") })
                     if (Directory.Exists(dir)) foreach (string file in Directory.GetFiles(dir, "*.wwnav", SearchOption.TopDirectoryOnly)) AddCapturedMap(file);
                 const string prefix = "NPC.NavMaps.Vanilla.";
-                foreach (string resource in typeof(Nav).Assembly.GetManifestResourceNames())
+                foreach (string resource in WildWasteland.Core.DiskResources.Names)
                     if (resource.StartsWith(prefix, StringComparison.Ordinal) && resource.EndsWith(".wwnav", StringComparison.OrdinalIgnoreCase))
                         AddCapturedMap(resource.Substring(prefix.Length));
                 _highlightIndexValid = true;

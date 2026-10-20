@@ -21,6 +21,7 @@ namespace WildWasteland.Core
         {
             DllPath = dllPath;
             Root = Path.GetDirectoryName(dllPath);
+            DiskResources.Initialize();
         }
 
         public static string ModuleDir(string id) { return Path.Combine(Root ?? ".", id); }

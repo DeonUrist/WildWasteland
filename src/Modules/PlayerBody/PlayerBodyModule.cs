@@ -39,7 +39,7 @@ namespace WildWasteland.Modules.PlayerBody
         internal static ConfigEntry<Gender> Character;
         internal static ConfigEntry<bool> ThirdPersonOnFoot, ToggleMiddleMouse, DynamicCrosshair, BodyFirstPerson, EmptyHandArms, FemaleArms, ReplaceDriver,
             EquipmentOnBody, PainSounds, FirstPersonSwayOn, SmoothAimDownSights, PickAssistOn;
-        internal static ConfigEntry<bool> ClimbingOn, JumpTriggersClimbing;
+        internal static ConfigEntry<bool> ClimbingOn, JumpTriggersClimbing, Ladders;
         internal static ConfigEntry<bool> FullBodyOnlyOnFoot;
         internal static ConfigEntry<bool> FirstPersonArmsOnlyOnFoot;
         internal static bool BodyInCar { get { return BodyFirstPerson.Value && !FullBodyOnlyOnFoot.Value; } }
@@ -63,7 +63,7 @@ namespace WildWasteland.Modules.PlayerBody
         internal static ConfigEntry<float> UpperPhase, ClipSprintSpeed, SprintFrom, TurnClipAngle, TurnStartRate, DirBlendSpeed, PumpClipSpeed;
         internal static ConfigEntry<float> RunLegsIn, RunLegsTurn;
         internal static ConfigEntry<float> OrbitSpeed, HipsDrift, ClipWalkSpeed, ClipRunSpeed, ClipCrouchSpeed, ThighSwing, KneeBend, ArmSwing, HipBob, CrouchDrop;
-        internal static ConfigEntry<float> ClimbMinHeight, ClimbMaxHeight, ClimbReach, ClimbWaistLimit, ClimbSpeed;
+        internal static ConfigEntry<float> ClimbMinHeight, ClimbMaxHeight, ClimbReach, ClimbWaistLimit, ClimbSpeed, LadderSpeed, LadderSlideSpeed, LadderSlidePose, LadderOffset, LadderEyeForward, LadderNeckBack;
 
         // the driver's-seat view offset Denis set in game (1.5.3: X -0.03, Y 0.02, Z 0.02) is the built-in base; the F7 values add to it
         internal static readonly Vector3 CarViewBase = new Vector3(-0.03f, 0.02f, 0.02f);
@@ -124,6 +124,7 @@ namespace WildWasteland.Modules.PlayerBody
             cfg.Migrate(ClimbingOn, ClimberCfg, "General", "Enabled"); Mig(ClimbingOn, "climbing", "Enabled");
             JumpTriggersClimbing = cfg.Player("Climbing", "JumpTriggersClimbing", true, "The game's Jump key climbs onto a reachable ledge or catches one within arm's reach during a jump. Otherwise it jumps normally.");
             Mig(JumpTriggersClimbing, "climbing", "Jump triggers climbing");
+            Ladders = cfg.Player("Climbing", "Ladders", true, "Ladders: weapon put away, centred on the ladder with a climbing animation (W / S up and down, Jump lets go). Off = the game's own ladder.");
 
             OcclusionPrototype = cfg.Player("Camera culling", "CameraCulling", false, "Third person: keep the camera distance and make geometry between camera and body semi-transparent (prototype; roofs and vehicles get a larger window; not inside caves). Off = the camera moves in front of obstacles.");
             Mig(OcclusionPrototype, "CAMERA", "OcclusionPrototype"); Mig(OcclusionPrototype, "General", "3rd person camera culling"); Mig(OcclusionPrototype, "Occlusion", "3rd person camera culling");
@@ -188,6 +189,13 @@ namespace WildWasteland.Modules.PlayerBody
             ClimbReach = ClimbEntry(cfg, Clm, "Reach", .85f, "Climbing: maximum distance to the obstacle face, metres.", .35f, 1.2f);
             ClimbWaistLimit = ClimbEntry(cfg, Clm, "WaistHeightLimit", 1.25f, "Climbing: higher ledges use the high-climb animation.", .8f, 1.5f);
             ClimbSpeed = ClimbEntry(cfg, Clm, "AnimationSpeed", 1.5f, "Climbing: climb playback speed.", .6f, 2.5f);
+            LadderSpeed = cfg.Tool(Clm, "LadderSpeed", 2.2f, "Ladders: climbing speed up, metres per second (the animation follows the rungs at any speed; the game's own ladder: 2).", new AcceptableValueRange<float>(.3f, 4f));
+            if (Mathf.Approximately(LadderSpeed.Value, 1.2f) || Mathf.Approximately(LadderSpeed.Value, .8f) || Mathf.Approximately(LadderSpeed.Value, 1.1f)) LadderSpeed.Value = 2.2f;   // earlier defaults: twice as fast now
+            LadderSlideSpeed = cfg.Tool(Clm, "LadderSlideSpeed", 6f, "Ladders: going down is a slide (hands and feet on the rails); its top speed, metres per second.", new AcceptableValueRange<float>(1f, 12f));
+            LadderSlidePose = cfg.Tool(Clm, "LadderSlidePose", 0f, "Ladders: the climbing animation frame held while sliding down (0..1 of one cycle).", new AcceptableValueRange<float>(0f, 1f));
+            LadderEyeForward = cfg.Tool(Clm, "LadderEyeForward", .16f, "Ladders: first-person eye forward of the head towards the ladder, metres (so the camera does not see its own neck).", new AcceptableValueRange<float>(0f, .4f));
+            LadderNeckBack = cfg.Tool(Clm, "LadderNeckBack", 12f, "Ladders: the neck tilted back while climbing, degrees.", new AcceptableValueRange<float>(-30f, 45f));
+            LadderOffset = cfg.Tool(Clm, "LadderOffset", 0f, "Ladders: moves the body away from (+) or towards (-) the ladder, metres; 0 = the balls of the feet over the rungs.", new AcceptableValueRange<float>(-.3f, .3f));
 
             JumpClipStart = cfg.Tool(Anim, "JumpClipStart", 0.2f, "Jump / RifleJump / PistolJump clips start this far in (share of the clip): Mixamo jumps crouch first, the game's jump leaves the ground at once.");
             StrikeWindup = cfg.Tool(Anim, "StrikeWindup", 0.08f, "Melee / bare hands: seconds the wind-up takes before the blow lands (the game hits the moment the swing starts).");
@@ -292,6 +300,7 @@ namespace WildWasteland.Modules.PlayerBody
             GunPose.Bind(Path.Combine(Paths.ConfigPath, OldCfg));
             AimLift.Load(DataDir);
             ClimbingController.Init();
+            LadderController.Init();
             Scheduler.StartCoroutine(FemalePain.LoadClips());
 
             // shared hooks (Core dispatchers) and module patches
@@ -312,10 +321,13 @@ namespace WildWasteland.Modules.PlayerBody
             IgnitionJob = Scheduler.Interval(this, "Ignition control", 0.5f, IgnitionControl.Tick);
             Scheduler.EveryFrame(this, "Climbing", ClimbingController.TickInstance, Phase.EarlyUpdate);
             Scheduler.EveryFrame(this, "Climbing (physics)", ClimbingController.FixedTickInstance, Phase.EarlyFixedUpdate);
+            Scheduler.EveryFrame(this, "Ladders", LadderController.TickInstance, Phase.EarlyUpdate);
+            Scheduler.EveryFrame(this, "Ladders (physics)", LadderController.FixedTickInstance, Phase.EarlyFixedUpdate);
             Scheduler.EveryFrame(this, "Body update", BodyRunner.Tick, Phase.Update);
             Scheduler.EveryFrame(this, "Body late", BodyRunner.LateTick, Phase.LateUpdate);
             Scheduler.EveryFrame(this, "ModAPI characters", BodyRunner.ModApiTick, Phase.LateUpdate);
             Scheduler.EveryFrame(this, "PlayerBody.WheelArms", BodyRunner.WheelTick, Phase.LateUpdateLast);
+            Scheduler.EveryFrame(this, "NPC traversal poses", NpcTraversal.LateTick, Phase.LateUpdateLast);
             Scheduler.Gui(this, "Weapon pose hint + vehicle HUD", BodyRunner.Gui, BodyRunner.GuiWanted);   // (WW perf) OnGUI only while one of them shows
             StartEndOfFrame();
 
@@ -345,6 +357,8 @@ namespace WildWasteland.Modules.PlayerBody
             _eof = null; _eofHost = null; IgnitionJob = null;
             try { GunPose.Flush(); AimLift.SaveIfDirty(); } catch (Exception e) { Warn("saving poses: " + e.Message); }
             try { ClimbingController.StopInstance(); } catch (Exception e) { Warn("climbing: " + e.Message); }
+            try { LadderController.StopInstance(); } catch (Exception e) { Warn("ladders: " + e.Message); }
+            try { NpcTraversal.Clear(); } catch (Exception e) { Warn("NPC traversals: " + e.Message); }
             try { BodyRunner.TearDown(); } catch (Exception e) { Error(e); }
             Perf.StopGc();
             try { IgnitionControl.Remove(); } catch (Exception e) { Warn("ignition row: " + e.Message); }
@@ -370,7 +384,7 @@ namespace WildWasteland.Modules.PlayerBody
         // the climb path is kept in world space for the duration of a climb: move it with the world (else a cancel would put the player
         // back 1000 m away). The death ragdoll is a scene root object, which the NWH FloatingOrigin moves itself; everything else is
         // re-derived from the Player / camera every frame (ThirdPerson moves its cached view along already).
-        public override void OnOriginShift(Vector3 delta) { ClimbingController.ShiftInstance(delta); }
+        public override void OnOriginShift(Vector3 delta) { ClimbingController.ShiftInstance(delta); LadderController.ShiftInstance(delta); }
 
         // ------------------------------------------------------------------ data files
         static readonly string[] Sidecars = { "weapon-poses.txt", "aim-lift.txt", "ignition-key.txt", "legacy-base-lines.txt", "weapon-grips.cfg", "BuiltinPoses.generated.cs" };

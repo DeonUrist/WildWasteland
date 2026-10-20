@@ -328,7 +328,7 @@ namespace WildWasteland.Modules.PlayerBody
             try
             {
                 if (!File.Exists(path))
-                    using (var source = typeof(Model).Assembly.GetManifestResourceStream("PlayerBody.Textures.female_kick.png"))
+                    using (var source = WildWasteland.Core.DiskResources.Open("PlayerBody.Textures.female_kick.png"))
                         if (source != null) { Directory.CreateDirectory(Path.GetDirectoryName(path)); using (var output = File.Create(path)) source.CopyTo(output); }
                 KickTex = Load(file, "Apocaplayer_kick");
             }

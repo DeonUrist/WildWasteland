@@ -76,14 +76,14 @@ namespace WildWasteland.Modules.NPC
                 Directory.CreateDirectory(export);
                 const string prefix = "NPC.NavMaps.Vanilla.";
                 var assembly = typeof(Nav).Assembly;
-                foreach (string resource in assembly.GetManifestResourceNames())
+                foreach (string resource in WildWasteland.Core.DiskResources.Names)
                 {
                     if (!resource.StartsWith(prefix, StringComparison.Ordinal)) continue;
                     string name = resource.Substring(prefix.Length), poi = VanillaFileName(name, expected);
                     if (poi == null) continue;
                     try
                     {
-                        using (var input = assembly.GetManifestResourceStream(resource))
+                        using (var input = WildWasteland.Core.DiskResources.Open(resource))
                         using (var output = new FileStream(System.IO.Path.Combine(export, name), FileMode.Create, FileAccess.Write)) input.CopyTo(output);
                         copied.Add(name); found.Add(poi);
                     }

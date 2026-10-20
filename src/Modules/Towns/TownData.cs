@@ -20,13 +20,15 @@ namespace WildWasteland.Modules.Towns
         internal Vector3 Entry, Outward;
         internal TownFrontage[] Frontages;
         internal TownFrontage[] TiltedFrontages;
-        internal bool Crane, Wreck, Merchant;
+        internal bool Crane, Wreck, Merchant, Camp;
+        internal bool Big { get { return HalfX > 25 || HalfZ > 25; } }
     }
     public sealed class TownLot
     {
         public string Prefab { get; internal set; }
         public bool IsParking { get { return Prefab == "Towns_Parking"; } }
-        public bool IsMerchant { get { return Prefab == "Camp_10"; } }
+        public bool IsMerchant { get { return Merchants.Contains(Prefab); } }
+        internal static readonly HashSet<string> Merchants = new HashSet<string>(StringComparer.Ordinal) { "Camp_10" };
         public Vector3 LocalPosition { get; internal set; }
         public float Yaw { get; internal set; }
         public TownRole Role { get; internal set; }

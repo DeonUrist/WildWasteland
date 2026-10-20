@@ -38,6 +38,14 @@ namespace WildWasteland.Core.UI
             if (!Open) return;
             if (_pause) Time.timeScale = 0; Cursor.lockState = CursorLockMode.None; Cursor.visible = true;
         }
+        /// <summary>(WW) Pause / run the world while the session stays open (input stays blocked, the cursor free).</summary>
+        public bool Paused { get { return Open && _pause; } }
+        public void SetPause(bool pause)
+        {
+            if (!Open || pause == _pause) return;
+            _pause = pause;
+            Time.timeScale = pause ? 0f : (_time > 0f ? _time : 1f);
+        }
         public void Close(bool immediate = false)
         {
             if (!Open && _releaseFrame < 0) return;

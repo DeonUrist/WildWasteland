@@ -54,7 +54,7 @@ namespace WildWasteland.Modules.Patrols
         private static MerchantLayoutFile _data;
         private static string PathName=>Path.Combine(EditorStore.Root,"MerchantLayouts.json");
         private static MerchantLayoutFile Defaults()
-        {using(var stream=typeof(PatrolsModule).Assembly.GetManifestResourceStream("Patrols.MerchantLayouts.defaults.json"))using(var reader=new StreamReader(stream))return TrafficCodec.ReadRecord<MerchantLayoutFile>(reader.ReadToEnd());}
+        {using(var stream=WildWasteland.Core.DiskResources.Open("Patrols.MerchantLayouts.defaults.json"))using(var reader=new StreamReader(stream))return TrafficCodec.ReadRecord<MerchantLayoutFile>(reader.ReadToEnd());}
         private static MerchantLayoutFile Data
         {
             get

@@ -27,9 +27,9 @@ namespace WildWasteland.Modules.Towns
             int h = Mathf.Max(2, Mathf.CeilToInt((spec.HalfZ * 2 + margin * 2) / cell));
             string prefix = "NPC.NavMaps.Vanilla." + spec.Name + "-";
             var assembly = typeof(Services).Assembly;
-            foreach (string resource in assembly.GetManifestResourceNames())
+            foreach (string resource in WildWasteland.Core.DiskResources.Names)
                 if (resource.StartsWith(prefix, StringComparison.Ordinal) && resource.EndsWith(".wwnav", StringComparison.Ordinal))
-                { using (var stream = assembly.GetManifestResourceStream(resource)) { var map = Read(stream, resource, spec, w, h, cell, margin); if (map != null) return map; } }
+                { using (var stream = WildWasteland.Core.DiskResources.Open(resource)) { var map = Read(stream, resource, spec, w, h, cell, margin); if (map != null) return map; } }
             foreach (string directory in new[] { Path.Combine(Assets.ModuleDir("NPC"), "NavMaps", "Vanilla"),
                 Path.Combine(Assets.ModuleConfigDir("NPC"), "NavMaps", "Custom"), Path.Combine(Assets.ModuleDir("NPC"), "NavMaps") })
             {

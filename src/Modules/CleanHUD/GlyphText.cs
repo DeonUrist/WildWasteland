@@ -27,7 +27,7 @@ namespace WildWasteland.Modules.CleanHUD
             f.Atlas = Assets.Tex(name + "_atlas");
             var asm = Assembly.GetExecutingAssembly();
             string json;
-            using (var s = asm.GetManifestResourceStream("CleanHUD." + name + "_meta.json"))
+            using (var s = WildWasteland.Core.DiskResources.Open("CleanHUD." + name + "_meta.json"))
             using (var r = new StreamReader(s)) json = r.ReadToEnd();
             var d = (Dictionary<string, object>)Json.Parse(json);
             f.Size = Json.Num(d, "size", 96); f.Ascent = Json.Num(d, "ascent", 58); f.Descent = Json.Num(d, "descent", 17);

@@ -569,12 +569,15 @@ namespace WildWasteland.Modules.NPC
             float left = Flat(pos - c.Goal);
             bool inv = c.Leg == Leg.Investigate, travel = c.Leg == Leg.Travel;
             float arrive = c.Leg == Leg.Home ? 1.5f : c.Leg == Leg.SearchBack ? 1.2f : inv ? Brain.ArriveFor(c.A.Owner) : travel ? (c.Ord != null ? c.Ord.Radius : 1.5f) : 0.8f;
-            if (left <= arrive && (inv || travel || Mathf.Abs(pos.y - c.Goal.y) < 2.5f)) { Arrived(c, now); return; }   // a ghost: flat distance, as the brain judged it; a travel goal: the caller's radius, flat
+            // (WW) a travel goal on another floor of a POI with navigation data counts only once the NPC is on that floor
+            bool flat = inv || travel && !PoiNav.Inside(c.Goal);
+            if (left <= arrive && (flat || Mathf.Abs(pos.y - c.Goal.y) < 2.5f)) { Arrived(c, now); return; }   // a ghost: flat distance, as the brain judged it; a travel goal: the caller's radius, flat
             Vector3 next = c.Goal; float pathLeft = left;
             bool onMap = Nav.On && Nav.Next(c.A.Owner, pos, c.Goal, out next, out pathLeft);
             if (onMap)
             {
                 c.Steer = next; left = pathLeft;
+                if (PoiNav.Guiding(c.A.Owner)) c.ProgressAt = now;      // (WW) a POI route never gives up: its watchdog slides a stuck body on
                 if (Nav.HopAhead(pos, next)) Hop(c, now);             // the map's way crosses a low lip here
             }
             else { c.Steer = c.Goal; }
@@ -742,6 +745,7 @@ namespace WildWasteland.Modules.NPC
         private static void Drive(Ctl c, float dt, float now)
         {
             if (c.Rb == null) { Stop(c); return; }
+            if (PoiNavTraverse.Busy(c.A.Owner)) return;   // (WW) on a POI ladder / climb: the traversal moves the body
             var t = c.A.T;
             if (c.Anim != null && now >= c.NextRunCheck)
             {
@@ -752,7 +756,8 @@ namespace WildWasteland.Modules.NPC
             if (to.sqrMagnitude < 0.0001f) return;
             float want = Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg;
             // three-way body feelers (only off a map route): the first free heading nearest the wanted one
-            if (now >= c.NextFan || Mathf.Abs(Mathf.DeltaAngle(want, c.FanWant)) > 15f)
+            if (PoiNav.Guiding(c.A.Owner)) c.FanOff = 0f;                // (WW) a POI route: straight at its waypoint, no body feelers
+            else if (now >= c.NextFan || Mathf.Abs(Mathf.DeltaAngle(want, c.FanWant)) > 15f)
             {
                 c.NextFan = now + 0.08f + 0.04f * UnityEngine.Random.value; c.FanWant = want; c.FanOff = 0f;
                 Vector3 low = t.position + Vector3.up * 0.6f, high = t.position + Vector3.up * 1.3f;
@@ -766,6 +771,7 @@ namespace WildWasteland.Modules.NPC
             float yaw = Mathf.MoveTowardsAngle(t.eulerAngles.y, chosen, Mathf.Max(10f, NpcModule.TurnRate.Value) * dt);
             t.rotation = Quaternion.Euler(0f, yaw, 0f);
             Vector3 v = t.forward * (c.Speed * Brain.TurnSpeedFactor(Mathf.Abs(Mathf.DeltaAngle(yaw, chosen))));   // slows down while turning: no arcs
+            if (PoiNav.Walk(c.A.Owner, c.Speed)) return;                  // (WW) a POI route: carried along it (no body physics), the turn only shown
             v.y = c.Rb.velocity.y;
             c.Rb.velocity = v;
         }

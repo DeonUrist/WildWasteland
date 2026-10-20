@@ -41,6 +41,9 @@ namespace WildWasteland.Modules.PlayerBody
         public int Count { get { return ModAPI.Count; } }
         public IAnimatedCharacter Attach(Animator animator) { return Wrap(ModAPI.Attach(animator)); }
         public IAnimatedCharacter Find(Animator animator) { return Wrap(ModAPI.Find(animator)); }
+        public INpcTraversalAnimation BeginNpcTraversal(Animator animator, string kind) { return NpcTraversal.Begin(animator, kind); }
+        public float LadderCycleRise { get { var c = PoseClip.Shared("ClimbingLadder"); return c != null ? c.Rise : 1.24f; } }
+        public float LadderToeDepth { get { var c = PoseClip.Shared("ClimbingLadder"); return c != null ? c.ToeDepth : .44f; } }
 
         private IAnimatedCharacter Wrap(ModAPI.Character c)
         {

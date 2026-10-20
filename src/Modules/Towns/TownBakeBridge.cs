@@ -13,6 +13,7 @@ namespace WildWasteland.Modules.Towns
     {
         private delegate int CellsDelegate(Transform root, bool roofedOnly, List<Vector3> into, int max, out bool known, out bool baked);
         private static Action<GameObject> _discover;
+        private static Action<GameObject> _actor;
         private static CellsDelegate _cells;
         private static Func<Vector3, Transform> _root;
         private static Func<bool> _enabled;
@@ -30,6 +31,7 @@ namespace WildWasteland.Modules.Towns
             var nav = typeof(Services).Assembly.GetType("WildWasteland.Modules.NPC.Nav", true);
             _enabled = (Func<bool>)Delegate.CreateDelegate(typeof(Func<bool>), Patches.Method(nav, "get_On"));
             _discover = (Action<GameObject>)Delegate.CreateDelegate(typeof(Action<GameObject>), Patches.Method(nav, "Spawned"));
+            _actor = (Action<GameObject>)Delegate.CreateDelegate(typeof(Action<GameObject>), Patches.Method(typeof(Services).Assembly.GetType("WildWasteland.Modules.NPC.Brain", true), "Spawned"));
             _cells = (CellsDelegate)Delegate.CreateDelegate(typeof(CellsDelegate), Patches.Method(nav, "FloorCells"));
             _root = (Func<Vector3, Transform>)Delegate.CreateDelegate(typeof(Func<Vector3, Transform>), Patches.Method(nav, "StructureRootAt"));
             if (!Patches.Patch(owner, Patches.Method(nav, "Next"),
@@ -41,6 +43,7 @@ namespace WildWasteland.Modules.Towns
             Log.Always("[Towns] NPC bridge installed: per-building bakes -> validated street links -> destination building; no town-wide bake.");
         }
         internal static void Discover(GameObject building) { if (_discover != null && Services.Npc != null) _discover(building); }
+        internal static void Actor(GameObject actor) { if (_actor != null && Services.Npc != null) _actor(actor); }
         internal static int Cells(Transform root, bool roofed, List<Vector3> into, out bool known, out bool baked)
         { known = baked = false; into.Clear(); return _cells == null ? 0 : _cells(root, roofed, into, 256, out known, out baked); }
         internal static Transform Root(Vector3 position) { return _root == null ? null : _root(position); }
@@ -65,7 +68,7 @@ namespace WildWasteland.Modules.Towns
         }
         internal static void Uninstall(TownsModule owner)
         {
-            _owner = null; Patches.Unpatch(owner); _discover = null; _cells = null; _root = null;
+            _owner = null; Patches.Unpatch(owner); _discover = null; _actor = null; _cells = null; _root = null;
         }
     }
 }

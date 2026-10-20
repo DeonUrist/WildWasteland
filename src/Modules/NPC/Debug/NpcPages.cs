@@ -75,7 +75,7 @@ namespace WildWasteland.Modules.NPC
                 Jobs(l, m);
             }));
 
-            pages.Add(new LivePage(m, "Detection", "Sight cones per creature group, light, hearing ranges, ghosts, taunts, the player's shout, engines and explosions (F6 has SightCone / SightRange / DarkSightRange).", l =>
+            pages.Add(new LivePage(m, "Detection", "Sight cones per creature group, light, hearing ranges, ghosts, taunts, the player's shout, engines and explosions (F6 has SightCone / SightRange / DarkSightRange / FootstepRadius).", l =>
             {
                 l.Value("Agents / alert / ghosts", I(Senses.AgentCount) + " / " + I(Senses.AlertCount) + " / " + I(Senses.GhostCount));
                 l.Value("Light now", F(Senses.LightLevel(), "0.00") + " (sight " + F(Senses.SightRange(), "0") + " m)");
@@ -136,6 +136,7 @@ namespace WildWasteland.Modules.NPC
                 if (!string.IsNullOrEmpty(Nav.MapActionStatus)) l.Text(Nav.MapActionStatus);
             }, Sec("Debug")) { IsTool = true });
 
+            pages.Add(new ActionPage(m, ToolGroups.Debug, "POI pathfinding", PoiNavEditor.DrawPage) { DebugOnly = true, IsTool = true });
             return pages;
         }
     }

@@ -17,7 +17,7 @@ namespace WildWasteland.Core
             if (!Files.TryGetValue(name, out values))
             {
                 values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); Files[name] = values;
-                using (var stream = typeof(Plugin).Assembly.GetManifestResourceStream("CleanHUD.DefaultSettings." + name + ".txt"))
+                using (var stream = WildWasteland.Core.DiskResources.Open("CleanHUD.DefaultSettings." + name + ".txt"))
                     if (stream != null) using (var reader = new StreamReader(stream))
                     {
                         string group = "", line;
@@ -42,7 +42,7 @@ namespace WildWasteland.Core
         internal static void InstallProfiles(string owner)
         {
             var assembly = typeof(Plugin).Assembly; string prefix = "CleanHUD.DefaultProfiles." + owner + ".";
-            foreach (string resource in assembly.GetManifestResourceNames())
+            foreach (string resource in WildWasteland.Core.DiskResources.Names)
             {
                 if (!resource.StartsWith(prefix, StringComparison.Ordinal)) continue;
                 string relative = resource.Substring(prefix.Length);
@@ -50,7 +50,7 @@ namespace WildWasteland.Core
                 string path = Path.Combine(Assets.ModuleConfigDir(owner), relative);
                 if (File.Exists(path)) continue;
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
-                using (var input = assembly.GetManifestResourceStream(resource)) using (var output = File.Create(path)) input.CopyTo(output);
+                using (var input = WildWasteland.Core.DiskResources.Open(resource)) using (var output = File.Create(path)) input.CopyTo(output);
             }
         }
     }

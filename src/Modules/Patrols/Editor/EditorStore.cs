@@ -13,7 +13,7 @@ namespace WildWasteland.Modules.Patrols
 
         internal static EditorData Defaults()
         {
-            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Patrols.EditorDefaults.json"))
+            using (var stream = WildWasteland.Core.DiskResources.Open("Patrols.EditorDefaults.json"))
             {
                 if (stream == null) throw new InvalidOperationException("Missing shipped editor defaults");
                 using (var reader = new StreamReader(stream)) return EditorData.FromJson(reader.ReadToEnd());

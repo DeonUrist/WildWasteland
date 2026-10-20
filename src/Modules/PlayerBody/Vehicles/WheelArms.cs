@@ -377,7 +377,7 @@ namespace WildWasteland.Modules.PlayerBody
                 var path = defaultsOnly ? FilePath : LoadPath();
                 if (!defaultsOnly && File.Exists(path)) text = File.ReadAllText(path);
                 else
-                    using (var stream = typeof(WheelArms).Assembly.GetManifestResourceStream("PlayerBody.WheelGrips." + _key + ".txt"))
+                    using (var stream = WildWasteland.Core.DiskResources.Open("PlayerBody.WheelGrips." + _key + ".txt"))
                     {
                         if (stream == null) return s;
                         using (var reader = new StreamReader(stream)) text = reader.ReadToEnd();

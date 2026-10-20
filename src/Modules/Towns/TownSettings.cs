@@ -15,17 +15,26 @@ namespace WildWasteland.Modules.Towns
         internal ConfigEntry<bool> PoiNearSpawn;
         internal ConfigEntry<bool> Walls;
         internal ConfigEntry<float> LoadingBudgetMs;
+        internal ConfigEntry<bool> TestGasStation, GasStationParking;
+        internal ConfigEntry<int> DesertGasStationChance;
+        internal ConfigEntry<float> GasStationScale;
+        internal ConfigEntry<UnityEngine.InputSystem.Key> PoiDresserKey;
         internal ConfigFile File;
         // This alternate binder makes the standalone DLL independent of internal ModuleConfig construction.
         internal void Bind(ConfigFile file)
         {
             File = file;
+            PoiDresserKey = file.Bind("Towns / Editors", "POI dresser", UnityEngine.InputSystem.Key.None, "Open the static prop dresser for the nearest custom POI within 200 metres. Requires Enable Debug and Developer mode. Layouts are saved with Towns assets and reused by every instance of that POI type.");
+            TestGasStation = file.Bind("Towns / Debug", "Test gas station", false, "Place the supplied gas station as the closest available POI outside the starting camp, on a clear level pad, with three melee Scrapyard raiders after its ground-floor navigation is baked. Test only; excluded from normal town lots and saves. Reload the world after enabling or disabling.");
+            GasStationScale = file.Bind("Towns / Debug", "Gas station scale", 1f, new ConfigDescription("Uniform extra scale for the render model and separate gasstation_collider.glb. Use 1 with the supplied models (their authored 1.5 scale gives a 32.19 x 34.28 metre footprint). Reload after changing: the terrain pad and navigation cache must match the scale.", new AcceptableValueRange<float>(.1f, 5f)));
+            DesertGasStationChance = file.Bind("Towns / World", "Desert gas station chance (%)", 8, new ConfigDescription("Chance per generated 5 km block of a roadside gas station POI (native loot inside, Scrapyard or animal spawners). Changes affect new/undecided blocks only after a world reload.", new AcceptableValueRange<int>(0, 100)));
+            GasStationParking = file.Bind("Towns / World", "Gas station parking lots", true, "Towns use the gas station as their parking lot outside the walls; convoys and the town bus park under its canopy. Off = the flat concrete parking slab.");
             Walls = file.Bind("Towns / Debug", "Town wall prototype", true, "Build native metal perimeter walls and four open cardinal gates around owned Coyote/Scrapyard towns. Parking remains just outside the east gate. Restart or reload after changing; buildings retain their saved positions.");
             LoadingBudgetMs = file.Bind("Towns / Debug", "Loading build budget (ms)", 12f, new ConfigDescription("Extra town construction time per frame while a world is loading or generating (nobody is playing yet). Normal play keeps the shared scheduler budget and one prefab per frame.", new AcceptableValueRange<float>(0f, 40f)));
             PoiNearSpawn = file.Bind("Towns / World", "New POI near spawn", false, "Allow newly generated Towns and War Rig in the first 5 km chunk around the starting camp. Off excludes new locations in chunk 0/0; existing saved towns remain. Changes affect new/undecided locations.");
             Min = Int(file, "Minimum buildings", 5, 3, 32, "Minimum building lots per town. The larger of minimum/maximum is used as the maximum.");
             Max = Int(file, "Maximum buildings", 8, 3, 32, "Maximum lots per town, inclusive: one open 24 x 40 m parking slot, remaining slots use native test buildings.");
-            Chance = Int(file, "Town chance (%)", 50, 0, 100, "Independent town chance per generated 5 km block. WORLD > POI. Selected blocks retry layouts/sites; Ensure selected towns allows the flattest available site when terrain targets cannot be met.");
+            Chance = Int(file, "Town chance (%)", 20, 0, 100, "Independent town chance per generated 5 km block. WORLD > POI. Selected blocks retry layouts/sites; Ensure selected towns allows the flattest available site when terrain targets cannot be met.");
             EnsureTown = file.Bind("Towns / Generation", "Ensure selected towns", true, "After a successful chance roll, use the flattest available unoccupied site if the relief/cut-fill/grade targets cannot be met. Keep building counts, global blockers and connection to a real road. Unavailable sites remain pending with an explanation.");
             Inhabited = Int(file, "Inhabited towns (%)", 50, 0, 100, "Fraction of human Scrapyard/Coyotes faction bases rather than animal/mutant ruins. Test Building_N models retain their native appearance; roles do not yet create service merchants.");
             Width = Float(file, "Street width", 10, 4, 24, "Street width in metres, using the current terrain road texture.");

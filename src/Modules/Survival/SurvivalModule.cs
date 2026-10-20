@@ -117,12 +117,12 @@ namespace WildWasteland.Modules.Survival
                     if (!File.Exists(target)) File.Copy(file, target);
                 }
                 string resourcePrefix = prefix + folder + ".";
-                foreach (string resource in assembly.GetManifestResourceNames())
+                foreach (string resource in WildWasteland.Core.DiskResources.Names)
                 {
                     if (!resource.StartsWith(resourcePrefix, StringComparison.Ordinal)) continue;
                     string target = Path.Combine(destination, resource.Substring(resourcePrefix.Length));
                     if (File.Exists(target)) continue;
-                    using (var input = assembly.GetManifestResourceStream(resource))
+                    using (var input = WildWasteland.Core.DiskResources.Open(resource))
                     using (var output = File.Create(target)) input.CopyTo(output);
                 }
             }
