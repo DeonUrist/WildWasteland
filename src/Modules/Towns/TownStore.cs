@@ -93,7 +93,7 @@ namespace WildWasteland.Modules.Towns
                     if ((p.StreetEdges.Length & 1) != 0) throw new InvalidDataException("Street edge pairs");
                     if (version >= 3)
                     {
-                        p.PathsVersion = Count(r, 6); p.PathWidth = F(r); p.AccessWidth = F(r);
+                        p.PathsVersion = Count(r, 7); p.PathWidth = F(r); p.AccessWidth = F(r);
                         p.AccessPath = new Vector3[Count(r, 2048)]; for (int j = 0; j < p.AccessPath.Length; j++) p.AccessPath[j] = V(r);
                         if (version >= 4) p.GradeAccess = r.ReadBoolean();
                         if (p.PathsVersion == 1 && (p.PathWidth < 1 || p.PathWidth > 9 || p.AccessWidth < 1 || p.AccessWidth > 12 || p.AccessPath.Length < 2))

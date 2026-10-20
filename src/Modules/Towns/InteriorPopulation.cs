@@ -70,6 +70,9 @@ namespace WildWasteland.Modules.Towns
             for (int n = 0; n < site.Spawners[lot].Length; n++)
             {
                 var f = site.Spawners[lot][n];
+                if (f != null && site.Plan.Lots[lot].IsMerchant && site.Plan.Faction == TownFaction.Coyotes
+                    && f.gameObject.name.StartsWith("CoyotesMerchantSpawn", StringComparison.Ordinal))
+                { Add(f, site); continue; } // Shopkeepers use the same native trigger sequence as town enemies.
                 if (f != null && f.gameObject.name.StartsWith("EnemySpawn", StringComparison.Ordinal)
                     && (f.gameObject.name.IndexOf("boss", StringComparison.OrdinalIgnoreCase) < 0 || f.gameObject.name.IndexOf("bodyguard", StringComparison.OrdinalIgnoreCase) >= 0))
                 {

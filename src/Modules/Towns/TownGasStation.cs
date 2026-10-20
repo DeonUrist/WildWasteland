@@ -17,7 +17,7 @@ namespace WildWasteland.Modules.Towns
     // The supplied gas station (GLB render shell + separate collider) in three roles:
     //  * a DESERT POI: [Towns / World] chance per generated 5 km block, on a flat pad beside a native road, facing it, with
     //    4 native loot spawners inside the shop and 2-3 native Scrapyard OR animal spawners (spawner progress is saved with the world);
-    //  * a town PARKING LOT (TownFactory): the shell only, outside the walls; convoys and the town bus park under its canopy;
+    //  * a town PARKING LOT (TownFactory): the shell only, beside the separate open parking apron outside the walls;
     //  * the developer TEST pad near the starting camp (unsaved, three melee raiders after its bake).
     // All instances are named "TownsGasStation ..." so the one NPC bake, POI navigation and dressing layout apply to every copy.
     internal sealed class TownGasStation : IDisposable
@@ -603,7 +603,7 @@ namespace WildWasteland.Modules.Towns
         {
             l.Entry(_settings.DesertGasStationChance); l.Entry(_settings.GasStationParking);
             l.Entry(_settings.TestGasStation); l.Entry(_settings.GasStationScale); l.Entry(_settings.TestCamp10);
-            l.Text("Desert stations: per generated 5 km block, beside a road, with native loot and Scrapyard or animal spawners. Town parking lots use the shell. The test pad (reload after changing) is near the starting camp with three melee raiders.");
+            l.Text("Desert stations: per generated 5 km block, beside a road, with native loot and Scrapyard or animal spawners. Town stations stand beside the open parking lot. The test pad (reload after changing) is near the starting camp with three melee raiders.");
             l.Value("Gas stations loaded", _stations.Count.ToString());
             l.Value("Gas station test", _status);
         }

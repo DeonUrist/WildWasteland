@@ -16,6 +16,8 @@ namespace WildWasteland.Modules.Towns
                 var center = new Vector3(frame.max.x + 26, 0, frame.center.z);
                 lot.LocalPosition = inverse * center; lot.Yaw = 90 - plan.Yaw;
                 plan.Radius = Mathf.Max(plan.Radius, center.magnitude + 24);
+                // Reserve a 40 m station footprint beside the apron (the authored shell is 32 x 34 m).
+                plan.Radius = Mathf.Max(plan.Radius, new Vector2(Mathf.Abs(center.x) + 20, Mathf.Abs(center.z + lot.HalfX + 22) + 20).magnitude + 3);
             }
             for (int c = 0; c < 4; c++) plan.Radius = Mathf.Max(plan.Radius, TownPerimeter.Corner(frame, c, 20).magnitude + 3);
         }

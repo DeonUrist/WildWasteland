@@ -518,12 +518,11 @@ namespace WildWasteland.Modules.Towns
                 // (WW) a Coyotes town always takes part (its merchant bus must be there), others once their faction holds it
                 if (!plan.HasTown || plan.PathsVersion < 3) continue;
                 if (plan.Faction != TownFaction.Coyotes && (!plan.Owned || plan.Condition != TownCondition.Inhabited)) continue;
-                bool lane = _settings.GasStationParking.Value && _gasStation != null && _gasStation.Available;
                 foreach (var lot in plan.Lots) if (lot.IsParking && !lot.Skipped)
                 {
                     into.Add(new Patrols.TownStop { Id = plan.Key, Name = plan.Name, Faction = plan.Faction.ToString(),
                         Parking = plan.World(lot.LocalPosition), Heading = Quaternion.Euler(0, plan.Yaw + lot.Yaw, 0) * Vector3.forward,
-                        Center = plan.WorldCenter, Radius = plan.Radius, MerchantSeeded = plan.MerchantSeeded, CanTravel = plan.AccessPath.Length > 1, Lane = lane,
+                        Center = plan.WorldCenter, Radius = plan.Radius, MerchantSeeded = plan.MerchantSeeded, CanTravel = plan.AccessPath.Length > 1, Lane = false,
                         RoadApproach = plan.AccessPath.Length > 1 ? (Vector3?)plan.World(plan.AccessPath[plan.AccessPath.Length - 1]) : null }); break;
                 }
             }

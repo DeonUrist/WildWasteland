@@ -30,6 +30,7 @@
     {"asset":"3777703848861010479","mesh":"Plane.013","position":[10.1,0.9407501,-6],"rotation":[0,0,0],"scale":[1,1,1],"collision":false},
     {"asset":"3167730838323902755","mesh":"fuse_box2.001","position":[10.1,0.6279068,-0.5],"rotation":[0,0,0],"scale":[1,1,1],"collision":false},
     {"asset":"2035249254012832540","mesh":"Cube.035","position":[11.2,0,-7.5],"rotation":[0,90,0],"scale":[1,1,1],"collision":true},
-    {"asset":"450069720167810057","mesh":"oil_tank_2.001","position":[11.7,-0.2,0.3],"rotation":[0,0,0],"scale":[1,1,1],"collision":true}
+    {"asset":"450069720167810057","mesh":"oil_tank_2.001","position":[11.7,-0.2,0.3],"rotation":[0,0,0],"scale":[1,1,1],"collision":true},
+    {"asset":"6987601735768689937","mesh":"table_1","position":[3.8,0.03559494,2.3],"rotation":[0,0,0],"scale":[1,1,1],"collision":true}
   ]
 }

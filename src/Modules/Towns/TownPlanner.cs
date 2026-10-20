@@ -18,7 +18,7 @@ namespace WildWasteland.Modules.Towns
             if (input.Saved != null)
             {
                 var saved = input.Saved;
-                if (saved.HasTown && saved.PathsVersion < 6)
+                if (saved.HasTown && saved.PathsVersion < 7)
                 { saved = saved.CopyPaths(); TownParking.Outside(saved); TownWalkGraph.Build(saved, input.Buildings, stop); TownParking.Access(saved, heights, data.globals.height, avoid); }
                 return saved;
             }

@@ -24,20 +24,23 @@ namespace WildWasteland.Modules.Towns
             if (lot.Skipped) { site.Spawners[index] = new PlayMakerFSM[0]; if (staged != null) UnityEngine.Object.Destroy(staged); return; }
             if (lot.IsParking)
             {
-                // (WW) the parking lot is the gas station shell (outside the walls); vehicles park in its canopy lane
+                // Keep the open parking apron; the station stands beside its north edge, outside the walls.
                 site.Spawners[index] = new PlayMakerFSM[0]; if (staged != null) UnityEngine.Object.Destroy(staged);
                 if (site.Buildings[index] != null) { site.Buildings[index].transform.SetParent(parent, true); site.Buildings[index].SetActive(true); return; }
                 var station = TownGasStation.Current;
                 if (settings.GasStationParking.Value && station != null && station.Available)
                 {
                     var shell = station.Shell(staging, "TownsGasStation (Towns " + TownPlanner.Hash(site.Plan.Key) + "/" + index + ")");
-                    var rotation = site.Anchor.rotation * Quaternion.Euler(0, site.Plan.Yaw + lot.Yaw + 180, 0);   // the open lane end faces out, toward arriving vehicles
-                    shell.transform.position = site.Scene(lot.LocalPosition) - rotation * TownGasStation.LaneCenter + Vector3.up * .05f;
+                    var parkingRotation = site.Anchor.rotation * Quaternion.Euler(0, site.Plan.Yaw + lot.Yaw, 0);
+                    var rotation = parkingRotation * Quaternion.Euler(0, 180, 0);
+                    var bounds = shell.GetComponent<MeshFilter>().sharedMesh.bounds;
+                    var center = site.Scene(lot.LocalPosition) + parkingRotation * Vector3.left * (lot.HalfX + 2 + bounds.extents.x);
+                    shell.transform.position = center - rotation * new Vector3(bounds.center.x, 0, bounds.center.z) + Vector3.up * .05f;
                     shell.transform.rotation = rotation;
                     shell.transform.SetParent(parent, true); shell.SetActive(true);
                     site.Buildings[index] = shell;
                     Physics.SyncTransforms(); TownBakeBridge.Discover(shell);
-                    Log.Always("[Towns] lot " + site.Plan.Key + "/" + index + ": gas station parking lot outside the walls");
+                    Log.Always("[Towns] lot " + site.Plan.Key + "/" + index + ": gas station beside open parking; 2 m gap outside the walls");
                 }
                 else Log.Always("[Towns] lot " + site.Plan.Key + "/" + index + ": reserved 24 x 40 m ground parking slot");
                 return;
@@ -115,6 +118,7 @@ namespace WildWasteland.Modules.Towns
         {
             var root = new GameObject("Towns parking and wreck pockets " + site.Plan.Key); root.transform.SetParent(parent, false);
             TownDebris.Build(site, assets, root.transform);
+            TownPavement.Build(site, assets, root.transform);
             return root;
         }
         internal static void KeepGeometry(TownSite site, int index, Transform parent)

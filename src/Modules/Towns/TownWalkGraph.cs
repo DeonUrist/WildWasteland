@@ -64,7 +64,7 @@ namespace WildWasteland.Modules.Towns
                 }
             }
             plan.StreetNodes = nodes.ToArray(); plan.StreetEdges = edges.ToArray(); plan.MainNodes = 0;
-            plan.PathsVersion = 6; plan.PathWidth = 1.2f; plan.AccessPath = new Vector3[0]; plan.GradeAccess = false;
+            plan.PathsVersion = 7; plan.PathWidth = 1.2f; plan.AccessPath = new Vector3[0]; plan.GradeAccess = false;
         }
         private static void Add(TownGround ground, TownPlan plan, List<Vector3> nodes, List<int> edges, int a, int b)
         { if (Clear(ground, plan, nodes[a], nodes[b])) { edges.Add(a); edges.Add(b); } }
