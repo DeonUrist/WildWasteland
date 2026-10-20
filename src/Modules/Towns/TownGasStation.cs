@@ -47,6 +47,7 @@ namespace WildWasteland.Modules.Towns
         internal static readonly Vector3 LaneCenter = new Vector3(-1f, 0f, -1.25f);
         internal const float LaneSpread = 5.75f;   // resident bus at +4.5 (deep), visitors at -7 (by the open end)
         private static readonly Vector3[] LootPoints = { new Vector3(7f, .05f, 6.5f), new Vector3(7f, .05f, -3f), new Vector3(8.5f, .05f, 11f), new Vector3(6.5f, .05f, -6.5f) };
+        private const bool SpawnEnemies = false;   // desert stations: loot only until their enemy spawners are fixed
         private static readonly Vector3[] EnemyPoints = { new Vector3(-9f, .05f, -10f), new Vector3(-9f, .05f, 11f), new Vector3(6f, .05f, 3f) };
         private readonly TownSettings _settings;
         private readonly List<Station> _stations = new List<Station>();
@@ -275,7 +276,8 @@ namespace WildWasteland.Modules.Towns
             SpawnerState[] saved; _saved.TryGetValue(station.Key, out saved);
             int n = 0;
             for (int i = 0; i < LootPoints.Length && loot != null; i++, n++) Add(station, loot, LootPoints[i], "ItemSpawn_gas_" + i, 1 + random.Next(2), null, saved, n);
-            for (int i = 0; i < enemies && enemy != null && pool != null && pool.Count > 0; i++, n++) Add(station, enemy, EnemyPoints[i], "EnemySpawn_gas_" + i, 1 + random.Next(2), pool, saved, n);
+            // (WW) enemy spawners are OFF for now (they spawned badly); loot only. Re-enable by setting SpawnEnemies.
+            for (int i = 0; SpawnEnemies && i < enemies && enemy != null && pool != null && pool.Count > 0; i++, n++) Add(station, enemy, EnemyPoints[i], "EnemySpawn_gas_" + i, 1 + random.Next(2), pool, saved, n);
         }
         private void Add(Station station, Transform template, Vector3 local, string name, int count, List<GameObject> pool, SpawnerState[] saved, int index)
         {
@@ -438,12 +440,12 @@ namespace WildWasteland.Modules.Towns
             for (int i = 0; i < names.Length; i++)
             {
                 var material = manager.Get(ids[i], true) as Material;
-                if (material == null || material.mainTexture == null || material.mainTexture.name != names[i])
+                if (!UsesTexture(material, names[i]))
                 {
                     // the saved reference id did not resolve (not loaded yet / another game build): any loaded material with that texture
                     material = null;
                     foreach (var m in Resources.FindObjectsOfTypeAll<Material>())
-                        if (m != null && m.mainTexture != null && m.mainTexture.name == names[i]) { material = m; break; }
+                        if (UsesTexture(m, names[i])) { material = m; break; }
                     if (material == null && i > 0)
                     {
                         // the texture itself (loaded, or the copy shipped next to the model: Towns/Models/<name>.png) on concrete_1's shader
@@ -481,6 +483,13 @@ namespace WildWasteland.Modules.Towns
                 _materials[i] = material;
                 Log.Always("[Towns] Gas station material: " + _model.NodeNames[i] + " -> " + key);
             }
+        }
+        private static bool UsesTexture(Material material, string name)
+        {
+            // Loaded materials include internal shaders without a _MainTex texture property.
+            if (material == null || Array.IndexOf(material.GetTexturePropertyNames(), "_MainTex") < 0) return false;
+            var texture = material.GetTexture("_MainTex");
+            return texture != null && texture.name == name;
         }
         private static void ShiftMesh(GasStation.GlbModel model, Vector3 offset)
         {
