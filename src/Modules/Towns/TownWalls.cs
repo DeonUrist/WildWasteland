@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 using WildWasteland.Core;
 
@@ -14,6 +15,8 @@ namespace WildWasteland.Modules.Towns
         internal readonly List<GameObject> Trees = new List<GameObject>();
         internal readonly TownDressingKit Dressing = new TownDressingKit();
         private readonly Dictionary<Material, Material> _shared = new Dictionary<Material, Material>();
+        private readonly Material[] _gateMaterials = new Material[2];
+        private readonly Texture2D[] _gateTextures = new Texture2D[2];
         internal bool Available { get { return Banner != null && Meshes[0] != null; } }
         internal void Load(List<GameObject> prefabs)
         {
@@ -51,10 +54,51 @@ namespace WildWasteland.Modules.Towns
                 var banner = prefab.transform.Find("decor/flag_pole"); Banner = banner == null ? null : banner.gameObject;
                 break;
             }
-            if (Available) Log.Always("[Towns] perimeter kit: Camp_14 heavy metal fences and native Scrapyard entrance banner; four open vehicle gates.");
+            if (Available) { LoadGateTextures(); Log.Always("[Towns] perimeter kit: Camp_14 heavy metal fences and faction entrance banners; four open vehicle gates."); }
             else Log.Warn("[Towns] native Camp_14 perimeter kit missing; wall prototype unavailable (towns retained).");
         }
-        internal void Dispose() { Tower.Dispose(); Trees.Clear(); foreach (var material in _shared.Values) UnityEngine.Object.Destroy(material); _shared.Clear(); }
+        private void LoadGateTextures()
+        {
+            var cloth = Banner.transform.Find("flag_2_2_sided"); var renderer = cloth == null ? null : cloth.GetComponent<Renderer>();
+            var source = renderer == null ? null : renderer.sharedMaterial; if (source == null) return;
+            for (int i = 0; i < _gateMaterials.Length; i++)
+            {
+                string file = i == 0 ? "gate_scrapyard.png" : "gate_coyotes.png";
+                string path = Path.Combine(Assets.ModuleDir("Towns"), "Perimeter", file);
+                Texture2D texture = null;
+                try
+                {
+                    if (!File.Exists(path))
+                    {
+                        using (var embedded = typeof(TownWallKit).Assembly.GetManifestResourceStream("Towns.Perimeter." + file))
+                        {
+                            if (embedded == null) throw new InvalidDataException("Missing embedded gate texture: " + file);
+                            Directory.CreateDirectory(Path.GetDirectoryName(path));
+                            using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write)) embedded.CopyTo(output);
+                        }
+                    }
+                    texture = new Texture2D(2, 2, TextureFormat.RGBA32, true) { name = "Towns gate " + i };
+                    if (!texture.LoadImage(File.ReadAllBytes(path), true)) throw new InvalidDataException("PNG could not be decoded");
+                    if (source.mainTexture != null) { texture.wrapMode = source.mainTexture.wrapMode; texture.filterMode = source.mainTexture.filterMode; texture.anisoLevel = source.mainTexture.anisoLevel; }
+                    _gateMaterials[i] = new Material(source) { name = "Towns gate " + i, mainTexture = texture, enableInstancing = true };
+                    _gateTextures[i] = texture; texture = null;
+                    Log.Always("[Towns] gate texture loaded: " + path);
+                }
+                catch (Exception e) { Log.Warn("[Towns] gate texture retained native banner: " + path + "; " + e.Message); }
+                finally { if (texture != null) UnityEngine.Object.Destroy(texture); }
+            }
+        }
+        internal void ApplyGateTexture(GameObject gate, TownFaction faction)
+        {
+            var material = _gateMaterials[faction == TownFaction.Coyotes ? 1 : 0]; if (material == null) return;
+            var cloth = gate.transform.Find("flag_2_2_sided"); var renderer = cloth == null ? null : cloth.GetComponent<Renderer>();
+            if (renderer != null) renderer.sharedMaterial = material;
+        }
+        internal void Dispose()
+        {
+            Tower.Dispose(); Trees.Clear(); foreach (var material in _shared.Values) UnityEngine.Object.Destroy(material); _shared.Clear();
+            for (int i = 0; i < _gateMaterials.Length; i++) { if (_gateMaterials[i] != null) UnityEngine.Object.Destroy(_gateMaterials[i]); if (_gateTextures[i] != null) UnityEngine.Object.Destroy(_gateTextures[i]); _gateMaterials[i] = null; _gateTextures[i] = null; }
+        }
     }
     internal sealed class TownWalls
     {
@@ -104,6 +148,7 @@ namespace WildWasteland.Modules.Towns
             {
                 // The native warehouse entrance is open. Preserve its banner/support, no invented door FSM.
                 var go = UnityEngine.Object.Instantiate(_kit.Banner, _root.transform, false); go.name = "Towns cardinal gate " + _next;
+                _kit.ApplyGateTexture(go, _site.Plan.Faction);
                 var scale = new Vector3(14f / 1.8193f, 4.1542f, 4.1542f);
                 go.transform.localScale = scale; go.transform.rotation = rotation;
                 go.transform.position = position - rotation * new Vector3(-.33315f * scale.x, -2.2889f * scale.y, -.3127f * scale.z);
