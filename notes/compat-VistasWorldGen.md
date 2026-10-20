@@ -1,5 +1,7 @@
 # VistasWorldGen compatibility — 2026-10-18 — Testing
 
+Superseding Towns policy (2026-10-20 23:33): with Vistas present, Towns performs no terrain height writes or access-road grading, and POI skips its Flatten200/native height-output relink. Towns select naturally flatter ground and project placements onto it. Prior post-grade pad restoration is removed. See [current Towns mode](towns-vistas.md) for deployed build, travel limitations and outstanding seam retest.
+
 Towns follow-up (2026-10-20): native/Vistas road hints now combine for new siting, parking approaches can join published roads, and town/gas-station pad footprints are restored after Vistas road grading. Saved towns retain their positions. First-pass asynchronous road readiness remains a limitation; see [Towns compatibility](towns-vistas.md) for exact scope, staged build and in-game checks.
 
 Installed dependency: `VistasWorldGen.dll`, BepInEx `apocalypter.worldamp` / Apocalypter World Amp 1.0.7. Inspection-only decompilation is outside this repo at `V:\Repos\Apocalypter\_tools\decompiled\VistasWorldGen\`. The DLL is obfuscated: repeated member names differ by type/signature, so the bridge resolves complete signatures and typed fields. No Vistas assembly reference, redistributed source or DLL edit is used. Earlier unrelated working-tree changes remain intact.

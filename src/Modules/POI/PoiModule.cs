@@ -126,12 +126,17 @@ namespace WildWasteland.Modules.POI
                         locations = (PoiLocations)Generator.Create(typeof(PoiLocations));
                         locations.Avoid = avoid.ToArray(); locations.Radius = definition.Radius;
                         int seed = 17; foreach (char c in definition.Id) seed = unchecked(seed * 31 + c); locations.Seed = seed & 32767;
-                        var pad = (Flatten200)Generator.Create(typeof(Flatten200));
-                        pad.radius = definition.Radius; pad.hardness = 1f; pad.noiseFallof = false;
-                        graph.Add(locations); graph.Add(pad); registration.Added.Add(locations); registration.Added.Add(pad);
-                        graph.Link(before, locations.Heights); graph.Link(before, pad.heightsIn); graph.Link(locations, pad.positionsIn);
-                        if (!registration.Original.ContainsKey(height)) registration.Original.Add(height, before);
-                        graph.Link(pad, height); registration.Sites.Add(definition.Id, locations);
+                        graph.Add(locations); registration.Added.Add(locations); graph.Link(before, locations.Heights);
+                        if (!VistasWorldGen.Present)
+                        {
+                            var pad = (Flatten200)Generator.Create(typeof(Flatten200));
+                            pad.radius = definition.Radius; pad.hardness = 1f; pad.noiseFallof = false;
+                            graph.Add(pad); registration.Added.Add(pad);
+                            graph.Link(before, pad.heightsIn); graph.Link(locations, pad.positionsIn);
+                            if (!registration.Original.ContainsKey(height)) registration.Original.Add(height, before);
+                            graph.Link(pad, height);
+                        }
+                        registration.Sites.Add(definition.Id, locations);
                         var allSites = new List<PoiLocations>(registration.Sites.Values).ToArray();
                         foreach (var output in outputs)
                         {

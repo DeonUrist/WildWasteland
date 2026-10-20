@@ -21,16 +21,14 @@ namespace WildWasteland.Modules.Towns
             }
             for (int c = 0; c < 4; c++) plan.Radius = Mathf.Max(plan.Radius, TownPerimeter.Corner(frame, c, 20).magnitude + 3);
         }
-        internal static void Access(TownPlan plan, MatrixWorld heights, float scale, List<Vector3> avoid, TownWorldRoads roads = null, float reach = 0)
+        internal static void Access(TownPlan plan, MatrixWorld heights, float scale, List<Vector3> avoid)
         {
+            if (Core.VistasWorldGen.Present) { plan.AccessPath = new Vector3[0]; plan.GradeAccess = false; return; }
             foreach (var lot in plan.Lots) if (lot.IsParking)
             {
                 var stop = new Patrols.TownStop { Parking = plan.World(lot.LocalPosition), Center = plan.WorldCenter, Radius = plan.Radius,
                     Heading = Quaternion.Euler(0, plan.Yaw + lot.Yaw, 0) * Vector3.forward };
                 var end = stop.Approach; var start = stop.Parking;
-                Vector3 road = Vector3.zero;
-                bool connected = Core.VistasWorldGen.Present && roads != null && roads.Nearest(end, reach, out road);
-                if (connected) end = road;
                 // A single unpainted ground approach, outside the buildings. No road/path meshes.
                 // Keep the join on the real heightfield and avoid native POI footprints.
                 if (end.x < heights.worldPos.x || end.z < heights.worldPos.z || end.x > heights.worldPos.x + heights.worldSize.x || end.z > heights.worldPos.z + heights.worldSize.z) return;
@@ -43,11 +41,7 @@ namespace WildWasteland.Modules.Towns
                 var radial = start - plan.WorldCenter; radial.y = 0;
                 float along = Vector3.Dot(radial, stop.Heading);
                 float edge = -along + Mathf.Sqrt(Mathf.Max(0, along * along + plan.Radius * plan.Radius - radial.sqrMagnitude));
-                var apron = start + stop.Heading * edge;
-                // Keep the outward parking lane before turning toward the world road; never cut through the pad.
-                var outside = end - apron; outside.y = 0; var radialApron = apron - plan.WorldCenter; radialApron.y = 0;
-                if (connected && Vector3.Dot(radialApron, outside) < 0) return;
-                start = apron;
+                start += stop.Heading * edge;
                 float length = new Vector2(end.x - start.x, end.z - start.z).magnitude;
                 if (Mathf.Abs(end.y - start.y) > length * .22f) return;
                 var inverse = Quaternion.Euler(0, -plan.Yaw, 0);

@@ -35,6 +35,7 @@ namespace WildWasteland.Modules.Towns
                     var rotation = parkingRotation * Quaternion.Euler(0, 180, 0);
                     var bounds = shell.GetComponent<MeshFilter>().sharedMesh.bounds;
                     var center = site.Scene(lot.LocalPosition) + parkingRotation * Vector3.left * (lot.HalfX + 2 + bounds.extents.x);
+                    center = site.Ground(center);
                     shell.transform.position = center - rotation * new Vector3(bounds.center.x, 0, bounds.center.z) + Vector3.up * .05f;
                     shell.transform.rotation = rotation;
                     shell.transform.SetParent(parent, true); shell.SetActive(true);

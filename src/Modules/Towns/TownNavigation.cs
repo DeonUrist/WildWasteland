@@ -107,6 +107,7 @@ namespace WildWasteland.Modules.Towns
         }
         private bool NeedsCast(int a, int b)
         {
+            if (_site.GroundTerrain != null) return true;
             var center = _site.Plan.WorldCenter; var pa = _nodes[a] - center; var pb = _nodes[b] - center;
             if (_site.Walls != null && _outline.Crosses(pa, pb, 2.5f)) return true;
             foreach (var box in _site.DebrisBlockers)

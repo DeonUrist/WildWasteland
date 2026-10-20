@@ -21,7 +21,7 @@ namespace WildWasteland.Modules.Towns
             float outer = plan.Radius + plan.Feather, border = outer + 16;
             if (area.worldSize.x <= border * 2 || area.worldSize.z <= border * 2) return result;
             // A sparse square grid can miss the entire eligible road corridor.
-            var points = roads.Sites(outer, input.AccessLength);
+            var points = Core.VistasWorldGen.Present ? new List<Vector3>() : roads.Sites(outer, input.AccessLength);
             for (int c = 0; c < 64; c++)
                 points.Add(new Vector3(area.worldPos.x + border + (c % 8 + (float)random.NextDouble()) * (area.worldSize.x - border * 2) / 8, 0,
                     area.worldPos.z + border + (c / 8 + (float)random.NextDouble()) * (area.worldSize.z - border * 2) / 8));
@@ -34,9 +34,10 @@ namespace WildWasteland.Modules.Towns
                 foreach (var p in avoid) if (new Vector2(point.x - p.x, point.z - p.z).sqrMagnitude < (outer + 40) * (outer + 40)) { occupied = true; break; }
                 if (occupied) continue;
                 Vector3 road; bool hasRoad = roads.Nearest(point, input.AccessLength, out road);
-                if (!hasRoad && !input.EnsureTown) continue;
+                if (!hasRoad && !input.EnsureTown && !Core.VistasWorldGen.Present) continue;
                 float distance = hasRoad ? new Vector2(road.x - point.x, road.z - point.z).magnitude : input.AccessLength;
-                if (hasRoad && distance < outer + 3) continue;
+                if (hasRoad && distance < outer + (Core.VistasWorldGen.Present ? 40 : 3)) continue;
+                if (Core.VistasWorldGen.Present) distance = 0;
                 float lo = float.PositiveInfinity, hi = float.NegativeInfinity, grade = 0;
                 // Rank cheaply first. Full-resolution relief/grade is measured only for the shortlist.
                 for (int z = -2; z <= 2; z++) for (int x = -2; x <= 2; x++)
@@ -46,7 +47,7 @@ namespace WildWasteland.Modules.Towns
                     lo = Mathf.Min(lo, height); hi = Mathf.Max(hi, height);
                 }
                 float relief = hi - lo;
-                bool preferred = relief <= input.MaxRelief && relief * .5f <= input.MaxEarthwork;
+                bool preferred = relief <= input.MaxRelief && (Core.VistasWorldGen.Present || relief * .5f <= input.MaxEarthwork);
                 var site = new Site { Center = new Vector3(point.x, (lo + hi) * .5f, point.z), Relief = relief,
                     Preferred = preferred, Cost = preferred ? relief + grade * 10 + distance * .004f : relief };
                 float separation = Mathf.Max(40, outer * .3f);
@@ -69,9 +70,10 @@ namespace WildWasteland.Modules.Towns
                 var site = result[i]; float lo, hi, grade;
                 TownPlanner.Measure(heights, data.globals.height, site.Center.x, site.Center.z, outer, out lo, out hi, out grade);
                 site.Center.y = (lo + hi) * .5f; site.Relief = hi - lo;
-                site.Preferred = site.Relief <= input.MaxRelief && site.Relief * .5f <= input.MaxEarthwork && grade <= input.MaxGrade;
+                site.Preferred = site.Relief <= input.MaxRelief && (Core.VistasWorldGen.Present || site.Relief * .5f <= input.MaxEarthwork) && grade <= input.MaxGrade;
                 site.Cost = site.Relief;
-                if (!site.Preferred && !input.EnsureTown) result.RemoveAt(i);
+                if (Core.VistasWorldGen.Present ? !site.Preferred || site.Relief > Mathf.Min(3, input.MaxRelief) || grade > Mathf.Min(.12f, input.MaxGrade)
+                    : !site.Preferred && !input.EnsureTown) result.RemoveAt(i);
             }
             result.Sort((a, b) => a.Preferred != b.Preferred ? (a.Preferred ? -1 : 1) : a.Cost.CompareTo(b.Cost));
             return result;

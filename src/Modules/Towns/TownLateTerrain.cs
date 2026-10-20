@@ -12,6 +12,7 @@ namespace WildWasteland.Modules.Towns
     {
         internal static void Apply(TileData data, TownPlan plan, TownAssets assets, StopToken stop)
         {
+            if (Core.VistasWorldGen.Present) { ClearObjects(data, plan, assets, stop); return; }
             var heights = new MatrixWorld(data.heights);
             Flatten200.StampLevel(heights, plan.WorldCenter.y / data.globals.height,
                 new Vector2D(plan.WorldCenter.x, plan.WorldCenter.z), plan.Radius + plan.Feather,
@@ -47,7 +48,10 @@ namespace WildWasteland.Modules.Towns
             else if (tex != null) matrix.ExportRawFloat(tex.texBytes, offset, new Coord(tex.res), .5f - 1f / 65535f);
             else throw new InvalidOperationException("Native height apply buffer missing.");
             data.heights = heights;
-
+            ClearObjects(data, plan, assets, stop);
+        }
+        private static void ClearObjects(TileData data, TownPlan plan, TownAssets assets, StopToken stop)
+        {
             var objects = data.ApplyOfType<ObjectsOutput.ApplyObjectsData>();
             if (objects == null) return;
             for (int p = 0; p < objects.prototypes.Length; p++)

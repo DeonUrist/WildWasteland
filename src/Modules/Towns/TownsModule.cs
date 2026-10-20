@@ -55,7 +55,7 @@ namespace WildWasteland.Modules.Towns
         private readonly ConcurrentQueue<Capture> _planned = new ConcurrentQueue<Capture>();
         private readonly List<Live> _sites = new List<Live>();
         private readonly List<Live> _resume = new List<Live>();
-        private readonly Dictionary<TerrainTile, TownVistasTerrain> _vistasTerrain = new Dictionary<TerrainTile, TownVistasTerrain>();
+        private string _startingTerrainState;
 
         private Dictionary<string, TownRecord> _records = new Dictionary<string, TownRecord>(StringComparer.Ordinal);
         private bool _running, _blocked, _waitingForTowns, _loading;
@@ -93,8 +93,7 @@ namespace WildWasteland.Modules.Towns
             _settings.LootMinPercent.SettingChanged += PopulationChanged; _settings.LootMaxPercent.SettingChanged += PopulationChanged;
             TerrainTile.OnBeforeTilePrepare += Prepare;
             TerrainTile.OnTileFinalized += Finalized; TerrainTile.OnTileApplied += Applied; TerrainTile.OnTileMoved += Moved;
-            VistasWorldGen.TerrainEdited += VistasTerrainEdited;
-            if (VistasWorldGen.Present) Log.Always("[Towns] Vistas compatibility active: generated road hints and protected town/gas-station terrain.");
+            if (VistasWorldGen.Present) Log.Always("[Towns] Vistas natural-terrain mode: no terrain writes, pad grading or access roads; buildings follow existing ground.");
             Scheduler.Sliced(this, "Build and connect", 700, BuildStep);
             // Behind a loading/generating screen this tick runs construction far beyond the shared frame budget; the predicate is one field read.
             Scheduler.EveryFrame(this, "Load construction", LoadBurst).Wants = LoadWanted;
@@ -109,7 +108,7 @@ namespace WildWasteland.Modules.Towns
                 if (key != plan.Key) continue;
                 Registration registration;
                 if (!_graphs.TryGetValue(old.Tile.mapMagic.graph, out registration)) registration = Register(old.Tile.mapMagic.graph);
-                var resumed = NewSite(plan, old.Tile.mapMagic.transform); resumed.Record = _records[key];
+                var resumed = NewSite(plan, old.Tile.mapMagic.transform, old.Tile.main.terrain, registration.Assets.Specs); resumed.Record = _records[key]; resumed.Record.Plan = resumed.Plan;
                 _sites.Add(new Live { Tile = old.Tile, Registration = registration, Site = resumed });
             }
             _resume.Clear();
@@ -206,7 +205,7 @@ namespace WildWasteland.Modules.Towns
                 {
                     // Building-map overlay (neighbour walls, wreck garden, towers, border props) from the read-only templates, off the main thread.
                     // A failure here only loses the shortcut: the runtime projection remains the fallback.
-                    try { capture.Plan.Overlay = TownOverlayPlan.Build(capture.Plan, assets.Specs, assets.WallKit.Dressing, assets.ShellBounds, assets.NavMaxStep, stop); }
+                    try { if (!VistasWorldGen.Present) capture.Plan.Overlay = TownOverlayPlan.Build(capture.Plan, assets.Specs, assets.WallKit.Dressing, assets.ShellBounds, assets.NavMaxStep, stop); }
                     catch (Exception e) { capture.Plan.Overlay = null; Log.Always("[Towns] WARNING: overlay plan skipped for " + capture.Plan.Key + ": " + e.Message); }
                     _planned.Enqueue(capture);
                 }
@@ -216,24 +215,13 @@ namespace WildWasteland.Modules.Towns
         }
         private void Applied(TerrainTile tile, TileData data, StopToken stop)
         {
+            TraceStartingTerrain(tile, "applied");
             Capture capture;
             if (data != null) TownPoiSettings.Forget(data);
             if (data == null || !_captures.TryRemove(data, out capture)) return;
             if (!_running || _blocked || data.isDraft || tile == null || capture.Epoch != _epoch || (stop != null && stop.stop)) return;
             try { _gasStation.Applied(capture.GasStation, tile, capture.Registration.Assets, _dressing); }
             catch (Exception e) { Log.Warn("[Towns] gas station placement stopped: " + e.Message); }
-            _vistasTerrain.Remove(tile);
-            try
-            {
-                if (VistasWorldGen.Present && tile.main != null && tile.main.terrain != null)
-                {
-                    var pads = new List<TownPlan>();
-                    if (capture.Plan != null && capture.Plan.HasTown) pads.Add(capture.Plan);
-                    if (capture.GasStation != null) foreach (var station in capture.GasStation) if (station.Pad != null) pads.Add(station.Pad);
-                    if (pads.Count > 0) _vistasTerrain[tile] = new TownVistasTerrain(tile, pads);
-                }
-            }
-            catch (Exception e) { Log.Warn("[Towns] Vistas terrain capture failed: " + e.Message); }
             if (capture.Input.Error != null) { Log.Warn("[Towns] skipped generation: " + capture.Input.Error); return; }
             if (capture.Plan == null) return;
             try
@@ -258,7 +246,8 @@ namespace WildWasteland.Modules.Towns
                 }
                 if (plan.GradeAccess) Log.Always("[Towns] graded access corridor " + plan.Key + ": road approach retained.");
 
-                var site = NewSite(plan, tile.mapMagic.transform);
+                var site = NewSite(plan, tile.mapMagic.transform, tile.main.terrain, capture.Registration.Assets.Specs);
+                record.Plan = site.Plan;
                 site.Record = record;
                 site.Loading = capture.Input.Progress;
                 if (site.Loading != null) site.Loading.Report(.7f, "Placing 0/" + plan.LotCount + " buildings");
@@ -268,9 +257,25 @@ namespace WildWasteland.Modules.Towns
         }
         private static string ChunkKey(int seed, int x, int z)
         { return "v1/" + seed.ToString(CultureInfo.InvariantCulture) + "/" + x.ToString(CultureInfo.InvariantCulture) + "/" + z.ToString(CultureInfo.InvariantCulture); }
-        private static TownSite NewSite(TownPlan plan, Transform anchor)
+        private static TownSite NewSite(TownPlan plan, Transform anchor, Terrain terrain, BuildingSpec[] specs)
         {
-            var site = new TownSite { Plan = plan, Anchor = anchor, Buildings = new GameObject[plan.LotCount], Spawners = new PlayMakerFSM[plan.LotCount][] };
+            var site = new TownSite { Plan = plan, Anchor = anchor, GroundTerrain = VistasWorldGen.Present ? terrain : null, Buildings = new GameObject[plan.LotCount], Spawners = new PlayMakerFSM[plan.LotCount][] };
+            if (VistasWorldGen.Present)
+            {
+                site.Plan = plan = plan.CopyPaths(); plan.Overlay = null; plan.DressingOnly = null; plan.AccessPath = new Vector3[0]; plan.GradeAccess = false; plan.Feather = 0; plan.MaximumEarthwork = 0;
+                foreach (var lot in plan.Lots)
+                {
+                    var entry = site.Scene(TownPlanner.Entrance(lot));
+                    var local = anchor.InverseTransformPoint(site.Ground(entry));
+                    var p = lot.LocalPosition; p.y = local.y - plan.WorldCenter.y - lot.Entry.y; lot.LocalPosition = p;
+                }
+                TownWalkGraph.Build(plan, specs, null);
+                for (int i = 0; i < plan.StreetNodes.Length; i++)
+                {
+                    var world = anchor.InverseTransformPoint(site.Ground(site.Scene(plan.StreetNodes[i])));
+                    plan.StreetNodes[i] = Quaternion.Euler(0, -plan.Yaw, 0) * (world - plan.WorldCenter);
+                }
+            }
             TownMarkers.Add(site); return site;
         }
         private bool Loading { get { return _waitingForTowns || (SaveBus.Busy && !SaveBus.Saving && !SaveSystem.Busy); } }
@@ -437,18 +442,47 @@ namespace WildWasteland.Modules.Towns
         }
         private void Moved(TerrainTile tile)
         {
-            _vistasTerrain.Remove(tile);
             if (_gasStation != null) _gasStation.Moved(tile);
             Remove(tile, true);
             string key = ChunkKey(tile.mapMagic.graph.random.Seed, tile.coord.x, tile.coord.z);
             if (tile.main != null) ForgetMoved(tile.main.data, key);
             if (tile.draft != null) ForgetMoved(tile.draft.data, key);
         }
-        private void VistasTerrainEdited(TerrainTile tile)
+        private void TraceStartingTerrain(TerrainTile applied, string source)
         {
-            TownVistasTerrain terrain;
-            if (!_running || _blocked || tile == null || !_vistasTerrain.TryGetValue(tile, out terrain)) return;
-            terrain.Restore(tile);
+            if (!VistasWorldGen.Present || applied == null || applied.mapMagic == null || Mathf.Abs(applied.coord.x) + Mathf.Abs(applied.coord.z) > 1) return;
+            try
+            {
+                var map = applied.mapMagic; var start = map.tiles[new Coord(0, 0)];
+                var terrain = start == null ? null : start.ActiveTerrain;
+                if (terrain == null || terrain.terrainData == null) return;
+                var data = terrain.terrainData; int res = data.holesResolution;
+                string state = "seed=" + map.graph.random.Seed + "; active=" + (start.main != null && terrain == start.main.terrain ? "main" : "draft")
+                    + "; size=" + data.size.ToString("F1") + "; heightRes=" + data.heightmapResolution + "; globalsHeight=" + map.globals.height
+                    + "; terrainWrites=off; tests=" + _settings.TestGasStation.Value + "/" + _settings.TestCamp10.Value + "/" + Services.PoiNavSetup;
+                int[] dx = { -1, 1, 0, 0 }, dz = { 0, 0, -1, 1 };
+                for (int side = 0; side < 4; side++)
+                {
+                    var holes = data.GetHoles(side == 1 ? res - 1 : 0, side == 3 ? res - 1 : 0, side < 2 ? 1 : res, side < 2 ? res : 1);
+                    int missing = 0; foreach (bool solid in holes) if (!solid) missing++;
+                    state += "; edge" + side + " holes=" + missing + "/" + res;
+                    var neighbour = map.tiles[new Coord(dx[side], dz[side])]; var other = neighbour == null ? null : neighbour.ActiveTerrain;
+                    if (other == null || other.terrainData == null) { state += " neighbour=absent"; continue; }
+                    var next = other.terrainData; float step = 0;
+                    for (int s = 0; s <= 8; s++)
+                    {
+                        float u = side == 0 ? 0 : side == 1 ? 1 : s / 8f, v = side == 2 ? 0 : side == 3 ? 1 : s / 8f;
+                        var p = terrain.transform.position + new Vector3(u * data.size.x, 0, v * data.size.z);
+                        float a = data.GetInterpolatedHeight(u, v) + terrain.transform.position.y;
+                        float b = next.GetInterpolatedHeight((p.x - other.transform.position.x) / next.size.x, (p.z - other.transform.position.z) / next.size.z) + other.transform.position.y;
+                        step = Mathf.Max(step, Mathf.Abs(a - b));
+                    }
+                    state += " neighbourHeight=" + next.size.y.ToString("F1", CultureInfo.InvariantCulture) + " maxStep=" + step.ToString("F1", CultureInfo.InvariantCulture) + "m";
+                }
+                if (state == _startingTerrainState) return;
+                _startingTerrainState = state; Log.Always("[Towns] Starting terrain (" + source + "): " + state);
+            }
+            catch (Exception e) { Log.Warn("[Towns] Starting terrain trace failed: " + e.Message); }
         }
         private void ForgetMoved(TileData data, string key)
         {
@@ -553,7 +587,7 @@ namespace WildWasteland.Modules.Towns
                 bool hold; Vector3 next;
                 if (site.Walls != null && TownBakeBridge.Root(position) == null && site.Walls.Walkers.Waypoint(site.Anchor.InverseTransformPoint(position) - site.Plan.WorldCenter,
                     site.Anchor.InverseTransformPoint(goal) - site.Plan.WorldCenter, out next, out hold))
-                { waypoint = site.Anchor.TransformPoint(site.Plan.WorldCenter + next); return true; }
+                { waypoint = site.Ground(site.Anchor.TransformPoint(site.Plan.WorldCenter + next)); return true; }
             }
             return false;
         }
@@ -566,7 +600,7 @@ namespace WildWasteland.Modules.Towns
                 Vector3 next;
                 if (!site.Walls.Vehicles.Waypoint(site.Anchor.InverseTransformPoint(position) - site.Plan.WorldCenter,
                     site.Anchor.InverseTransformPoint(goal) - site.Plan.WorldCenter, out next, out hold)) continue;
-                waypoint = site.Anchor.TransformPoint(site.Plan.WorldCenter + next); return true;
+                waypoint = site.Ground(site.Anchor.TransformPoint(site.Plan.WorldCenter + next)); return true;
             }
             return false;
         }
@@ -603,7 +637,7 @@ namespace WildWasteland.Modules.Towns
             // Keep graph registrations until shutdown: the native generator graph can survive scene changes.
         }
         private void ClearSites()
-        { if (_dressing != null) _dressing.Clear(); if (_gasStation != null) _gasStation.Clear(true); foreach (var live in _sites) TownFactory.Destroy(live.Site); _sites.Clear(); _captures.Clear(); _vistasTerrain.Clear();  TownPoiSettings.Clear(); InteriorPopulation.Clear(); _next = 0; _waitingForTowns = false; TownRoadBridge.Clear(); TownLoading.Clear("World changed"); }
+        { _startingTerrainState = null; if (_dressing != null) _dressing.Clear(); if (_gasStation != null) _gasStation.Clear(true); foreach (var live in _sites) TownFactory.Destroy(live.Site); _sites.Clear(); _captures.Clear();  TownPoiSettings.Clear(); InteriorPopulation.Clear(); _next = 0; _waitingForTowns = false; TownRoadBridge.Clear(); TownLoading.Clear("World changed"); }
         private void Block(string stage, Exception e)
         { _blocked = true; TownLoading.Failed(e.Message); Log.Error("[Towns] blocked during " + stage + "; no replacement layout will be invented", e); }
         private static void Undo(Registration registration)
@@ -621,7 +655,6 @@ namespace WildWasteland.Modules.Towns
             _settings.LootMinPercent.SettingChanged -= PopulationChanged; _settings.LootMaxPercent.SettingChanged -= PopulationChanged;
             TerrainTile.OnBeforeTilePrepare -= Prepare; TerrainTile.OnTileFinalized -= Finalized;
             TerrainTile.OnTileApplied -= Applied; TerrainTile.OnTileMoved -= Moved;
-            VistasWorldGen.TerrainEdited -= VistasTerrainEdited;
             _resume.Clear();
             foreach (var live in _sites)
             {

@@ -24,7 +24,7 @@ namespace WildWasteland.Modules.Towns
             _plan = TownOverlayPlan.DressingFor(site.Plan, assets);
             Blockers.AddRange(_plan.Blockers);
         }
-        private Vector3 Scene(Vector3 p) { return _site.Anchor.TransformPoint(_site.Plan.WorldCenter + p); }
+        private Vector3 Scene(Vector3 p) { return _site.Ground(_site.Anchor.TransformPoint(_site.Plan.WorldCenter + p), p.y); }
         internal bool Step(out bool spawned)
         {
             spawned = false;
@@ -69,7 +69,8 @@ namespace WildWasteland.Modules.Towns
         private void Add(Bounds box)
         {
             // Plan boxes are town-centred; the overlap fallback and street-edge rechecks read anchor-relative boxes.
-            box.center += _site.Plan.WorldCenter; box.Expand(.3f); _site.DebrisBlockers.Add(box);
+            float offset = box.center.y; box.center += _site.Plan.WorldCenter;
+            box.center = _site.Anchor.InverseTransformPoint(_site.Ground(_site.Anchor.TransformPoint(box.center), offset)); box.Expand(.3f); _site.DebrisBlockers.Add(box);
         }
     }
 }

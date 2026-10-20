@@ -143,7 +143,7 @@ namespace WildWasteland.Modules.Towns
             if (Ready) return Vehicles.Ready ? Walkers.Step() : Vehicles.Step();
             if (_next >= _pieces.Count) return _border.Step(out spawned);
             var p = _pieces[_next]; var rotation = _site.Anchor.rotation * Quaternion.LookRotation(p.Direction);
-            var position = _site.Anchor.TransformPoint(_site.Plan.WorldCenter + p.Position);
+            var position = _site.Ground(_site.Anchor.TransformPoint(_site.Plan.WorldCenter + p.Position));
             if (p.Kind < 0)
             {
                 // The native warehouse entrance is open. Preserve its banner/support, no invented door FSM.

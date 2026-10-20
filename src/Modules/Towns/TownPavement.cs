@@ -6,6 +6,7 @@ namespace WildWasteland.Modules.Towns
         // Keep only the parking slab: no internal road/path mesh or terrain painting.
         internal static void Build(TownSite site, TownAssets assets, Transform root)
         {
+            if (Core.VistasWorldGen.Present) return;
             if (assets.PavementMaterial == null) return;
             foreach (var lot in site.Plan.Lots) if (lot.IsParking && !lot.Skipped)
             {

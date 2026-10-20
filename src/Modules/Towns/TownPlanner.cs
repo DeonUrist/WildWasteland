@@ -18,11 +18,12 @@ namespace WildWasteland.Modules.Towns
             if (input.Saved != null)
             {
                 var saved = input.Saved;
+                if (Core.VistasWorldGen.Present) { saved = saved.CopyPaths(); saved.AccessPath = new Vector3[0]; saved.GradeAccess = false; saved.Feather = 0; saved.MaximumEarthwork = 0; }
                 if (saved.HasTown && saved.PathsVersion < 7)
                 { saved = saved.CopyPaths(); TownParking.Outside(saved); TownWalkGraph.Build(saved, input.Buildings, stop); TownParking.Access(saved, heights, data.globals.height, avoid); }
                 return saved;
             }
-            var plan = new TownPlan { Key = input.Key, Decision = "chance", Feather = input.Feather, StreetWidth = 1.5f };
+            var plan = new TownPlan { Key = input.Key, Decision = "chance", Feather = Core.VistasWorldGen.Present ? 0 : input.Feather, StreetWidth = 1.5f };
             var random = new System.Random(Hash(input.Key + (Core.VistasWorldGen.Present ? "|" + Core.VistasWorldGen.RoadIdentity : "")));
             if (input.ExcludeStartingChunk) { plan.Decision = "starting chunk excluded"; return plan; }
             if (random.Next(100) >= input.Chance) return plan;
@@ -38,10 +39,10 @@ namespace WildWasteland.Modules.Towns
                 if (plan.Lots.Length == 0) break;
                 var sites = TownSiting.Find(plan, input, data, heights, avoid, roads, random, stop);
                 if (sites.Count == 0) continue;
-                var site = sites[0]; plan.WorldCenter = site.Center; plan.OriginalRelief = site.Relief; plan.MaximumEarthwork = site.Relief * .5f;
+                var site = sites[0]; plan.WorldCenter = site.Center; plan.OriginalRelief = site.Relief; plan.MaximumEarthwork = Core.VistasWorldGen.Present ? 0 : site.Relief * .5f;
                 TownWalkGraph.Build(plan, input.Buildings, stop);
-                TownParking.Access(plan, heights, data.globals.height, avoid, roads, input.AccessLength);
-                plan.HasTown = true; plan.Decision = "accepted compact site; attempt " + (attempt + 1) + "; no internal road surfaces";
+                TownParking.Access(plan, heights, data.globals.height, avoid);
+                plan.HasTown = true; plan.Decision = "accepted compact site; attempt " + (attempt + 1) + (Core.VistasWorldGen.Present ? "; natural terrain, no access roads" : "; no internal road surfaces");
                 TownPopulation.Assign(plan, input, random); return plan;
             }
             plan.Lots = new TownLot[0]; plan.HasTown = false;

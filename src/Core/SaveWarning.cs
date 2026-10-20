@@ -25,10 +25,9 @@ namespace WildWasteland.Core
             float scale = Mathf.Min(Screen.width / 1920f, Screen.height / 1080f);
             Vector2 anchor = CleanHud.Hud.SaveWarningAnchor();
             var rect = new Rect(anchor.x - 410 * scale, anchor.y + 8 * scale, 820 * scale, 58 * scale);
-            var oldColor = GUI.color; int depth = GUI.depth; GUI.depth = -100;
-            GUI.color = new Color(.03f, .025f, .015f, .82f); GUI.DrawTexture(rect, Texture2D.whiteTexture); GUI.color = oldColor;
+            int depth = GUI.depth; GUI.depth = -100;
             var color = _phase == 3 || _phase == 1 && _seconds <= 15 ? new Color(1f, .78f, .35f) : new Color(.96f, .91f, .79f);
-            CleanHud.GlyphFont.DrawGame(rect, _text, 34 * scale, color, TextAnchor.MiddleCenter);
+            CleanHud.GlyphFont.DrawGame(rect, _text, 24 * scale, color, TextAnchor.MiddleCenter);
             GUI.depth = depth;
         }
     }

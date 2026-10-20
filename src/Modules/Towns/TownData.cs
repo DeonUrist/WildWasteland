@@ -116,6 +116,7 @@ namespace WildWasteland.Modules.Towns
     {
         public TownPlan Plan { get; internal set; }
         internal Transform Anchor;
+        internal Terrain GroundTerrain;
         internal GameObject Streets;
         internal GameObject[] Buildings;
         internal PlayMakerFSM[][] Spawners;
@@ -134,6 +135,11 @@ namespace WildWasteland.Modules.Towns
         internal int PrepSteps;                   // completed overlap/navigation steps (work-based preparation budget)
         internal readonly HashSet<int> CountedMembers = new HashSet<int>();
         internal Vector3 Scene(Vector3 local) { return Anchor.TransformPoint(Plan.World(local)); }
+        internal Vector3 Ground(Vector3 point, float offset = 0)
+        {
+            if (GroundTerrain != null) point.y = GroundTerrain.SampleHeight(point) + GroundTerrain.transform.position.y + offset;
+            return point;
+        }
         public GameObject Building(int lot) { return Buildings[lot]; }
         public bool Parking(out Vector3 center, out Quaternion rotation, out Vector2 size)
         {
