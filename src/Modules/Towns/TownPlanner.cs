@@ -23,7 +23,7 @@ namespace WildWasteland.Modules.Towns
                 return saved;
             }
             var plan = new TownPlan { Key = input.Key, Decision = "chance", Feather = input.Feather, StreetWidth = 1.5f };
-            var random = new System.Random(Hash(input.Key));
+            var random = new System.Random(Hash(input.Key + (Core.VistasWorldGen.Present ? "|" + Core.VistasWorldGen.RoadIdentity : "")));
             if (input.ExcludeStartingChunk) { plan.Decision = "starting chunk excluded"; return plan; }
             if (random.Next(100) >= input.Chance) return plan;
             int count = random.Next(input.Min, input.Max + 1);
@@ -40,7 +40,7 @@ namespace WildWasteland.Modules.Towns
                 if (sites.Count == 0) continue;
                 var site = sites[0]; plan.WorldCenter = site.Center; plan.OriginalRelief = site.Relief; plan.MaximumEarthwork = site.Relief * .5f;
                 TownWalkGraph.Build(plan, input.Buildings, stop);
-                TownParking.Access(plan, heights, data.globals.height, avoid);
+                TownParking.Access(plan, heights, data.globals.height, avoid, roads, input.AccessLength);
                 plan.HasTown = true; plan.Decision = "accepted compact site; attempt " + (attempt + 1) + "; no internal road surfaces";
                 TownPopulation.Assign(plan, input, random); return plan;
             }

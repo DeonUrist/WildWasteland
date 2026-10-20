@@ -1,5 +1,7 @@
 # VistasWorldGen compatibility — 2026-10-18 — Testing
 
+Towns follow-up (2026-10-20): native/Vistas road hints now combine for new siting, parking approaches can join published roads, and town/gas-station pad footprints are restored after Vistas road grading. Saved towns retain their positions. First-pass asynchronous road readiness remains a limitation; see [Towns compatibility](towns-vistas.md) for exact scope, staged build and in-game checks.
+
 Installed dependency: `VistasWorldGen.dll`, BepInEx `apocalypter.worldamp` / Apocalypter World Amp 1.0.7. Inspection-only decompilation is outside this repo at `V:\Repos\Apocalypter\_tools\decompiled\VistasWorldGen\`. The DLL is obfuscated: repeated member names differ by type/signature, so the bridge resolves complete signatures and typed fields. No Vistas assembly reference, redistributed source or DLL edit is used. Earlier unrelated working-tree changes remain intact.
 
 Windows Release build/deploy succeeded with zero warnings and zero errors. Built and installed DLL MD5: `8C04EAAFA4C9698757B5CBE5DD07FECF`. Unique local artifact: `bin/Release/WildWasteland_0.1.33_vistas_20261018_020839.dll`. No game was launched or automated for verification.

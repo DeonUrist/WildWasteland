@@ -128,12 +128,14 @@ namespace WildWasteland.Modules.Towns
                     _bakeStep.Invoke(null, new[] { native }); _warming = true; return false;
                 }
             }
-            var lots = new List<int>(); for (int lot = 0; lot < _site.Buildings.Length; lot++) if (_site.Buildings[lot] != null) lots.Add(lot);
-            _grids = new Grid[lots.Count]; var overlay = _site.Plan.Overlay; _planned = overlay != null && overlay.Lots != null && overlay.Lots.Length == _site.Plan.LotCount;
-            for (int i = 0; i < _grids.Length; i++)
+            var lots = new List<int>(); for (int lot = 0; lot < _site.Buildings.Length; lot++)
+                if (!_site.Plan.Lots[lot].IsParking && !_site.Plan.Lots[lot].Skipped && _site.Buildings[lot] != null) lots.Add(lot);
+            // Parking shells have their own navigation; publish only a completely captured overlay.
+            var grids = new Grid[lots.Count]; var overlay = _site.Plan.Overlay; _planned = overlay != null && overlay.Lots != null && overlay.Lots.Length == _site.Plan.LotCount;
+            for (int i = 0; i < grids.Length; i++)
             {
                 var g = new Grid { Native = Native[_site.Buildings[lots[i]].transform], AnchorY = _site.Anchor.position.y, Lot = lots[i] };
-                _grids[i] = g; Owners[g.Native] = this;
+                grids[i] = g;
                 g.W = (int)Get(g, "W"); g.H = (int)Get(g, "H"); g.Cell = (float)Get(g, "Cell");
                 g.Origin = (Vector3)Get(g, "GridOrigin") - _site.Anchor.position;
                 g.Right = (Vector3)Get(g, "GridRight"); g.Forward = (Vector3)Get(g, "GridForward");
@@ -150,10 +152,10 @@ namespace WildWasteland.Modules.Towns
                 g.Floor = (float[])g.Local.Clone(); g.Why = (byte[])g.OriginalWhy.Clone(); g.Edges = (byte[])g.OriginalEdges.Clone();
                 g.Near = new bool[g.Floor.Length]; g.Comp = new int[g.Floor.Length]; for (int c = 0; c < g.Comp.Length; c++) g.Comp[c] = -1;
             }
-            foreach (var g in _grids)
+            foreach (var g in grids)
             {
                 var neighbours = new List<Grid>();
-                foreach (var other in _grids)
+                foreach (var other in grids)
                     if (other != g && other.Bounds.x <= g.Bounds.z && other.Bounds.z >= g.Bounds.x
                         && other.Bounds.y <= g.Bounds.w && other.Bounds.w >= g.Bounds.y) neighbours.Add(other);
                 g.Neighbours = neighbours.ToArray();
@@ -164,6 +166,7 @@ namespace WildWasteland.Modules.Towns
                 if (patch != null && patch.W == g.W && patch.H == g.H && Mathf.Abs(patch.Cell - g.Cell) < .0001f) { g.Patch = patch; g.Changed = patch.Any(_dressing); }
                 else if (patch != null) Log.Warn("[Towns] overlay plan mismatch for " + _site.Plan.Lots[g.Lot].Prefab + " (" + patch.W + "x" + patch.H + " vs " + g.W + "x" + g.H + "); runtime projection used.");
             }
+            _grids = grids; foreach (var g in grids) Owners[g.Native] = this;
             return true;
         }
         private void ApplyPatch(Grid g)

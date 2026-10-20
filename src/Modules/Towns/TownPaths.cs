@@ -18,8 +18,7 @@ namespace WildWasteland.Modules.Towns
             var area = data.area.active;
             _minX = area.worldPos.x + 12; _minZ = area.worldPos.z + 12;
             _maxX = area.worldPos.x + area.worldSize.x - 12; _maxZ = area.worldPos.z + area.worldSize.z - 12;
-            if (roads == null) return;
-            foreach (var line in roads.lines) foreach (var segment in line.segments)
+            if (roads != null) foreach (var line in roads.lines) foreach (var segment in line.segments)
             {
                 int samples = Mathf.Clamp(Mathf.CeilToInt(Vector3.Distance(segment.start.pos, segment.end.pos) / 16), 8, 512);
                 var previous = segment.GetPoint(0); previous.y = 0;
@@ -29,6 +28,23 @@ namespace WildWasteland.Modules.Towns
                     _segments.Add(previous); _segments.Add(point); previous = point;
                 }
             }
+            if (Core.VistasWorldGen.Present) foreach (var line in Core.VistasWorldGen.RoadLines)
+                for (int i = 1; i < line.Length; i++)
+                {
+                    var a = line[i - 1]; var b = line[i]; a.y = b.y = 0;
+                    if (Mathf.Max(a.x, b.x) < _minX || Mathf.Min(a.x, b.x) > _maxX
+                        || Mathf.Max(a.z, b.z) < _minZ || Mathf.Min(a.z, b.z) > _maxZ) continue;
+                    int samples = Mathf.Clamp(Mathf.CeilToInt(Vector3.Distance(a, b) / 16), 1, 512);
+                    for (int s = 0; s < samples; s++)
+                    { _segments.Add(Vector3.Lerp(a, b, s / (float)samples)); _segments.Add(Vector3.Lerp(a, b, (s + 1) / (float)samples)); }
+                }
+            if (!Core.VistasWorldGen.Present) return;
+            // Vistas publishes roads from workers. Stable ordering keeps site selection reproducible.
+            var segments = new List<Vector3[]>();
+            for (int i = 0; i < _segments.Count; i += 2) segments.Add(new[] { _segments[i], _segments[i + 1] });
+            segments.Sort((a, b) => { int c = a[0].x.CompareTo(b[0].x); if (c == 0) c = a[0].z.CompareTo(b[0].z);
+                if (c == 0) c = a[1].x.CompareTo(b[1].x); return c == 0 ? a[1].z.CompareTo(b[1].z) : c; });
+            _segments.Clear(); foreach (var segment in segments) _segments.AddRange(segment);
         }
         internal bool Inside(Vector3 p) { return p.x >= _minX && p.x <= _maxX && p.z >= _minZ && p.z <= _maxZ; }
         internal bool Nearest(Vector3 position, float limit, out Vector3 point)
