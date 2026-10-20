@@ -20,7 +20,15 @@ namespace WildWasteland.Modules.Towns
         private struct Bits { [FieldOffset(0)] internal float F; [FieldOffset(0)] internal uint U; }
         private static uint Sum(uint sum, float y, byte why, byte sky, byte edge)
         { unchecked { sum = (sum ^ new Bits { F = y }.U) * 16777619; sum = (sum ^ why) * 16777619; sum = (sum ^ sky) * 16777619; return (sum ^ edge) * 16777619; } }
+        internal static string LastMiss = "";
         internal static TownBakeData Load(BuildingSpec spec, float margin, float cell)
+        {
+            // exact maps first; then (WW) a map of the same grid whose collider count differs (loose / dynamic props counted
+            // differently by the runtime baker): the footprint, floors and walls are the same grid
+            var map = Load(spec, margin, cell, true);
+            return map ?? Load(spec, margin, cell, false);
+        }
+        private static TownBakeData Load(BuildingSpec spec, float margin, float cell, bool strict)
         {
             cell = Mathf.Max(cell, Mathf.Max(spec.HalfX * 2 + margin * 2, spec.HalfZ * 2 + margin * 2) / 600f);
             int w = Mathf.Max(2, Mathf.CeilToInt((spec.HalfX * 2 + margin * 2) / cell));
@@ -29,24 +37,25 @@ namespace WildWasteland.Modules.Towns
             var assembly = typeof(Services).Assembly;
             foreach (string resource in WildWasteland.Core.DiskResources.Names)
                 if (resource.StartsWith(prefix, StringComparison.Ordinal) && resource.EndsWith(".wwnav", StringComparison.Ordinal))
-                { using (var stream = WildWasteland.Core.DiskResources.Open(resource)) { var map = Read(stream, resource, spec, w, h, cell, margin); if (map != null) return map; } }
+                { using (var stream = WildWasteland.Core.DiskResources.Open(resource)) { var map = Read(stream, resource, spec, w, h, cell, margin, strict); if (map != null) return map; } }
             foreach (string directory in new[] { Path.Combine(Assets.ModuleDir("NPC"), "NavMaps", "Vanilla"),
                 Path.Combine(Assets.ModuleConfigDir("NPC"), "NavMaps", "Custom"), Path.Combine(Assets.ModuleDir("NPC"), "NavMaps") })
             {
                 if (!Directory.Exists(directory)) continue;
                 var files = Directory.GetFiles(directory, spec.Name + "-*.wwnav"); Array.Sort(files, StringComparer.Ordinal);
                 foreach (string file in files)
-                    using (var stream = File.OpenRead(file)) { var map = Read(stream, file, spec, w, h, cell, margin); if (map != null) return map; }
+                    using (var stream = File.OpenRead(file)) { var map = Read(stream, file, spec, w, h, cell, margin, strict); if (map != null) return map; }
             }
+            LastMiss = "wants " + w + "x" + h + " cells of " + cell.ToString("0.###") + " m, " + spec.ColliderCount + " colliders";
             return null;
         }
-        private static TownBakeData Read(Stream stream, string source, BuildingSpec spec, int w, int h, float cell, float margin)
+        private static TownBakeData Read(Stream stream, string source, BuildingSpec spec, int w, int h, float cell, float margin, bool strict)
         {
             using (var r = new BinaryReader(stream))
             {
                 if (r.ReadInt32() != 0x574E4156 || r.ReadInt32() != 1) return null;
                 r.ReadUInt64(); int mw = r.ReadInt32(), mh = r.ReadInt32(); float mc = r.ReadSingle(), reference = r.ReadSingle(); int colliders = r.ReadInt32();
-                if (mw != w || mh != h || mc != cell || colliders != spec.ColliderCount) return null;
+                if (mw != w || mh != h || mc != cell || strict && colliders != spec.ColliderCount) return null;
                 uint sum = Sum(2166136261, reference, 0, 0, 0);
                 for (int i = 0; i < colliders; i++) sum = Sum(sum, 0, r.ReadByte(), 0, 0);
                 int n = r.ReadInt32();

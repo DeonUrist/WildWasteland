@@ -109,7 +109,7 @@ namespace WildWasteland.Modules.Towns
                     foreach (var child in prefab.GetComponentsInChildren<Transform>(true)) if (child.name.IndexOf("crane_big", StringComparison.OrdinalIgnoreCase) >= 0) spec.Crane = true;
                     spec.Bake = TownBakeData.Load(spec, margin, cell);
                     if (spec.Bake == null || !spec.Bake.FindEntry(spec))
-                    { Log.Warn("[Towns] template excluded: " + prefab.name + "; no matching bake with a measured outward entrance. Bake this prefab with current NPC settings first."); continue; }
+                    { Log.Warn("[Towns] template excluded: " + prefab.name + "; " + (spec.Bake == null ? "no matching bake (" + TownBakeData.LastMiss + ")" : "no measured outward entrance in " + spec.Bake.Source) + ". Bake this prefab with current NPC settings first."); continue; }
                     var paths = new List<string>();
                     var budgets = new List<TownPopulation.NativeBudget>();
                     var markers = new List<string>();
