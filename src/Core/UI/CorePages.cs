@@ -147,6 +147,7 @@ namespace WildWasteland.Core.UI
             }
             Switch(l, "Vehicle Icons", Player.VehicleStatusHint);
             Switch(l, "Compass", CleanHudSettings.ShowCompass);
+            Switch(l, "Simple map icons", CleanHudSettings.SimpleMapIcons);
             l.Entry(CleanHudSettings.Scale);
         }
 
@@ -228,6 +229,7 @@ namespace WildWasteland.Core.UI
             if (VerboseSetting(e) || ReferenceEquals(e, Plugin.DeveloperMode)) return false;
             if (ReferenceEquals(e, CleanHudSettings.ShowNeeds) || ReferenceEquals(e, CleanHudSettings.ShowHealthNumbers)
                 || ReferenceEquals(e, CleanHudSettings.DamageDirection)
+                || ReferenceEquals(e, CleanHudSettings.SimpleMapIcons)
                 || ReferenceEquals(e, CleanHudSettings.ShowInsanity) || ReferenceEquals(e, CleanHudSettings.Scale)
                 || ReferenceEquals(e, CleanHudSettings.ShowConvoys) || ReferenceEquals(e, CleanHudSettings.ShowLocations)
                 || ReferenceEquals(e, CleanHudSettings.AmbiguousPatrols) || ReferenceEquals(e, CleanHudSettings.AmbiguousLocations)

@@ -92,6 +92,7 @@ namespace WildWasteland.Modules.Patrols
             _footLive.TryGetValue(journey.id, out fl);
             if (fl != null) FootBodies(journey, fl);
             if (!AnyWalker(journey)) { if (Core.Log.Verbose) PatrolsModule.Verbose("Foot patrol " + journey.name + ": everyone died"); Remove(journey); return; }
+            if (!journey.TerrainRoute) { if (fl != null) foreach (var body in fl.Bodies) Unorder(body); return; }
             if (!journey.arrived && !string.IsNullOrEmpty(journey.destination) && Cleared(journey.destination) && !FootRetarget(journey, fl != null)) return;
             if (fl == null)
             {
@@ -469,7 +470,7 @@ namespace WildWasteland.Modules.Patrols
                 if (pending.Job.Roads != null) Array.Copy(pending.Job.Roads, roads, Mathf.Min(pending.Job.Roads.Length, outward.Length));
                 if (pending.Back.Roads != null && pending.Back.Roads.Length > 1) Array.Copy(pending.Back.Roads, 1, roads, outward.Length, Mathf.Min(pending.Back.Roads.Length - 1, back.Length - 1));
                 var journey = new TrafficJourney { id = Guid.NewGuid().ToString("N"), name = pending.Name, faction = pending.Faction, source = pending.Source.id, destination = pending.Source.id,
-                    foot = true, route = route, roadLegs = roads, TerrainRoute = pending.Job.Elevation || pending.Back.Elevation, leg = 1, position = route[0],
+                    foot = true, route = route, roadLegs = roads, TerrainRoute = true, leg = 1, position = route[0],
                     speed = PatrolsModule.FootSpeed.Value, walkers = pending.Walkers, vehicles = NoVehicles };
                 _journeys.Add(journey);
                 _footStateCode = -1;
@@ -514,6 +515,7 @@ namespace WildWasteland.Modules.Patrols
             foreach (var poi in TrafficLocations.Points.Values)
             {
                 if (poi == null) continue;
+                if (!TrafficLocations.StartingAllowed(poi.position)) continue;
                 if (InsideCamp(poi.position)) { inCamp++; continue; }
                 float d = TrafficLocations.FlatDistance(source.apron, poi.position);
                 if (d < 300f) { tooNear++; continue; } if (d > longest) { tooFar++; continue; }

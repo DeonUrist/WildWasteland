@@ -29,6 +29,7 @@ namespace WildWasteland.Modules.Patrols
             internal Vector3 A,B;
             internal Vector3[][] Hints;
             internal Bounds[] Blocks;
+            internal Bounds[] Quiet;
             internal float Influence;
             internal int Seed;
             internal ElevationGrid[] Elevation;
@@ -62,11 +63,12 @@ namespace WildWasteland.Modules.Patrols
             var lines=PatrolsModule.TrafficRoadRouting.Value?nearby.SelectMany(t=>t.Lines).ToList():new List<Vector3[]>();
             if(PatrolsModule.TrafficRoadRouting.Value&&Core.VistasWorldGen.Present)lines.AddRange(Core.VistasWorldGen.RoadLines);
             var blocks = new List<Bounds>(_blocks);
+            var quiet = TrafficLocations.StartingBlocks(); blocks.AddRange(quiet);
             if (Modules.Towns.TownsApi.Provider != null) Modules.Towns.TownsApi.Provider.TravelBlocks(blocks);
             Queue.Enqueue(new Request{Job=job,A=a,B=b,Hints=hints,
                 Elevation=nearby.Where(t=>t.Elevation!=null&&(foot||t.FinalGround)).Select(t=>t.Elevation).ToArray(),
                 Blocks=blocks.Where(box => bounds.Overlaps(new Rect(box.min.x, box.min.z, box.size.x, box.size.z))).ToArray(),Influence=PatrolsModule.TrafficRoadConnector.Value,Seed=seed,Lines=lines.ToArray(),Convoy=convoy,Foot=foot,
-                Sources=Alternatives(sources,source),Destinations=Alternatives(destinations,destination),Existing=existing});
+                Sources=Alternatives(sources,source),Destinations=Alternatives(destinations,destination),Existing=existing,Quiet=quiet});
             Start();return job;
         }
         private static TrafficBase[] Alternatives(TrafficBase[] choices,TrafficBase fallback)
@@ -87,8 +89,15 @@ namespace WildWasteland.Modules.Patrols
                         if(request.Job.Epoch!=Volatile.Read(ref _epoch))continue;
                         if(request.Foot)
                         {
-                            request.Job.Route=TerrainWaypoints.Build(request.A,request.B,request.Hints,request.Blocks,request.Influence,request.Seed,request.Elevation,out var roads);
-                            request.Job.Roads=roads;
+                            var stops = request.Existing ?? new[] { request.A, request.B };
+                            var points = new List<Vector3>(); var kinds = new List<bool>(); bool complete = true;
+                            for (int i = 1; i < stops.Length; i++)
+                            {
+                                var leg = TerrainWaypoints.Build(stops[i-1],stops[i],request.Hints,request.Blocks,request.Influence,request.Seed,request.Elevation,out var roads);
+                                if (leg == null) { complete = false; break; }
+                                points.AddRange(i == 1 ? leg : leg.Skip(1)); kinds.AddRange(i == 1 ? roads : roads.Skip(1));
+                            }
+                            if (complete) { request.Job.Route=points.ToArray(); request.Job.Roads=kinds.ToArray(); }
                         }
                         else if(request.Existing!=null)
                         {
@@ -117,6 +126,7 @@ namespace WildWasteland.Modules.Patrols
                                 best=score;request.Job.Route=route;request.Job.Roads=roads;request.Job.Source=pair.Item2;request.Job.Destination=pair.Item3;
                             }
                         }
+                        if(request.Job.Route!=null && !Clear(request.Job.Route,request.Quiet))request.Job.Route=null;
                         if(request.Job.Route!=null)RoadPath.Prepare(request.Job.Route);Interlocked.Increment(ref Searches);
                     }
                     catch(Exception e){request.Job.Error=e.ToString();}
@@ -179,5 +189,11 @@ namespace WildWasteland.Modules.Patrols
         }
         private static bool Crosses(Bounds box,Vector3 a,Vector3 b)
         {a.y=b.y=0f;var d=b-a;float length=d.magnitude;return length>0.01f&&box.IntersectRay(new Ray(a,d/length),out var hit)&&hit<length;}
+        internal static bool Clear(Vector3[] route, Bounds[] blocks)
+        {
+            foreach (var box in blocks) for (int i = 0; i < route.Length; i++)
+            { var p = route[i]; p.y = 0; if (box.Contains(p) || i > 0 && Crosses(box, route[i - 1], p)) return false; }
+            return true;
+        }
     }
 }

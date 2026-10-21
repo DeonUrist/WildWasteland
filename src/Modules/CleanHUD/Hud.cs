@@ -829,6 +829,8 @@ namespace WildWasteland.Modules.CleanHUD
                 if (!mv.Rt.gameObject.activeSelf) { mv.Rt.gameObject.SetActive(true); mv.Distance = int.MinValue; }
                 float x = cx + s.Rel * ppd;
                 Place(mv.Rt, x - 80f, 13f, 160f, 70f);
+                float iconSize = !ambiguous && s.E.Owner == LocationMarkers.Owner && LocationMarkers.CustomIcon(s.E.Target) ? 54f : 36f;
+                Place(mv.Icon.rectTransform, 80f - iconSize * .5f, 36f - iconSize, iconSize, iconSize);
                 mv.Icon.texture = tex; mv.Icon.color = ambiguous ? Color.white : s.E.Style.Color;
                 float alpha = s.Edge ? .55f : 1f; if (mv.Group.alpha != alpha) mv.Group.alpha = alpha;
                 if (mv.Dist.enabled != s.E.Style.ShowDistance) mv.Dist.enabled = s.E.Style.ShowDistance;

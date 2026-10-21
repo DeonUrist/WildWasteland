@@ -73,6 +73,9 @@ namespace WildWasteland.Modules.Patrols
             for (int i = 0; i < count; i++) cost[i] = float.PositiveInfinity;
             int start = Mathf.RoundToInt((a.z - z0) / Cell) * width + Mathf.RoundToInt((a.x - x0) / Cell);
             int end = Mathf.RoundToInt((b.z - z0) / Cell) * width + Mathf.RoundToInt((b.x - x0) / Cell);
+            // Parking can lie less than one coarse cell from a town wall. Keep the exact exterior endpoints.
+            positions[start] = a; heights[start] = a.y; valid[start] = !Inside(blocks, a);
+            positions[end] = b; heights[end] = b.y; valid[end] = !Inside(blocks, b);
             var first = positions[start]; first.y = heights[start];
             var last = positions[end]; last.y = heights[end];
             if (!valid[start] || !valid[end] || !Safe(a, first, grids, blocks, limit, out _) || !Safe(last, b, grids, blocks, limit, out _)) return null;

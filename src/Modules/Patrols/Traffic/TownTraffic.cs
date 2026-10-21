@@ -110,9 +110,6 @@ namespace WildWasteland.Modules.Patrols
             if (_townDepartures.Any(d => d.Journey.merchant == (role == 2))) return false;
             var destinations = _townStops.Where(s => s.CanTravel && (role != 2 || s.Faction == "Coyotes") && !ParkingBusy(s.Id)).ToList();
             var sources = _townStops.Where(s => s.CanTravel).ToList();
-            foreach (var point in TrafficLocations.Points.Values)
-                if (point.name.StartsWith("Starter_Area", StringComparison.Ordinal))
-                    sources.Add(new TownStop { Id = point.id, Name = "Starting camp", Faction = "Coyotes", Parking = point.position, Center = point.position, Heading = Vector3.forward, CanTravel = true });
             var player = PlayerRef.Player; if (player == null || destinations.Count == 0) return false;
             var position = TrafficSpace.World(player.position);
             // Actual settlements are remembered before encounter visibility; no invented offscreen endpoints.

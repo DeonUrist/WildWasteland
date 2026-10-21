@@ -18,6 +18,7 @@ namespace WildWasteland.Modules.CleanHUD
         internal static ConfigEntry<bool> Enabled, ShowNeeds, ShowHealthNumbers, ShowInsanity, MenuEnabled, CleanFont, EnableCheats;
         internal static ConfigEntry<float> Scale;
         internal static ConfigEntry<bool> ShowConvoys, ShowLocations;
+        internal static ConfigEntry<bool> SimpleMapIcons;
         internal static ConfigEntry<bool> DamageDirection;
         internal static ConfigEntry<bool> AmbiguousPatrols, AmbiguousLocations;
         internal static ConfigEntry<bool> ShowCompass, MapEnabled, DrivingHudOnlyThirdPerson;
@@ -48,6 +49,8 @@ namespace WildWasteland.Modules.CleanHUD
             DamageDirection = cfg.Player("HUD", "DamageDirection", true, "Show an opaque red arrow toward each attacker for two seconds after a hit. Repeated hits refresh one arrow. Requires NPC AI and Clean HUD.");
             ShowConvoys = cfg.Player("HUD", "ShowConvoys", true, "Compass icons and distances for vehicle groups: merchants yellow, Coyotes green, patrols red and convoys orange.");
             ShowLocations = cfg.Player("HUD", "ShowLocations", true, "Compass icons and distances for native locations within 1 km.");
+            SimpleMapIcons = cfg.Player("HUD", "Simple map icons", false, "Use generic location icons on the map and compass instead of location-specific pictures.");
+            SimpleMapIcons.SettingChanged += SimpleIconsChanged;
             AmbiguousPatrols = cfg.Player("HUD", "AmbiguousPatrols", true, "Show all compass vehicle groups with white vehicle icons, keeping their distances.");
             AmbiguousLocations = cfg.Player("HUD", "AmbiguousLocations", true, "Show undiscovered compass locations as neutral question marks. Approaching within 100 m or spotting through binoculars remembers their real icons and colors. Quest flags are unchanged.");
             ShowCompass = cfg.Player("HUD", "Compass", true, "Show the compass, including its direction strip and all markers.");
@@ -179,6 +182,7 @@ namespace WildWasteland.Modules.CleanHUD
         private void TickWeatherMap() { _weatherMap.Tick(_questMap); }
         private void PollLayout() { Layout.Poll(false); }
         private void MapChanged(object sender, EventArgs args) { if (Running && _questMap != null) _questMap.ApplyEnabled(); }
+        private void SimpleIconsChanged(object sender, EventArgs args) { if (Running) LocationMarkers.RefreshIcons(); }
         private void AttachHud()
         {
             ChaseCameraHud.Install(this);

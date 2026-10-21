@@ -52,6 +52,7 @@ namespace WildWasteland.Modules.Patrols
         internal static void Reset(){Sites.Clear();Candidates.Clear();_next=0f;_cursor=0;}
         internal static void Register(string id,Transform root)
         {
+            if (TrafficLocations.TownBuilding(root)) return;
             if(Sites.TryGetValue(id,out var old)&&old.Root==root)return;
             var spawners=new List<PlayMakerFSM>();
             foreach(var f in root.GetComponentsInChildren<PlayMakerFSM>(true))

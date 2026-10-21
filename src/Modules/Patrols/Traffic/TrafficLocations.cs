@@ -31,12 +31,27 @@ namespace WildWasteland.Modules.Patrols
         internal static int NearbyCount(Vector3 player,float range)
         {
             int count=0;foreach(var camp in Known.Values)
-                if(camp.faction!="Coyotes"&&!camp.cleared&&TrafficCamps.Loaded(camp.id)&&FlatDistance(camp.center,player)<=range)count++;
+                if(camp.faction!="Coyotes"&&!camp.cleared&&TrafficCamps.Loaded(camp.id)&&!TownInterior(camp.center)&&FlatDistance(camp.center,player)<=range)count++;
+            if (Modules.Towns.TownsApi.Provider != null) count += Modules.Towns.TownsApi.Provider.PatrolCount(player, range);
             return count;
         }
         internal static TrafficBase[] NearbyBases(Vector3 player,float range)
-        {return Known.Values.Where(c=>c.faction!="Coyotes"&&!c.cleared&&TrafficCamps.Loaded(c.id)&&FlatDistance(c.center,player)<=range).ToArray();}
+        {return PatrolBases().Where(c=>BaseLoaded(c.id)&&FlatDistance(c.center,player)<=range).ToArray();}
+        internal static TrafficBase[] PatrolBases()
+        {
+            var bases = Known.Values.Where(c => c.faction != "Coyotes" && !c.cleared && !TownInterior(c.center)).ToList();
+            if (Modules.Towns.TownsApi.Provider != null) Modules.Towns.TownsApi.Provider.PatrolBases(bases);
+            return bases.ToArray();
+        }
+        internal static bool BaseLoaded(string id)
+        { return TrafficCamps.Loaded(id) || Modules.Towns.TownsApi.Provider != null && Modules.Towns.TownsApi.Provider.PatrolBase(id); }
+        internal static bool TownInterior(Vector3 world)
+        { Vector3 parking; return Modules.Towns.TownsApi.Provider != null && Modules.Towns.TownsApi.Provider.ParkingOutside(world, out parking); }
         internal static Bounds[] Blocks() => Known.Values.Select(c=>new Bounds(new Vector3(c.center.x,0f,c.center.z),new Vector3(c.size.x+16f,10000f,c.size.z+16f))).ToArray();
+        internal static Bounds[] StartingBlocks() => Points.Values.Where(p => p.name.StartsWith("Starter_Area", StringComparison.Ordinal)).Select(p => new Bounds(new Vector3(p.position.x, 0, p.position.z), new Vector3(1000, 10000, 1000))).ToArray();
+        internal static bool StartingAllowed(Vector3 point)
+        { foreach (var p in Points.Values) if (p.name.StartsWith("Starter_Area", StringComparison.Ordinal) && Mathf.Abs(point.x - p.position.x) <= 500f && Mathf.Abs(point.z - p.position.z) <= 500f) return false; return true; }
+        internal static int StartingRevision { get { int revision = 0; foreach (var p in Points.Values) if (p.name.StartsWith("Starter_Area", StringComparison.Ordinal)) revision ^= p.position.GetHashCode(); return revision; } }
         internal static bool Contains(TrafficBase camp,Vector3 point,float margin=35f)
         {return Mathf.Abs(point.x-camp.center.x)<=camp.size.x/2f+margin&&Mathf.Abs(point.z-camp.center.z)<=camp.size.z/2f+margin;}
         internal static bool PlayerAt(TrafficBase camp)
@@ -138,13 +153,17 @@ namespace WildWasteland.Modules.Patrols
         {return name.Length>prefix.Length&&name.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)&&char.IsDigit(name[prefix.Length]);}
         private static void RememberPoi(Transform root,string name)
         {
-            if(!PoiName(name))return;string id=Identity(root);if(Points.ContainsKey(id)||!ExaminedPoints.Add(id))return;
+            if (TownBuilding(root)) return;
+            if(!PoiName(name))return;string id=Identity(root);bool starting=name.StartsWith("Starter_Area", StringComparison.Ordinal);
+            if((Points.ContainsKey(id)&&!starting)||!ExaminedPoints.Add(id))return;
             // Inspect a POI only on first discovery, in the existing incremental scene scan.
             Vector3 point=root.position;
             var box=new Bounds(point,Vector3.zero);foreach(var collider in root.GetComponentsInChildren<Collider>(true))if(!collider.isTrigger)box.Encapsulate(collider.bounds);
             point=box.center+root.forward*(Mathf.Max(box.extents.x,box.extents.z)+25f);
+            if (starting) point = box.center;
             if(Points.Count>=1024)return;
             Points[id]=new TrafficPoi{id=id,name=TemplateExporter.PrefabName(root.name),position=TrafficSpace.World(point)};
+            if (starting) Revision++;
         }
 
         internal static string Identity(Transform t)
@@ -155,6 +174,7 @@ namespace WildWasteland.Modules.Patrols
 
         private static void Remember(Transform root, Bounds? baked, object structure = null)
         {
+            if (TownBuilding(root)) return;
             string id = Identity(root);
             TrafficCamps.Register(id,root);
             // Older NPC Overhaul grids can still contain pre-jump scene coordinates; use current collider geometry instead.
@@ -233,6 +253,9 @@ namespace WildWasteland.Modules.Patrols
         }
 
         internal static float FlatDistance(Vector3 a, Vector3 b) { a.y = b.y = 0f; return Vector3.Distance(a, b); }
+
+        internal static bool TownBuilding(Transform root)
+        { for (var t = root; t != null; t = t.parent) if (Modules.Towns.TownMarkers.Owns(t)) return true; return false; }
 
         internal static float EngineRange(GameObject car)
         {

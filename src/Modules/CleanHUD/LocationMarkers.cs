@@ -16,7 +16,7 @@ namespace WildWasteland.Modules.CleanHUD
         private sealed class Location
         {
             internal int Marker, MapMarker; internal Transform Root; internal Renderer Native; internal bool ForceOff;
-            internal string Icon, Label, Key, Caption; internal Color Color; internal IMapMarkers Map; internal bool Known, Cleared;
+            internal string Icon, GenericIcon, Label, Key, Caption; internal Color Color; internal IMapMarkers Map; internal bool Known, Cleared;
             internal Vector3 Position() { return Root != null ? Root.position : Vector3.zero; }
         }
         private static readonly Dictionary<Transform, Location> Locations = new Dictionary<Transform, Location>();
@@ -28,6 +28,8 @@ namespace WildWasteland.Modules.CleanHUD
 
         internal static bool Known(Transform root) { Location location; return root != null && Locations.TryGetValue(root, out location) && location.Known; }
         internal static bool Known(Func<Vector3> position) { var location = position.Target as Location; return location != null && location.Known; }
+        internal static bool CustomIcon(Func<Vector3> position) { var location = position.Target as Location; return location != null && location.Icon == location.Label; }
+        internal static bool CustomIcon(Transform root) { Location location; return root != null && Locations.TryGetValue(root, out location) && location.Icon == location.Label; }
         internal static bool MissingBake(Func<Vector3> position)
         {
             var location = position.Target as Location;
@@ -94,8 +96,18 @@ namespace WildWasteland.Modules.CleanHUD
                 if (int.TryParse(label.Substring(5), out number)) color = number == 10 || number == 15 || number == 16 ? new Color(.31f, .86f, .39f) : new Color(1f, .31f, .31f);
             }
             var renderer = icon.GetComponent<Renderer>();
-            if (MapIcons.Get(label) != null) glyph = label;
-            Locations.Add(root, new Location { Root = root, Icon = glyph, Color = color, Label = label, Caption = CaptionName(label), Native = renderer, ForceOff = renderer != null && renderer.forceRenderingOff });
+            string generic = glyph;
+            if (!CleanHudModule.SimpleMapIcons.Value && MapIcons.Get(label) != null) glyph = label;
+            Locations.Add(root, new Location { Root = root, Icon = glyph, GenericIcon = generic, Color = color, Label = label, Caption = CaptionName(label), Native = renderer, ForceOff = renderer != null && renderer.forceRenderingOff });
+        }
+        internal static void RefreshIcons()
+        {
+            foreach (var location in Locations.Values)
+            {
+                location.Icon = !CleanHudModule.SimpleMapIcons.Value && MapIcons.Get(location.Label) != null ? location.Label : location.GenericIcon;
+                if (location.Map != null) location.Map.Remove(location.MapMarker); location.MapMarker = 0;
+                if (location.Marker != 0) Api.Compass.Remove(location.Marker); location.Marker = 0;
+            }
         }
         private static string CaptionName(string label)
         {

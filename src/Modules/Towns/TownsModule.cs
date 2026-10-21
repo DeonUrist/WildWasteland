@@ -568,6 +568,50 @@ namespace WildWasteland.Modules.Towns
         }
         internal void MerchantSeeded(string key)
         { TownRecord record; if (_records.TryGetValue(key, out record)) record.Plan.MerchantSeeded = true; }
+        internal int TravelRevision
+        { get { int count = 0; foreach (var record in _records.Values) if (record.Plan.HasTown) count++; return unchecked(_epoch * 397 ^ count); } }
+        internal bool PatrolBase(string id)
+        {
+            TownRecord record;
+            if (id == null || !_records.TryGetValue(id, out record) || !record.Plan.HasTown || record.Plan.Condition != TownCondition.Inhabited) return false;
+            foreach (var lot in record.Plan.Lots) if (lot.IsParking && !lot.Skipped) return true;
+            return false;
+        }
+        internal int PatrolCount(Vector3 player, float range)
+        {
+            int count = 0;
+            foreach (var record in _records.Values)
+            {
+                var plan = record.Plan; if (!plan.HasTown || plan.Condition != TownCondition.Inhabited) continue;
+                foreach (var lot in plan.Lots) if (lot.IsParking && !lot.Skipped)
+                { var d = plan.World(lot.LocalPosition) - player; d.y = 0; if (d.sqrMagnitude <= range * range) count++; break; }
+            }
+            return count;
+        }
+        internal void PatrolBases(List<Patrols.TrafficBase> into)
+        {
+            foreach (var record in _records.Values)
+            {
+                var plan = record.Plan;
+                if (!plan.HasTown || plan.Condition != TownCondition.Inhabited) continue;
+                foreach (var lot in plan.Lots) if (lot.IsParking && !lot.Skipped)
+                { into.Add(new Patrols.TrafficBase { id = plan.Key, name = plan.Name, faction = plan.Faction.ToString(),
+                    center = plan.World(lot.LocalPosition), apron = plan.World(lot.LocalPosition), gate = plan.World(lot.LocalPosition), size = new Vector3(24, 0, 40) }); break; }
+            }
+        }
+        internal bool ParkingOutside(Vector3 world, out Vector3 parking)
+        {
+            parking = world;
+            foreach (var record in _records.Values) if (record.Plan.HasTown)
+            {
+                var plan = record.Plan; var p = world - plan.WorldCenter; p.y = 0;
+                if (p.sqrMagnitude > plan.Radius * plan.Radius) continue;
+                var frame = TownPerimeter.Frame(plan);
+                if (!frame.Contains(p)) continue;
+                foreach (var lot in plan.Lots) if (lot.IsParking && !lot.Skipped) { parking = plan.World(lot.LocalPosition); return true; }
+            }
+            return false;
+        }
         internal void TravelBlocks(List<Bounds> into)
         {
             foreach (var record in _records.Values) if (record.Plan.HasTown)
@@ -619,6 +663,9 @@ namespace WildWasteland.Modules.Towns
         }
         internal bool VehicleWaypoint(Vector3 position, Vector3 goal, out Vector3 waypoint, out bool hold)
         {
+            Vector3 parking;
+            bool redirected = ParkingOutside(Patrols.TrafficSpace.World(goal), out parking);
+            if (redirected) goal = Patrols.TrafficSpace.Scene(parking);
             waypoint = goal; hold = false;
             foreach (var live in _sites)
             {
@@ -628,7 +675,7 @@ namespace WildWasteland.Modules.Towns
                     site.Anchor.InverseTransformPoint(goal) - site.Plan.WorldCenter, out next, out hold)) continue;
                 waypoint = site.Ground(site.Anchor.TransformPoint(site.Plan.WorldCenter + next)); return true;
             }
-            return false;
+            return redirected;
         }
         public override void OnSaveBegin(string slot)
         {

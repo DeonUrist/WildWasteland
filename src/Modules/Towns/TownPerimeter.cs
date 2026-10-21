@@ -111,9 +111,12 @@ namespace WildWasteland.Modules.Towns
                 _nodes[i * 2 + 1] = TownPerimeter.Gate(_frame, i) + TownPerimeter.Normal(i) * 16; }
             for (int i = 0; i < _outline.Vertices.Length; i++)
             { _nodes[8 + i * 2] = _outline.Offset(i, -3.2f); _nodes[9 + i * 2] = _outline.Offset(i, 10); }
+            if (!walking)
+            { _nodes = new Vector3[4]; for (int i = 0; i < 4; i++) _nodes[i] = TownPerimeter.Corner(_frame, i, 20f); }
         }
         private bool Clear(Vector3 a, Vector3 b)
         {
+            if (!_walking && CrossesFrame(a, b)) return false;
             if (_outline.Crosses(a, b, _margin) || Props(a, b)) return false;
             if (!_walking) for (int i = 0; i < _buildings.Length; i++)
             {
@@ -123,6 +126,12 @@ namespace WildWasteland.Modules.Towns
                     && TownPerimeter.Clip(from.z, to.z - from.z, box.extents.z + _margin, ref lo, ref hi)) return false;
             }
             return true;
+        }
+        private bool CrossesFrame(Vector3 a, Vector3 b)
+        {
+            float lo = 0, hi = 1;
+            return TownPerimeter.Clip(a.x - _frame.center.x, b.x - a.x, _frame.extents.x + 6f, ref lo, ref hi)
+                && TownPerimeter.Clip(a.z - _frame.center.z, b.z - a.z, _frame.extents.z + 6f, ref lo, ref hi);
         }
         private bool Props(Vector3 a, Vector3 b)
         {
@@ -155,7 +164,7 @@ namespace WildWasteland.Modules.Towns
         internal bool Waypoint(Vector3 a, Vector3 b, out Vector3 point, out bool hold)
         {
             point = b; hold = false;
-            if (!_outline.Crosses(a, b, _margin) && !Props(a, b)) return false;
+            if (Clear(a, b)) return false;
             if (!_ready) { point = a; hold = true; return true; }
             float best = float.PositiveInfinity; int start = -1, end = -1;
             // Node visibility is memoised per 2 m cell for half a second: every pilot decision asked for all 2n segments.
@@ -175,7 +184,7 @@ namespace WildWasteland.Modules.Towns
             if (start >= 0)
             { if ((a - _nodes[start]).sqrMagnitude < 9 && start != end) start = _next[start, end]; point = _nodes[start]; return true; }
             // Dense building rows may have no vehicle clearance. Wait outside a gate rather than ram.
-            for (int i = 1; i < 8; i += 2)
+            for (int i = _walking ? 1 : 0; i < (_walking ? 8 : _nodes.Length); i += _walking ? 2 : 1)
                 if (_from[i] && (a - _nodes[i]).sqrMagnitude < best)
                 { best = (a - _nodes[i]).sqrMagnitude; point = _nodes[i]; }
             if (float.IsPositiveInfinity(best)) point = a;

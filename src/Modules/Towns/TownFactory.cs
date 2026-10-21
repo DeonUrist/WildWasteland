@@ -127,7 +127,6 @@ namespace WildWasteland.Modules.Towns
         {
             var root = new GameObject("Towns parking and wreck pockets " + site.Plan.Key); root.transform.SetParent(parent, false);
             TownDebris.Build(site, assets, root.transform);
-            TownPavement.Build(site, assets, root.transform);
             return root;
         }
         internal static void KeepGeometry(TownSite site, int index, Transform parent)

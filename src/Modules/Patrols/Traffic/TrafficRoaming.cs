@@ -34,7 +34,7 @@ namespace WildWasteland.Modules.Patrols
             }
             var group=Convoy.TrafficGroup(false,"Coyotes");if(group==null)return;
             var roster=EditorStore.ComposeFull(group,false,()=>UnityEngine.Random.value);if(roster.Count==0)return;
-            var points=TrafficLocations.Points.Values.Where(p=>TrafficLocations.FlatDistance(p.position,player)<=4000f&&TrafficLocations.FlatDistance(p.position,player)>100f
+            var points=TrafficLocations.Points.Values.Where(p=>TrafficLocations.StartingAllowed(p.position)&&!TrafficLocations.TownInterior(p.position)&&TrafficLocations.FlatDistance(p.position,player)<=4000f&&TrafficLocations.FlatDistance(p.position,player)>100f
                 &&!TrafficLocations.Known.Values.Any(c=>c.faction!="Coyotes"&&Mathf.Abs(p.position.x-c.center.x)<=c.size.x/2+40f&&Mathf.Abs(p.position.z-c.center.z)<=c.size.z/2+40f)).ToArray();
             if(points.Length==0)return;
             var poi=points[UnityEngine.Random.Range(0,points.Length)];

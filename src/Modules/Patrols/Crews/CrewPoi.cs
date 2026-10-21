@@ -46,6 +46,17 @@ namespace WildWasteland.Modules.Patrols
         internal static bool Parking(GameObject car, Bounds box, out Vector3 point)
         {
             point = car.transform.position; float best = float.MaxValue;
+            Vector3 townParking;
+            if (Modules.Towns.TownsApi.Provider != null && Modules.Towns.TownsApi.Provider.ParkingOutside(TrafficSpace.World(box.center), out townParking))
+            {
+                var p = TrafficSpace.Scene(townParking); RaycastHit floor;
+                if (!Physics.Raycast(p + Vector3.up * 80f, Vector3.down, out floor, 200f, 1 << 14, QueryTriggerInteraction.Ignore) || floor.normal.y < .94f) return false;
+                p.y = floor.point.y;
+                int occupied = Physics.OverlapBoxNonAlloc(p + Vector3.up * 2f, new Vector3(4f, 1.5f, 4f), Occupants, Quaternion.identity, Physics.DefaultRaycastLayers & ~(1 << 14), QueryTriggerInteraction.Ignore);
+                if (occupied == Occupants.Length) return false;
+                for (int i = 0; i < occupied; i++) if (!Occupants[i].transform.IsChildOf(car.transform)) return false;
+                point = p; return true;
+            }
             var exclusion = box; exclusion.Expand(new Vector3(8f, 0f, 8f));
             var start = car.transform.position; start.y = exclusion.center.y;
             // Four faces, with two alternatives each; the vehicle's existing obstacle avoidance drives the approach.
