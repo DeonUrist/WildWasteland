@@ -1,5 +1,15 @@
 # BloodFX compatibility — Testing, 2026-10-21
 
+## Confirmed effects and performance/F8 follow-up
+
+Denis confirmed the compatibility works and requested a performance check, F8 suppression, and release after first committing every existing local change. That baseline is commit207c2ad.
+
+Read-only developer-log review found25 Guns.BloodFX lifecycle timing samples: min0/max6.125/average3.10824 milliseconds per second. This measures the entire recovered BloodFX updater, not just adapter dispatch, and is under0.7% of one core averaged over a reporting interval. No duplicate scheduler/native update path or new performance problem was found in the adapter. The absent-plugin path exits once; closed delegates avoid reflection invocation/argument arrays on Update; relay reflection is confined to actual particle collisions. BloodFX still synchronously visits its existing PlayMaker FSM list every configured scan interval and polls health on its original cadence; effects have their own budgets. These are retained third-party costs and potential peaks, not a whole-game FPS/memory guarantee. No new game/harness/profiling run was made.
+
+For1.0.8, a Guns-owned prefix on optional BloodFX.Plugin.TestHit(bool) suppresses the non-player debug effect only when its configured key isF8 and WW's compatibility is active. It adds no input polling. F9/player test and an explicitly different test key remain native. The configured key remains visible in BloodFX settings but its F8 action is inactive; no saved config is rewritten. Module shutdown releases the runtime suppression. Ordinary hit effects are unaffected.
+
+Release build: Windows Release/Deploy=false zero errors/two existing NPC warnings; MD5 6A3C65AA3DA96D3590573AA18DB7BFC2. Stage V:/Repos/Apocalypter/_releases/WildWasteland_1.0.8_20261021_223652_432.dll. Not deployed: game running. Denis tests F8 no longer generates test blood, then combat and save/reload; other BloodFX effects should keep working. This supersedes the earlier F8 test instruction below for1.0.8.
+
 Denis installed BloodFX and reports it does not work with WW, then requested a compatibility patch inside WW. Installed plugin logs BloodFX0.2.0 startup; General Enabled/NpcsBleed/PlayerBleeds are true. SHA256: 13AB800FBF77760A45341AE8F6F218206478151437DF3D2CA990A417B343BD3B. No source was found in the game-source dump; read-only ILSpy inspection of the installed assembly established the relevant contracts.
 
 BloodFX.Plugin.Update owns input, scanning, health polling and effect maintenance. Awake provides no persistent update relay or scene-load recovery. Its two DontDestroyOnLoad calls protect particle objects only. BloodFX.BloodRelay.OnParticleCollision tests Owner with Unity null semantics, so a destroyed plugin component cannot handle spray collisions despite retaining a usable managed instance. The Weapons Pack repository's earlier TESTING.md additionally records a destroyed native BloodFX component in its historical live diagnostic; that is historical evidence, not a new current-session probe.

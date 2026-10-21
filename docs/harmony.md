@@ -2,6 +2,8 @@
 
 BloodFX optional lifecycle compatibility (2026-10-21): Guns prefixes `BloodFX.BloodRelay.OnParticleCollision(GameObject)`. Early-out while the native plugin component is alive or relay Owner differs from the retained managed instance. After native destruction only, forward to its closed `Plugin.OnSprayCollision` delegate, bypassing BloodFX's Unity-null owner guard. A WW scheduler callback invokes its original managed Update only after native destruction and during gameplay; the native component remains the sole updater while alive. No native Update/health/damage patch. Signature checks and teardown are in Guns/BloodFxCompat.cs.
 
+Guns also prefixes optional `BloodFX.Plugin.TestHit(bool)`: reject only the non-player debug hit when its configured key is F8 and this compatibility owner is active. Other test bindings remain native; no input polling or saved-config edit is added.
+
 ## Weapons Pack optional integration (2026-10-21, Testing)
 
 PlayerBody additionally prefixes/postfixes `ChainsawPrototype.Plugin.UpdateThirdPerson(object,object[])`: restore any owned native-carrier suppression first, then in FP only use cached shadow-only copies of the actual held model after the pack's pose/hide logic. Closed signature-checked source/camera delegates, no new tick/scene scan. TP remains pack-owned. Renderer capture occurs only when carrier changes; copies rebuild only when model/body changes. Removed on PlayerBody shutdown. See the first-person shadow follow-up in notes/weapons-pack-compatibility.md.
