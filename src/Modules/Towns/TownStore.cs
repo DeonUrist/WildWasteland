@@ -86,6 +86,7 @@ namespace WildWasteland.Modules.Towns
                         p.Lots[j] = lot;
                     }
                     if (version == 1) TownPopulation.Legacy(p);
+                    TownPopulation.Classify(p); // Saved faction defines the settlement even before its residents have spawned.
                     p.StreetNodes = new Vector3[Count(r, 2048)]; for (int j = 0; j < p.StreetNodes.Length; j++) p.StreetNodes[j] = V(r);
                     p.StreetEdges = new int[Count(r, 8192)];
                     for (int j = 0; j < p.StreetEdges.Length; j++)

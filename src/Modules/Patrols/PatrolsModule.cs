@@ -59,6 +59,7 @@ namespace WildWasteland.Modules.Patrols
             Services.Camps = new TrafficCamps.Status();
             Services.VehicleCombatActive = VehicleCombatActive;
             Services.NpcHurt-=Crew.Attacked;Services.NpcHurt+=Crew.Attacked;
+            Services.VehiclePartHit-=Crew.PartHit;Services.VehiclePartHit+=Crew.PartHit;
             SaveBus.CleanupSettings -= DrawSaveCleanupSettings; SaveBus.CleanupSettings += DrawSaveCleanupSettings;
             SaveBus.SaveCancelled -= PatrolPersistence.CancelPendingSave; SaveBus.SaveCancelled += PatrolPersistence.CancelPendingSave;
             LoadingProgress.Register(this, VehicleBuildCache.LoadWork);
@@ -137,6 +138,7 @@ namespace WildWasteland.Modules.Patrols
         {
             Services.VehicleCombatActive = null;
             Services.NpcHurt-=Crew.Attacked;
+            Services.VehiclePartHit-=Crew.PartHit;
             CrewReturn.Reset();
             SaveBus.CleanupSettings -= DrawSaveCleanupSettings;
             SaveBus.SaveCancelled -= PatrolPersistence.CancelPendingSave;

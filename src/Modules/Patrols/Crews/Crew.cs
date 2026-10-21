@@ -381,9 +381,9 @@ namespace WildWasteland.Modules.Patrols
         { if (!PatrolsModule.Running) return;
             if (_car == null) { Destroy(this); return; }
             if (Time.timeScale <= 0f) return;
+            if(CombatTick())return;
             if (TownParking && Marker?.PlayerEntered != true && PlayerRef.PlayerCar != _car) { Nwh.SetInput(_car, 0f, 0f, 1f); Nwh.SetHandbrake(_car, 1f); return; }
             TownParking = false;
-            if(CombatTick())return;
             if (Regroup != null && Time.time >= _nextRegroup)
             {
                 // 2 Hz with a per-car random phase; next += interval (re-phased after a gap)

@@ -77,6 +77,14 @@ namespace WildWasteland.Modules.Performance
             return lods.Length == 1 && IsInjectedHeight(lods[0].screenRelativeTransitionHeight, _usedScale);
         }
 
+        internal static bool Owns(LODGroup group)
+        {
+            var module = PerformanceModule.Instance;
+            if (module != null) foreach (var feature in module.Features)
+            { var cull = feature as CullLods; if (cull != null && cull.Injected(group)) return true; }
+            return false;
+        }
+
         public override void OnSettingsChanged() { QualityGuard.Set(QualityGuard.Q.LodBias, _bias.Value); }
         public override void OnSceneLoaded() { _done.Clear(); RenderScan.RequestFull(); }
         public override void OnWorldReady() { RenderScan.RequestFull(); }
@@ -85,6 +93,9 @@ namespace WildWasteland.Modules.Performance
         {
             if (c.Player || c.Saved || c.Vehicle) return;
             var go = root.gameObject;
+            // RC9 supplies persistent flat wall panels; a cull-only parent would hide those as well.
+            if (go.name.StartsWith("Towns perimeter ", StringComparison.Ordinal))
+                foreach (var feature in PerformanceModule.Instance.Features) if (feature is GeneratedLods && feature.IsOn) return;
             if (!_done.Add(root.GetInstanceID())) return;
             if (!c.Asset && go.scene.buildIndex < 0) return;          // DontDestroyOnLoad / mod objects
             if (go.layer == 12) return;

@@ -121,6 +121,7 @@ namespace WildWasteland.Modules.Patrols
                 var v = bodypart.FsmVariables.GetFsmFloat("Damage");
                 if (v == null) { PatrolsModule.Verbose("Melee wheels: " + bodypart.gameObject.name + " Bodypart has no Damage variable"); return; }
                 v.Value = dmg;
+                Core.Services.RaiseVehiclePartHit(bodypart.gameObject, Core.GameRefs.Player);
                 bodypart.SendEvent("Damage");
                 _done = true;
                 PatrolsModule.Verbose("Melee wheels: " + active.gameObject.name + " hit " + bodypart.gameObject.name + " (" + dmg + ")");

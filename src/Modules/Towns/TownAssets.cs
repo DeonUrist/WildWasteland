@@ -143,7 +143,8 @@ namespace WildWasteland.Modules.Towns
             Material concrete = null;
             foreach (var asset in Buildings.Values) foreach (var renderer in asset.Prefab.GetComponentsInChildren<Renderer>(true))
                 foreach (var material in renderer.sharedMaterials)
-                    if (material != null && material.mainTexture != null && (material.name == "concrete_3" || concrete == null && material.name.IndexOf("concrete", StringComparison.OrdinalIgnoreCase) >= 0)) concrete = material;
+                    if (material != null && (material.name == "concrete_3" || concrete == null && material.name.IndexOf("concrete", StringComparison.OrdinalIgnoreCase) >= 0)
+                        && Array.IndexOf(material.GetTexturePropertyNames(), "_MainTex") >= 0 && material.GetTexture("_MainTex") != null) concrete = material;
             if (concrete != null) { PavementMaterial = new Material(concrete) { name = "Towns native concrete parking" }; PavementMaterial.mainTextureScale = Vector2.one; }
             CarShells.Sort((a, b) => string.CompareOrdinal(a.Mesh.name, b.Mesh.name));
             ShellBounds.Clear(); foreach (var shell in CarShells) ShellBounds.Add(shell.Mesh.bounds);

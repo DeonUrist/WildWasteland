@@ -118,6 +118,7 @@ namespace WildWasteland.Modules.Patrols
             get
             {
                 var journey = WorldTraffic.Find(Journey);
+                var defendingCrew=GetComponent<Crew>();if(defendingCrew!=null&&defendingCrew.CombatEnemy!=null)return true;
                 if(journey?.merchant==true)return TrafficFactions.ForCar(gameObject)!=null;
                 if(GetComponent<BattleCar>()!=null)return TrafficFactions.ForCar(gameObject)!=null;
                 var opposing=TrafficFactions.ForCar(gameObject);

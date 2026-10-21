@@ -77,8 +77,8 @@ def main():
     replacements = {"WildWasteland/WildWasteland.dll": dll,
                     "WildWasteland/icon.png": (repo / "icon.png").read_bytes()}
     replacements.update(payloads)
-    for name in ("camp.png", "building.png"):
-        replacements["WildWasteland/CleanHUD/Icons/" + name] = (repo / "src/Modules/CleanHUD/Icons" / name).read_bytes()
+    for path in sorted((repo / "src/Modules/CleanHUD/Icons").glob("*.png")):
+        replacements["WildWasteland/CleanHUD/Icons/" + path.name] = path.read_bytes()
     artwork = repo / "src/Modules/CleanHUD/Embedded/LoadingScreens"
     screens = sorted(artwork.glob("Screen*.png"))
     if {p.name for p in screens} != {"Screen%d.png" % i for i in range(1, 19)}:

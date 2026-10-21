@@ -59,6 +59,9 @@ namespace WildWasteland.Core
         /// <summary>Patrols raised: an occupant left a raider car (ex Apocapatrol.Patrol.BailOut). (car, previous passenger object, new on-foot NPC)</summary>
         public static event Action<GameObject, GameObject, GameObject> CrewBailedOut;
         public static event Action<GameObject, GameObject> NpcHurt;
+        public static event Action<GameObject, GameObject> VehiclePartHit;
+        internal static void RaiseVehiclePartHit(GameObject part, GameObject attacker)
+        { var h=VehiclePartHit;if(h==null)return;try{h(part,attacker);}catch(Exception e){Log.Error("VehiclePartHit handler",e);} }
         internal static void RaiseNpcHurt(GameObject victim, GameObject attacker)
         { var h=NpcHurt;if(h==null)return;try{h(victim,attacker);}catch(Exception e){Log.Error("NpcHurt handler",e);} }
         /// <summary>Patrols raised: a raider car exploded (ex Apocapatrol.Explode.Blast).</summary>
@@ -77,7 +80,7 @@ namespace WildWasteland.Core
 
         internal static void ClearEvents()
         {
-            CrewBailedOut = null; VehicleExploded = null; NpcHurt = null;
+            CrewBailedOut = null; VehicleExploded = null; NpcHurt = null; VehiclePartHit = null;
         }
     }
 

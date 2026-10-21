@@ -52,7 +52,7 @@ namespace WildWasteland.Modules.Towns
         public TownCondition Condition { get; internal set; }
         public TownFaction Faction { get; internal set; }
         public int FactionMembers { get; internal set; }
-        public bool Owned { get { return FactionMembers >= 5; } }
+        public bool Owned { get { return HasTown && (Faction == TownFaction.Coyotes || Faction == TownFaction.Scrapyard); } }
         internal bool PopulationMeasured;
         internal bool MerchantSeeded;
         public string Name { get; internal set; }

@@ -14,7 +14,7 @@ namespace WildWasteland.Modules.Towns
     internal static class InteriorPopulation
     {
         private sealed class Location { internal Transform Root; internal readonly List<Group> Groups = new List<Group>(); internal bool Arrived; }
-        private sealed class Group { internal PlayMakerFSM Fsm; internal TownSite Town; internal Location Location; internal bool Started, Suspended; internal int Attempts; internal float StartedAt; internal FsmEvent Deferred; internal FsmState DeferredState; }
+        private sealed class Group { internal PlayMakerFSM Fsm; internal TownSite Town; internal PoiDressing.Site Dressing; internal Location Location; internal bool Started, Suspended; internal int Attempts; internal float StartedAt; internal FsmEvent Deferred; internal FsmState DeferredState; }
         private static readonly Dictionary<object, Location> Locations = new Dictionary<object, Location>();
         private sealed class Member { internal GameObject Owner; internal FsmFloat Health; internal Senses.Agent Agent; internal string Name; }
         private static readonly Dictionary<PlayMakerFSM, Group> Groups = new Dictionary<PlayMakerFSM, Group>();
@@ -51,18 +51,19 @@ namespace WildWasteland.Modules.Towns
             for (var t = f.transform; t != null; t = t.parent) if (TownMarkers.Owns(t)) return;
             Add(f, null);
         }
-        private static void Add(PlayMakerFSM f, TownSite town)
+        private static void Add(PlayMakerFSM f, TownSite town, Transform markerRoot = null)
         {
             Transform root = town == null ? f.transform : town.Anchor;
             if (town == null) for (var t = f.transform.parent; t != null; t = t.parent)
                 if (t.name.StartsWith("Building_", StringComparison.Ordinal) || t.name.StartsWith("Camp_", StringComparison.Ordinal)
                     || t.name.StartsWith("Cave_", StringComparison.Ordinal) || t.name.StartsWith("Wreck_", StringComparison.Ordinal)) root = t;
+            if (markerRoot != null) root = markerRoot;
             object key = town == null ? (object)root : town;
             Location location; if (!Locations.TryGetValue(key, out location)) Locations.Add(key, location = new Location { Root = root });
             Group group;
             if (Groups.TryGetValue(f, out group))
             {
-                if (town != null) {
+                if (town != null || markerRoot != null) {
                     group.Town = town;
                     if (group.Location != location) { location.Arrived |= group.Location.Arrived; group.Location.Groups.Remove(group); group.Location = location; location.Groups.Add(group); }
                 }
@@ -71,6 +72,8 @@ namespace WildWasteland.Modules.Towns
             }
             group = new Group { Fsm = f, Town = town, Location = location }; location.Groups.Add(group); Groups.Add(f, group); Pending.Add(group);
         }
+        internal static void OwnMarker(PlayMakerFSM f, PoiDressing.Site site)
+        { Add(f, site.Town, site.Town == null ? site.Root : null); Groups[f].Dressing = site; Groups[f].Suspended = true; f.enabled = false; }
         internal static void OwnTown(TownSite site, int lot)
         {
             for (int n = 0; n < site.Spawners[lot].Length; n++)
@@ -141,6 +144,7 @@ namespace WildWasteland.Modules.Towns
                 if (f == null || !f.gameObject.activeInHierarchy || !f.enabled && !group.Suspended || Value(f, "OnOff") > 0) { Pending.RemoveAt(at); return true; }
                 if (!Near(f)) continue;
                 if (group.Town != null && group.Town.NextLot < group.Town.Plan.LotCount) continue;
+                if (group.Dressing != null && !group.Dressing.Ready) continue;
                 if (!WorldWork.Try(WorldWork.Population)) return false;
                 if (group.Suspended) { group.Suspended = false; f.enabled = true; }
                 if (group.Deferred != null)

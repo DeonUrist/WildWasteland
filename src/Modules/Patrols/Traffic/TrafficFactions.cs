@@ -120,6 +120,7 @@ namespace WildWasteland.Modules.Patrols
         internal static GameObject ForCar(GameObject car,PatrolMarker marker)
         {
             if(marker==null)return null;
+            var enemy=car.GetComponent<Crew>()?.CombatEnemy;if(enemy!=null)return enemy;
             if(Time.time>=marker.FactionCheck){marker.FactionCheck=Time.time+0.4f;marker.FactionTarget=Target(marker.Faction,car.transform.position);}
             var target=marker.FactionTarget;
             return target!=null&&PlayerRef.Player!=null&&target==PlayerRef.Player.gameObject&&PatrolPoi.Ignored(car)?null:target;

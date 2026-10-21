@@ -69,6 +69,18 @@ namespace WildWasteland.Modules.Towns
         public override string DisplayName { get { return "Towns"; } }
         public int SiteCount { get { return _sites.Count; } }
         public TownSite GetSite(int index) { return _sites[index].Site; }
+        internal TownSite MarkerTown(Transform root, out List<GameObject> pool)
+        {
+            pool = null;
+            foreach (var live in _sites) foreach (var building in live.Site.Buildings)
+                if (building != null && building.transform == root)
+                {
+                    if (!live.Registration.Assets.Population.TryGetValue(live.Site.Plan.Faction, out pool) || pool.Count == 0)
+                        throw new InvalidOperationException("No native " + live.Site.Plan.Faction + " population for town POI markers.");
+                    return live.Site;
+                }
+            return null;
+        }
         public override void BindConfig(ModuleConfig cfg) { _settings.Bind(cfg); }
         public void BindStandalone(ConfigFile file) { _settings.Bind(file); }
         public override void Init()
@@ -110,6 +122,7 @@ namespace WildWasteland.Modules.Towns
                 Registration registration;
                 if (!_graphs.TryGetValue(old.Tile.mapMagic.graph, out registration)) registration = Register(old.Tile.mapMagic.graph);
                 var resumed = NewSite(plan, old.Tile.mapMagic.transform, old.Tile.main.terrain, registration.Assets.Specs); resumed.Record = _records[key]; resumed.Record.Plan = resumed.Plan;
+                TownPopulation.Budget(resumed, registration.Assets, _settings);
                 _sites.Add(new Live { Tile = old.Tile, Registration = registration, Site = resumed });
             }
             _resume.Clear();
@@ -250,6 +263,7 @@ namespace WildWasteland.Modules.Towns
                 var site = NewSite(plan, tile.mapMagic.transform, tile.main.terrain, capture.Registration.Assets.Specs);
                 record.Plan = site.Plan;
                 site.Record = record;
+                TownPopulation.Budget(site, capture.Registration.Assets, _settings);
                 site.Loading = capture.Input.Progress;
                 if (site.Loading != null) site.Loading.Report(.7f, "Placing 0/" + plan.LotCount + " buildings");
                 _sites.Add(new Live { Tile = tile, Registration = capture.Registration, Site = site });
@@ -686,6 +700,7 @@ namespace WildWasteland.Modules.Towns
                 foreach (var live in _sites) TownFactory.Capture(live.Site, _records[live.Site.Plan.Key], live.Registration.Assets);
                 try { _gasStation.Save(slot); } catch (Exception e) { Log.Warn("[Towns] gas station spawner states not saved: " + e.Message); }
                 TownSaveRecord.Save(slot, _records);
+                if (_dressing != null) _dressing.Markers.Save(slot);
             }
             catch (Exception e) { SaveBus.ReportFailure("Towns save failed: " + e.Message); Block("saving", e); }
         }
@@ -694,11 +709,11 @@ namespace WildWasteland.Modules.Towns
         {
             ClearSites(); _resume.Clear(); _epoch++; _blocked = false;
             if (_gasStation != null) _gasStation.Load(slot);
-            try { _records = string.IsNullOrEmpty(slot) ? new Dictionary<string, TownRecord>(StringComparer.Ordinal) : TownSaveRecord.Load(slot, SavePath(slot)); _names.Begin(_records); InteriorPopulation.DiscoverExisting(); }
+            try { if (_dressing != null) _dressing.Markers.Load(slot); _records = string.IsNullOrEmpty(slot) ? new Dictionary<string, TownRecord>(StringComparer.Ordinal) : TownSaveRecord.Load(slot, SavePath(slot)); _names.Begin(_records); InteriorPopulation.DiscoverExisting(); }
             catch (Exception e) { _records.Clear(); Block("loading (saved data retained on disk)", e); }
         }
         public void NewWorld()
-        { ClearSites(); if (_gasStation != null) _gasStation.NewWorld(); _resume.Clear(); _epoch++; _blocked = false;  _records.Clear(); _names.Begin(_records); InteriorPopulation.DiscoverExisting(); }
+        { ClearSites(); if (_dressing != null) _dressing.Markers.Load(null); if (_gasStation != null) _gasStation.NewWorld(); _resume.Clear(); _epoch++; _blocked = false;  _records.Clear(); _names.Begin(_records); InteriorPopulation.DiscoverExisting(); }
         private void StateChanged(string previous, string current)
         { if (current == "setSeed" || current == "Start") NewWorld(); }
         public override void OnWorldReady() { Refresh(); }

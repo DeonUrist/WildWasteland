@@ -21,7 +21,7 @@ namespace WildWasteland.Modules.Performance
         public override string Help { get { return "Uses the optional Performance/LOD pack made by tools/lod-generator/Generate.cmd. Zoom restores original meshes. Missing/unsupported meshes stay original. Restores originals for saves and when disabled."; } }
         public ScanTypes Types { get { return ScanTypes.Renderers | ScanTypes.Skinned; } }
 
-        Knob _near, _far, _zoomFov, _memory;
+        Knob _near, _far, _zoomFov, _memory, _distance;
         Job _job, _discovery;
         GeneratedLodPack _pack;
         readonly List<Binding> _objects = new List<Binding>();
@@ -30,6 +30,7 @@ namespace WildWasteland.Modules.Performance
         readonly Dictionary<string, Entry> _cache = new Dictionary<string, Entry>(StringComparer.Ordinal);
         readonly Queue<Completion> _completed = new Queue<Completion>();
         readonly Queue<Entry> _uploads = new Queue<Entry>();
+        readonly Dictionary<LODGroup, bool> _wallCulls = new Dictionary<LODGroup, bool>();
         int _cursor, _pending;
         volatile int _epoch;
         long _reserved;
@@ -63,7 +64,8 @@ namespace WildWasteland.Modules.Performance
         {
             _near = NewKnob(cfg, "Full detail screen height", "Projected size above which the original mesh is used.", .08f, .12f, .18f, .18f);
             _far = NewKnob(cfg, "Far detail screen height", "Projected size below which the second generated mesh is used.", .02f, .035f, .05f, .05f);
-            _zoomFov = NewKnob(cfg, "Full detail zoom FOV", "An active game camera at or below this FOV restores all original meshes (binoculars/scopes). 0 disables this override.", 30, 30, 30, 30);
+            _distance = NewKnob(cfg, "Distance multiplier", "Multiplier of mesh detail transition distances. 1.5 retains each detail level 50% farther from the camera.", 1.5f, 1.5f, 1.5f, 1.5f);
+            _zoomFov = NewKnob(cfg, "Full detail zoom FOV", "Actual rendered zoom relative to normal FOV, or FOV at/below this value, restores originals (RMB/scroll/binoculars/scopes). 0 disables this override.", 30, 30, 30, 30);
             _memory = NewKnob(cfg, "Cache MB", "Maximum generated payload bytes reserved for the current scene; two worker reads at most. GPU overhead is additional.", 128, 256, 384, 256);
         }
 
@@ -78,6 +80,7 @@ namespace WildWasteland.Modules.Performance
                 return;
             }
             _pack = new GeneratedLodPack(root);
+            Camera.onPreRender += RenderView;
             _status = _pack.Entries.Count + " generated meshes indexed";
             _epoch++;
             SaveGuard.Register(this);
@@ -90,12 +93,14 @@ namespace WildWasteland.Modules.Performance
         protected override void OnDisable()
         {
             GeneratedLodExport.Stop();
+            Camera.onPreRender -= RenderView;
             RenderScan.Unregister(this);
             SaveGuard.Unregister(this);
             if (_job != null) { _job.Remove(); _job = null; }
             if (_discovery != null) { _discovery.Remove(); _discovery = null; }
             Clear();
             _pack = null;
+            RenderScan.RequestFull();
         }
 
         void Discover() { if (_pack != null && !RenderScan.Busy) RenderScan.RequestFull(); }
@@ -111,11 +116,14 @@ namespace WildWasteland.Modules.Performance
             _epoch++;
             Restore();
             foreach (var entry in _cache.Values)
-                foreach (var mesh in entry.Variants) if (mesh != null) UnityEngine.Object.Destroy(mesh);
+                for (int i = 0; i < entry.Variants.Length; i++) if (entry.Variants[i] != null && (i == 0 || entry.Variants[i] != entry.Variants[0])) UnityEngine.Object.Destroy(entry.Variants[i]);
+            foreach (var group in _wallCulls) if (group.Key != null) group.Key.enabled = group.Value;
+            _wallCulls.Clear();
             _objects.Clear(); _bindings.Clear(); _sources.Clear(); _cache.Clear(); _uploads.Clear();
             lock (_completed) _completed.Clear();
             _cursor = 0; _reserved = 0; _pending = 0; _saving = _guard = _zoom = false;
             _cameraFrame = -1; _cameras.Clear(); _missing = _errors = 0;
+            _rendered.Clear(); _normalFov = null;
         }
 
         void Restore()
@@ -133,7 +141,39 @@ namespace WildWasteland.Modules.Performance
         {
             if (c.Asset || c.Player || (c.Root != null && c.Root.name == "ApocaplayerBody")) return;
             var filter = renderer.GetComponent<MeshFilter>();
-            if (filter != null) Attach(renderer, filter, null, filter.sharedMesh);
+            if (filter != null)
+            {
+                if (renderer.name.StartsWith("Towns metal wall ", StringComparison.Ordinal) && c.Root != null && c.Root.name.StartsWith("Towns perimeter ", StringComparison.Ordinal)) Wall(renderer, filter, c.Root);
+                else Attach(renderer, filter, null, filter.sharedMesh);
+            }
+        }
+
+        void Wall(MeshRenderer renderer, MeshFilter filter, Transform root)
+        {
+            if (_pack == null || filter.sharedMesh == null || _bindings.ContainsKey(renderer.GetInstanceID())) return;
+            // RC2 may already have injected a cull-only group before RC9 was enabled. Keep its ownership and restore on disable.
+            var group = root.GetComponent<LODGroup>();
+            if (group != null && !_wallCulls.ContainsKey(group) && CullLods.Owns(group)) { _wallCulls.Add(group, group.enabled); group.enabled = false; }
+            Mesh original = filter.sharedMesh;
+            string key = "wall:" + GeneratedLodPack.Key(original);
+            Entry entry;
+            if (!_cache.TryGetValue(key, out entry))
+            {
+                Bounds bounds = original.bounds; Vector3 a = bounds.min, b = bounds.max; float x = bounds.center.x;
+                var proxy = new Mesh { name = "WWLOD_town_wall_panel" };
+                // Two opposite faces, each two triangles: visible from inside and outside, with correct lighting normals.
+                proxy.vertices = new[] { new Vector3(x,a.y,a.z), new Vector3(x,b.y,a.z), new Vector3(x,b.y,b.z), new Vector3(x,a.y,b.z),
+                    new Vector3(x,a.y,a.z), new Vector3(x,b.y,a.z), new Vector3(x,b.y,b.z), new Vector3(x,a.y,b.z) };
+                proxy.normals = new[] { Vector3.right, Vector3.right, Vector3.right, Vector3.right, Vector3.left, Vector3.left, Vector3.left, Vector3.left };
+                proxy.tangents = new[] { new Vector4(0,0,1,-1), new Vector4(0,0,1,-1), new Vector4(0,0,1,-1), new Vector4(0,0,1,-1), new Vector4(0,0,1,1), new Vector4(0,0,1,1), new Vector4(0,0,1,1), new Vector4(0,0,1,1) };
+                proxy.uv = new[] { new Vector2(0,0), new Vector2(0,1), new Vector2(1,1), new Vector2(1,0), new Vector2(0,0), new Vector2(0,1), new Vector2(1,1), new Vector2(1,0) };
+                proxy.subMeshCount = Mathf.Max(1, renderer.sharedMaterials.Length);
+                proxy.SetTriangles(new[] { 0,1,2,0,2,3,4,6,5,4,7,6 }, 0, false); proxy.bounds = bounds; proxy.UploadMeshData(true);
+                entry = new Entry { Source = original, State = 3, Bounds = bounds };
+                entry.Variants[0] = proxy; entry.Variants[1] = proxy; _cache.Add(key, entry);
+            }
+            var binding = new Binding { Renderer = renderer, Filter = filter, Original = original, Entry = entry };
+            _objects.Add(binding); _bindings.Add(renderer.GetInstanceID(), binding);
         }
         public void OnSkinned(SkinnedMeshRenderer renderer, ref ScanCtx c)
         {
@@ -220,6 +260,31 @@ namespace WildWasteland.Modules.Performance
 
         int _cameraFrame = -1;
         readonly List<Camera> _cameras = new List<Camera>();
+        struct View { internal float Tan; internal int Frame; }
+        readonly Dictionary<Camera, View> _rendered = new Dictionary<Camera, View>();
+        HutongGames.PlayMaker.FsmFloat _normalFov;
+        static float ProjectionTan(Camera camera)
+        { float m11 = Mathf.Abs(camera.projectionMatrix.m11); return m11 > .0001f ? 1 / m11 : Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * .5f); }
+        float ViewTan(Camera camera)
+        {
+            View view; float tan = ProjectionTan(camera);
+            // Third-person projection is restored after rendering. Retain its last actual view for the next sliced pass.
+            return _rendered.TryGetValue(camera, out view) && view.Frame >= Time.frameCount - 1 ? Mathf.Min(tan, view.Tan) : tan;
+        }
+        bool Zoom(Camera camera, float tan)
+        {
+            if (_zoomFov.Value <= 0 || camera.orthographic) return false;
+            if (_normalFov == null) _normalFov = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmFloat("FOV");
+            float normal = _normalFov != null && _normalFov.Value > 0 ? _normalFov.Value : camera.fieldOfView;
+            return tan <= Mathf.Tan(_zoomFov.Value * Mathf.Deg2Rad * .5f) || tan < Mathf.Tan(normal * Mathf.Deg2Rad * .5f) * .98f;
+        }
+        void RenderView(Camera camera)
+        {
+            if (camera == null || !camera.isActiveAndEnabled || !GameCameras.IsGameCamera(camera) || camera.orthographic) return;
+            float tan = ProjectionTan(camera); _rendered[camera] = new View { Tan = tan, Frame = Time.frameCount };
+            // Runs after camera projection overrides, even when the shared slice budget is exhausted.
+            if (!_zoom && Zoom(camera, tan)) { Restore(); _zoom = true; }
+        }
         void Cameras()
         {
             if (_cameraFrame == Time.frameCount) return;
@@ -231,7 +296,7 @@ namespace WildWasteland.Modules.Performance
             {
                 if (camera == null || !camera.isActiveAndEnabled || camera.cameraType != CameraType.Game) continue;
                 _cameras.Add(camera);
-                if (_zoomFov.Value > 0 && !camera.orthographic && camera.fieldOfView <= _zoomFov.Value) zoom = true;
+                if (Zoom(camera, ViewTan(camera))) zoom = true;
             }
             if (zoom && !_zoom) Restore();
             _zoom = zoom;
@@ -260,9 +325,9 @@ namespace WildWasteland.Modules.Performance
                 foreach (var camera in _cameras)
                 {
                     if ((camera.cullingMask & (1 << b.Renderer.gameObject.layer)) == 0) continue;
-                    float distance = Mathf.Max(.01f, Vector3.Distance(camera.transform.position, bounds.center) - radius);
+                    float distance = Mathf.Max(.01f, Vector3.Distance(camera.transform.position, bounds.center) / Mathf.Max(.01f, _distance.Value) - radius);
                     float value = camera.orthographic ? radius / Mathf.Max(.01f, camera.orthographicSize)
-                        : radius / (distance * Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * .5f));
+                        : radius / (distance * ViewTan(camera));
                     height = Mathf.Max(height, value * QualitySettings.lodBias);
                 }
                 float near = Mathf.Max(.001f, _near.Value), far = Mathf.Clamp(_far.Value, .0001f, near * .9f);

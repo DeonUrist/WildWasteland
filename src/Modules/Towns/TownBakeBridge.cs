@@ -55,7 +55,9 @@ namespace WildWasteland.Modules.Towns
         private static void Before(GameObject owner, Vector3 pos, ref Vector3 goal, out Redirect __state)
         {
             __state = new Redirect(); Vector3 next; bool approach;
-            if (_owner == null || Services.Npc == null || !_owner.Waypoint(owner, pos, goal, out next, out approach)) return;
+            if (_owner == null || Services.Npc == null) return;
+            if (!_owner.Waypoint(owner, pos, goal, out next, out approach))
+            { approach = false; if (!PoiDressing.Exit(pos, goal, out next)) return; }
             __state.Active = true; __state.Approach = approach; __state.ActualGoal = goal; __state.Waypoint = next; goal = next;
         }
         private static void After(Vector3 pos, ref Vector3 goal, ref Vector3 next, ref float pathLeft, ref bool __result, Redirect __state)

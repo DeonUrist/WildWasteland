@@ -27,6 +27,7 @@ namespace WildWasteland.Modules.Patrols
             internal int Role, Slot, Order, State, Fails;
             internal float[] LocalPos;
             internal bool Standing, Arrived, Excluded, BoardKnown;
+            internal bool GuardReturning;
             internal Vector3 Board, OrderedPoint;   // Board: car-local boarding point
             internal float OrderedAt;
         }
@@ -199,7 +200,20 @@ namespace WildWasteland.Modules.Patrols
                 if (m.State == Aboard || m.State == Left) continue;
                 if (m.Body == null || (m.Health != null && m.Health.Value <= 0f)) { Leave(g, m, "died"); continue; }
                 if (m.Body.transform.parent != null || QuestFollowers.IsHired(m.Body)) { m.Excluded = true; Leave(g, m, "taken by a quest or mounted elsewhere"); continue; }
-                if(g.CombatExit)api.CrewOrder(m.Body,returnNow?null:enemy,returnNow);
+                if(g.CombatExit)
+                {
+                    if(g.Crew.BusDefence&&!returnNow)
+                    {
+                        var post=g.Car.transform.TransformPoint(new Vector3(i%2==0?-4f:4f,0f,(i/2-1)*3f));post.y=m.Body.transform.position.y;
+                        float distance=(m.Body.transform.position-g.Car.transform.position).sqrMagnitude;
+                        if(distance>400f)m.GuardReturning=true;
+                        else if((m.Body.transform.position-post).sqrMagnitude<16f)m.GuardReturning=false;
+                        api.CrewOrder(m.Body,m.GuardReturning?null:enemy,m.GuardReturning);
+                        if(m.GuardReturning&&(m.OrderedAt<=0f||now-m.OrderedAt>3f))Order(api,m,post,now);
+                        else if(!m.GuardReturning&&m.OrderedAt>0f){api.Travel(m.Body,null,0f);m.OrderedAt=0f;}
+                    }
+                    else api.CrewOrder(m.Body,returnNow?null:enemy,returnNow);
+                }
                 pending++;
                 if (allIdle && (g.CombatExit?!returnNow:!Idle(api, m.Body))) allIdle = false;
             }

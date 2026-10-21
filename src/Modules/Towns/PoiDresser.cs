@@ -32,6 +32,9 @@ namespace WildWasteland.Modules.Towns
         private Vector2 _catalogScroll, _placedScroll;
         private bool _moving, _dirty, _validHit;
         private bool _filterComplete;
+        private readonly HashSet<string> _expanded = new HashSet<string>(StringComparer.Ordinal);
+        private bool _profilesOpen;
+        private Vector2 _profileScroll;
         private LineRenderer _outline;
         private Material _outlineMaterial;
         private readonly Vector3[] _lines = new Vector3[16];
@@ -67,6 +70,7 @@ namespace WildWasteland.Modules.Towns
             _cameraLocal = t.localPosition; _cameraPosition = t.position; _cameraRotation = t.localRotation;
             _view = t.position; _yaw = t.eulerAngles.y; _pitch = t.eulerAngles.x; if (_pitch > 180) _pitch -= 360;
             _site = nearest; _draft = nearest.Layout.Copy(); _selected = -1; _dirty = false; _undo.Clear();
+            _expanded.Clear(); _catalogScroll = Vector2.zero; _profilesOpen = false; _runtime.Markers.Catalog.Start();
             if (nearest.Dressing != null) nearest.Dressing.SetActive(false);
             NewPreview(); _runtime.Catalog.Start(); Ledger.ClearNumbers();
             _status = "Choose a mesh on the left to place it. SAVE writes this POI type's layout.";
@@ -143,7 +147,17 @@ namespace WildWasteland.Modules.Towns
         private void Choose(PoiPropCatalog.Asset asset)
         {
             CancelPlacement(); _asset = asset;
-            _placing = new PoiDressProp { Asset = asset.Id, Mesh = asset.MeshName, Collision = asset.Shapes.Count > 0 };
+            _placing = new PoiDressProp { Asset = asset.Id, Mesh = asset.MeshName, Source = asset.Source, Collision = asset.Shapes.Count > 0, Kind = asset.MarkerKind };
+            if (_placing.Marker)
+            {
+                _placing.Id = Guid.NewGuid().ToString("N"); _placing.Collision = false;
+                _placing.Scale = _placing.Kind == "Hide" ? new Vector3(3,2,3) : _placing.Kind == "Exit" ? new Vector3(1,2,.3f) : new Vector3(2,.2f,2);
+                var profiles = _runtime.Markers.Catalog.For(_placing.Kind);
+                _placing.Profile = profiles.Count == 0 ? "" : profiles[0].Name;
+                if (_placing.Kind == "Items") _placing.Profile = "All loot";
+                if (_placing.Kind == "CarParts") _placing.Profile = "Car parts";
+                if (_placing.Kind == "Monsters") { _placing.Profile = "EnemySpawn_Wild_V1"; _placing.Chance = 85; }
+            }
             _ghost = _runtime.Catalog.Create(asset, _preview.transform, _placing, false); _ghost.SetActive(false);
             _selected = -1; Ledger.ClearNumbers();
         }
@@ -152,6 +166,7 @@ namespace WildWasteland.Modules.Towns
             if (!_validHit || _draft.Props.Count >= PoiDressLayout.Limit) return;
             if (_moving) { _moving = false; Ledger.ClearNumbers(); return; }
             RecordUndo(); _draft.Props.Add(_placing.Copy());
+            if (_placing.Marker) _draft.Props[_draft.Props.Count - 1].Id = Guid.NewGuid().ToString("N");
             _visuals.Add(_runtime.Catalog.Create(_asset, _preview.transform, _placing, false)); _built++;
             _dirty = true;
         }
@@ -189,12 +204,14 @@ namespace WildWasteland.Modules.Towns
             if (!Ready || _selected < 0 || _draft.Props.Count >= PoiDressLayout.Limit) return;
             if (_moving) { CancelPlacement(); return; }
             RecordUndo(); var prop = _draft.Props[_selected].Copy(); prop.Position += Vector3.right * .5f;
+            if (prop.Marker) prop.Id = Guid.NewGuid().ToString("N");
             var asset = _runtime.Catalog.Resolve(prop); _draft.Props.Add(prop);
             _visuals.Add(_runtime.Catalog.Create(asset, _preview.transform, prop, false)); _built++;
             _selected = _built - 1; _dirty = true; Ledger.ClearNumbers();
         }
         private void CancelPlacement()
         {
+            _profilesOpen = false;
             if (_ghost != null) Object.Destroy(_ghost); _ghost = null; _placing = null; _asset = null;
             if (_moving && _undo.Count > 0)
             { _draft = _undo.Pop(); NewPreview(); _dirty = true; }
@@ -232,7 +249,7 @@ namespace WildWasteland.Modules.Towns
         internal void DrawPage(ToolLayout l, TownSettings settings)
         {
             l.Entry(settings.PoiDresserKey);
-            l.Text("Dress a nearby custom POI with static native mesh props. Layouts are shared by every instance of that POI type. World is paused while editing.");
+            l.Text("Dress a nearby custom POI with categorized vanilla scenery and hiding, exit or spawn markers. Layouts are shared by POI type; spawn progress belongs to each world instance. World is paused while editing.");
             if (l.Button("Open POI dresser", GameRefs.InPlay)) OpenFromPage();
             if (!string.IsNullOrEmpty(_status)) l.Text(_status);
             l.Value("Layout folder", PoiDressStore.DirectoryPath);
@@ -260,10 +277,7 @@ namespace WildWasteland.Modules.Towns
                 _search = Ledger.TextField(new Rect(12, 74, 294, 32), "PoiDressSearch", _search);
                 Ledger.Label(new Rect(12, 108, 294, 26), _runtime.Catalog.Complete ? _filtered.Count + " native meshes" : "Indexing native meshes…", Ledger.Small);
                 Filter();
-                _catalogScroll = GUI.BeginScrollView(new Rect(10, 140, 300, 690), _catalogScroll, new Rect(0, 0, 277, _filtered.Count * 48));
-                int first = Mathf.Max(0, (int)(_catalogScroll.y / 48)), last = Mathf.Min(_filtered.Count, first + 17);
-                for (int i = first; i < last; i++) if (Ledger.Button(new Rect(0, i * 48, 276, 44), _filtered[i].Label, Ready)) Choose(_filtered[i]);
-                GUI.EndScrollView();
+                DrawCatalog();
                 DrawInspector();
                 if (!Opened) return;
                 Ledger.Panel(new Rect(0, 846, 1600, 54));
@@ -298,12 +312,12 @@ namespace WildWasteland.Modules.Towns
             PoiDressProp prop = _placing ?? (_selected >= 0 ? _draft.Props[_selected] : null);
             if (prop != null)
             {
-                Ledger.Label(new Rect(x, 144, 292, 40), prop.Mesh, Ledger.Small);
+                Ledger.Label(new Rect(x, 144, 292, 40), prop.Marker ? prop.Mesh + " / authoring area" : prop.Mesh, Ledger.Small);
                 Vector3 oldPosition = prop.Position, oldRotation = prop.Rotation, oldScale = prop.Scale;
                 prop.Position = VectorFields(x, 190, "Position (POI local)", "Pos", prop.Position, -500, 500);
                 prop.Rotation = VectorFields(x, 258, "Rotation (degrees)", "Rot", prop.Rotation, -3600, 3600);
-                prop.Scale = VectorFields(x, 326, "Scale multiplier", "Scale", prop.Scale, .01f, 20);
-                bool collision = GUI.Toggle(new Rect(x, 396, 290, 28), prop.Collision, "Solid collider / navigation obstacle");
+                prop.Scale = VectorFields(x, 326, prop.Marker ? "Area size (POI local metres)" : "Scale multiplier", "Scale", prop.Scale, .01f, 20);
+                bool collision = !prop.Marker && GUI.Toggle(new Rect(x, 396, 290, 28), prop.Collision, "Solid collider / navigation obstacle");
                 if (collision != prop.Collision) { RecordUndo(); prop.Collision = collision; _dirty = true; }
                 if (oldPosition != prop.Position || oldRotation != prop.Rotation || oldScale != prop.Scale) { _dirty = true; PoseSelected(); if (_ghost != null) PoiPropCatalog.Pose(_ghost.transform, prop); }
                 if (_selected >= 0)
@@ -317,11 +331,63 @@ namespace WildWasteland.Modules.Towns
             _grid = Ledger.Number(new Rect(x + 150, 476, 140, 28), "PoiGrid", _grid, 0, 10, NoChange);
             Ledger.Label(new Rect(x, 510, 140, 28), "Surface height", Ledger.Small);
             _height = Ledger.Number(new Rect(x + 150, 510, 140, 28), "PoiHeight", _height, -20, 20, NoChange);
-            _placedScroll = GUI.BeginScrollView(new Rect(x, 550, 298, 280), _placedScroll, new Rect(0, 0, 274, _draft.Props.Count * 30));
+            bool spawn = prop != null && prop.Marker && prop.Kind != "Hide" && prop.Kind != "Exit";
+            if (spawn) DrawSpawnInspector(prop, x);
+            else if (prop != null && prop.Kind == "Exit") Ledger.Label(new Rect(x, 545, 292, 55), "Place at a doorway. Arrow points OUT. NPC exit routes use this waypoint.", Ledger.Small);
+            else if (prop != null && prop.Kind == "Hide") Ledger.Label(new Rect(x, 545, 292, 55), "Place on a walkable floor behind cover. Native Hide points fill the area.", Ledger.Small);
+            float listY = spawn ? 692 : prop != null && prop.Marker ? 608 : 550;
+            bool wasEnabled = GUI.enabled; if (spawn && _profilesOpen) GUI.enabled = false;
+            _placedScroll = GUI.BeginScrollView(new Rect(x, listY, 298, 830 - listY), _placedScroll, new Rect(0, 0, 274, _draft.Props.Count * 30));
             int first = Mathf.Max(0, (int)(_placedScroll.y / 30)), last = Mathf.Min(_draft.Props.Count, first + 11);
             for (int i = first; i < last; i++)
                 if (Ledger.Button(new Rect(0, i * 30, 272, 28), (i + 1) + ": " + _draft.Props[i].Mesh, true, i == _selected))
                 { CancelPlacement(); _selected = i; Ledger.ClearNumbers(); }
+            GUI.EndScrollView();
+            GUI.enabled = wasEnabled;
+            if (spawn && _profilesOpen) DrawProfiles(prop, x);
+        }
+        private void DrawCatalog()
+        {
+            float height = 0;
+            foreach (string category in PoiDressMarkers.Categories)
+            { height += 36; if (_expanded.Contains(category)) foreach (var asset in _filtered) if (asset.Category == category) height += 46; }
+            _catalogScroll = GUI.BeginScrollView(new Rect(10, 140, 300, 690), _catalogScroll, new Rect(0,0,277,height));
+            float y = 0;
+            foreach (string category in PoiDressMarkers.Categories)
+            {
+                int count = 0; foreach (var asset in _filtered) if (asset.Category == category) count++;
+                bool open = _expanded.Contains(category);
+                if (Ledger.Button(new Rect(0,y,276,32), (open ? "- " : "+ ") + category + " (" + count + ")", true, open))
+                { if (open) _expanded.Remove(category); else _expanded.Add(category); }
+                y += 36;
+                if (!open) continue;
+                foreach (var asset in _filtered) if (asset.Category == category)
+                {
+                    if (y + 44 >= _catalogScroll.y && y <= _catalogScroll.y + 690 && Ledger.Button(new Rect(10,y,266,42), asset.Label, Ready)) Choose(asset);
+                    y += 46;
+                }
+            }
+            GUI.EndScrollView();
+        }
+        private void DrawSpawnInspector(PoiDressProp prop, float x)
+        {
+            int min = prop.Minimum, max = prop.Maximum, chance = prop.Chance;
+            Ledger.Label(new Rect(x,548,140,25), "Count min / max", Ledger.Small);
+            min = Mathf.RoundToInt(Ledger.Number(new Rect(x+144,548,70,26), "MarkerMin", min,0,32,_beforeNumber));
+            max = Mathf.RoundToInt(Ledger.Number(new Rect(x+220,548,70,26), "MarkerMax", max,min,32,_beforeNumber));
+            Ledger.Label(new Rect(x,580,140,25), "Spawn chance (%)", Ledger.Small);
+            chance = Mathf.RoundToInt(Ledger.Number(new Rect(x+150,580,140,26), "MarkerChance",chance,0,100,_beforeNumber));
+            if (min != prop.Minimum || max != prop.Maximum || chance != prop.Chance) { prop.Minimum = min; prop.Maximum = Mathf.Max(min,max); prop.Chance = chance; _dirty = true; }
+            if (Ledger.Button(new Rect(x,614,290,32), "List: " + (string.IsNullOrEmpty(prop.Profile) ? "choose..." : prop.Profile) + "  v")) _profilesOpen = !_profilesOpen;
+            Ledger.Label(new Rect(x,650,290,34), "One-shot per instance; native weights. 50 m arrival queues the whole POI.", Ledger.Small);
+        }
+        private void DrawProfiles(PoiDressProp prop, float x)
+        {
+            var profiles = _runtime.Markers.Catalog.For(prop.Kind);
+            Ledger.Panel(new Rect(x,646,292,180));
+            _profileScroll = GUI.BeginScrollView(new Rect(x+3,650,286,172),_profileScroll,new Rect(0,0,266,profiles.Count*32));
+            for (int i = 0; i < profiles.Count; i++) if (Ledger.Button(new Rect(0,i*32,264,30),profiles[i].Name + " (" + profiles[i].Count + ")"))
+            { RecordUndo(); prop.Profile = profiles[i].Name; _profilesOpen = false; _dirty = true; }
             GUI.EndScrollView();
         }
         private static void NoChange() { }

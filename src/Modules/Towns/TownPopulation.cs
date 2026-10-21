@@ -30,7 +30,7 @@ namespace WildWasteland.Modules.Towns
             for (int i = 0; i < loot; i++) plan.Lots[random.Next(plan.LotCount)].Loot++;
             if (plan.LotCount > 2) plan.Lots[2].Vehicles = 1;
             plan.PopulationMeasured = true;
-            plan.Condition = TownCondition.Ruined;
+            Classify(plan);
         }
         internal static void Created(TownSite site, GameObject actor)
         {
@@ -47,8 +47,6 @@ namespace WildWasteland.Modules.Towns
                 if (!human) return; // Yard Hounds accompany a base but cannot claim it.
             }
             plan.FactionMembers++;
-            Classify(plan);
-            if (plan.FactionMembers == 5) Log.Always("[Towns] ownership confirmed " + plan.Key + ": " + plan.Faction + "; 5 faction members actually spawned.");
         }
         internal static void Classify(TownPlan plan)
         {
@@ -136,7 +134,7 @@ namespace WildWasteland.Modules.Towns
             int loot = Percentage(site.Plan, settings.LootMinPercent.Value, settings.LootMaxPercent.Value, "loot");
             site.PopulationCounts = Allocate(site, assets, population, 1);
             site.LootCounts = Allocate(site, assets, loot, 2);
-            Log.Always("[Towns] town rolls " + site.Plan.Key + ": population=" + population + "%, loot=" + loot + "%; shared native totals balanced across buildings and spawn groups; completed groups retained.");
+            Log.Always("[Towns] town rolls " + site.Plan.Key + ": faction=" + site.Plan.Faction + ", " + site.Plan.Condition + ", population=" + population + "%, loot=" + loot + "%; planned before construction; shared native totals balanced across buildings and spawn groups; completed groups retained.");
         }
         private static int[][] Allocate(TownSite site, TownAssets assets, int percent, int kind)
         {

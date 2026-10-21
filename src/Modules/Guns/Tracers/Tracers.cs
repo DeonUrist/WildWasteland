@@ -1068,6 +1068,7 @@ namespace WildWasteland.Modules.Guns
             }
             if (wheel == null) return;
             _wDone = true;
+            Core.Services.RaiseVehiclePartHit(wheel.gameObject, Core.GameRefs.Player);
             float mult = Mathf.Max(0f, GunsModule.WheelDamageMultiplier.Value);
             float before = PartCondition(wheel);
             foreach (var f in wheel.GetComponents<PlayMakerFSM>())
@@ -1552,7 +1553,7 @@ namespace WildWasteland.Modules.Guns
                 if (t.CompareTag("vehPart")) { part = t; break; }
             if (part == null) return;
 
-
+            Core.Services.RaiseVehiclePartHit(part.gameObject, s.ShooterRoot ?? s.Player);
             if (!GunsModule.VehicleDamage.Value) return;
             float pct = Mathf.Abs(damage) / Mathf.Max(1f, GunsModule.VehicleDamagePer1.Value);   // [Tracers] VehicleDamagePer1 bullet damage = 1 % condition
             bool wheel = IsWheel(col.transform, part);

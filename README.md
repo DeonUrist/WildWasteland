@@ -1,6 +1,6 @@
 # Wild Wasteland
 
-**Wild Wasteland 1.0.6** is a single-player gameplay overhaul for **Apocalypter**, built for BepInEx 5. It brings a visible player body, more capable enemies, travelling vehicle crews, expanded combat, quests, survival features and a unified interface into one configurable mod.
+**Wild Wasteland 1.0.7** is a single-player gameplay overhaul for **Apocalypter**, built for BepInEx 5. It brings a visible player body, more capable enemies, travelling vehicle crews, expanded combat, quests, survival features and a unified interface into one configurable mod.
 
 Saving now waits for pending terrain work and holds streaming through publication. Location-discovery updates use same-directory file replacement on Windows; real write errors still retain the save safety checks.
 
@@ -10,7 +10,7 @@ Choose which modules to use and adjust them through the in-game settings. Wild W
 
 With **Vistas World Gen / World Amp**, Towns and added POIs leave terrain heights unchanged. Towns use naturally flatter sites, place buildings on existing ground and build no access roads or parking pavement. Fewer towns may fit; town bus/convoy visits that require access roads are unavailable in this mode. Starting-tile seam behavior remains under testing.
 
-[Download 1.0.6](https://github.com/DeonUrist/WildWasteland/releases/tag/v1.0.6) · [Feature wiki](https://github.com/DeonUrist/WildWasteland/wiki) · [Report a problem](https://github.com/DeonUrist/WildWasteland/issues)
+[Download 1.0.7](https://github.com/DeonUrist/WildWasteland/releases/tag/v1.0.7) · [Feature wiki](https://github.com/DeonUrist/WildWasteland/wiki) · [Report a problem](https://github.com/DeonUrist/WildWasteland/issues)
 
 ## Player body and movement
 
@@ -103,7 +103,7 @@ Performance optimizations are optional and experimental. Its presets and measure
 
 ## Compatibility and support
 
-Wild Wasteland 1.0.6 is the **single-player** project. Multiplayer-specific features belong to the separate WWMP build. Mod-created vehicles and components require their supporting modules when loading; removing the mod cannot make the base game restore objects it does not know.
+Wild Wasteland 1.0.7 is the **single-player** project. Multiplayer-specific features belong to the separate WWMP build. Mod-created vehicles and components require their supporting modules when loading; removing the mod cannot make the base game restore objects it does not know.
 
 Some features remain marked **Testing** in the [wiki](https://github.com/DeonUrist/WildWasteland/wiki). The release compiles successfully; that does not establish complete gameplay, save-recovery or performance verification across every setup.
 

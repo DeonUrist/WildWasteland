@@ -325,7 +325,10 @@ namespace WildWasteland.Modules.Towns
             int enemies = 2 + random.Next(2);
             SpawnerState[] saved; _saved.TryGetValue(station.Key, out saved);
             int n = 0;
-            for (int i = 0; i < LootPoints.Length && loot != null; i++, n++) Add(station, loot, LootPoints[i], "ItemSpawn_gas_" + i, 1 + random.Next(2), null, saved, n);
+            bool authoredLoot = false;
+            try { foreach (var prop in PoiDressStore.Load("TownsGasStation").Props) if (prop.Kind == "Items" || prop.Kind == "CarParts") { authoredLoot = true; break; } }
+            catch (Exception e) { Log.Warn("[Towns] gas station retains native loot: " + e.Message); }
+            for (int i = 0; !authoredLoot && i < LootPoints.Length && loot != null; i++, n++) Add(station, loot, LootPoints[i], "ItemSpawn_gas_" + i, 1 + random.Next(2), null, saved, n);
             // (WW) enemy spawners are OFF for now (they spawned badly); loot only. Re-enable by setting SpawnEnemies.
             for (int i = 0; SpawnEnemies && i < enemies && enemy != null && pool != null && pool.Count > 0; i++, n++) Add(station, enemy, EnemyPoints[i], "EnemySpawn_gas_" + i, 1 + random.Next(2), pool, saved, n);
         }
