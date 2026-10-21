@@ -95,7 +95,7 @@ namespace WildWasteland.Modules.Patrols
                 &&(convoy||TrafficFactions.Normalize(g.Faction)!="Coyotes"||CoyoteRoster(g))),
                 _inst.RollKm, _inst.RollBosses, () => UnityEngine.Random.value);
         }
-        private static bool CoyoteRoster(SpawnGroup group)=>group.Templates.Any(n=>{var t=CarTemplate.Find(n);return t!=null&&t.Available&&!t.IsTruck&&CrewFactions.Compatible(t,"Coyotes");});
+        private static bool CoyoteRoster(SpawnGroup group)=>group.Templates.Any(n=>{var t=CarTemplate.Find(n);return t!=null&&t.Available&&CrewFactions.Compatible(t,"Coyotes");});
         internal static bool HasTrafficFaction(string faction)=>_inst!=null&&EditorStore.Data.Patrols.Any(g=>TrafficFactions.Normalize(g.Faction)==faction&&g.Eligible(_inst.RollKm,_inst.RollBosses)&&(faction!="Coyotes"||CoyoteRoster(g)));
 
         internal static int BossKills()

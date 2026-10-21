@@ -99,7 +99,7 @@ namespace WildWasteland.Modules.Patrols
             foreach (string name in group.Templates)
             {
                 var template = CarTemplate.Park.FirstOrDefault(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-                if (template != null && template.Available && CrewFactions.Compatible(template,group.Faction) && (convoy || !template.IsTruck)) list.Add(template.CloneForSpawn());
+                if (template != null && template.Available && CrewFactions.Compatible(template,group.Faction)) list.Add(template.CloneForSpawn());
             }
             if (!convoy && list.Count == 0 && TrafficFactions.Normalize(group.Faction)=="Scrapyard") list.Add(CarTemplate.FallbackCar.CloneForSpawn());
             if (convoy && !list.Any(t => t.IsTruck)) { var fallback = CarTemplate.FallbackTruck.CloneForSpawn();if(TrafficFactions.Normalize(group.Faction)=="Coyotes"){fallback.Faction="Coyotes";fallback.Driver="Bodyguard";fallback.Passenger="";fallback.Turrets=new string[4];} fallback.SpawnLoot = new Dictionary<string, int>(); fallback.SpawnCargoKey = ""; list.Insert(0, fallback); }

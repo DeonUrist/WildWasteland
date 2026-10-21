@@ -139,7 +139,7 @@ namespace WildWasteland.Modules.Patrols
             float actions = right.yMax - 99; Ledger.Rule(rx, actions, rw);
             var chosen = CarTemplate.Find(_selectedTemplate); var selected = Selected;
             if(chosen!=null&&!CrewFactions.Compatible(chosen,ListFaction))chosen=null;
-            bool canAdd = chosen != null && chosen.Available && selected != null && CrewFactions.Compatible(chosen,selected.Faction) && (_tab !=0 || !chosen.IsTruck);
+            bool canAdd = chosen != null && chosen.Available && selected != null && CrewFactions.Compatible(chosen,selected.Faction);
             if (Ledger.Button(new Rect(rx, actions + 13, rw, 34), _tab==2?"+  Add template to merchant":_tab == 1 ? "+  Add template to convoy" : "+  Add template to patrol", canAdd, true)) Queue(() => { selected.Templates.Add(chosen.Name); _status = "Added one copy of " + chosen.Name; });
             if (PatrolsModule.AllowDebugSpawns.Value && Ledger.Button(new Rect(rx, actions + 54, rw, 34), "Spawn template", chosen != null && chosen.Available)) Queue(() => { var spawn = chosen.CloneForSpawn();spawn.SetupOnly=true;spawn.ReleaseHandbrake=false;if (spawn.IsTruck && _tab == 1 && selected != null) spawn.SpawnCargoOptions = selected.AllowedCargo.ToArray(); Schedule(() => {if(_tab==2)MerchantRuntime.SpawnTemplate(_patrol,spawn,selected);else _patrol.Spawn(spawn);}); }, false);
         }
@@ -151,7 +151,7 @@ namespace WildWasteland.Modules.Patrols
         }
         private static int VehicleCount(SpawnGroup group, bool convoy)
         {
-            var list = group.Templates.Select(CarTemplate.Find).Where(t => t != null && t.Available && CrewFactions.Compatible(t,group.Faction) && (convoy || !t.IsTruck)).ToList();
+            var list = group.Templates.Select(CarTemplate.Find).Where(t => t != null && t.Available && CrewFactions.Compatible(t,group.Faction)).ToList();
             return list.Count + ((convoy && !list.Any(t => t.IsTruck)) || (!convoy && list.Count == 0) ? 1 : 0);
         }
         private void DrawLedgerGroup(SpawnGroup group, int index, Rect r)
@@ -178,7 +178,7 @@ namespace WildWasteland.Modules.Patrols
                 int found = 0, trucks = 0;
                 for (int i = 0; i < group.Templates.Count; i++)
                 {
-                    int slot = i; var t = CarTemplate.Find(group.Templates[i]); bool available = t != null && t.Available; if (available && (_tab == 1 || !t.IsTruck)) { found++; if (t.IsTruck) trucks++; }
+                    int slot = i; var t = CarTemplate.Find(group.Templates[i]); bool available = t != null && t.Available; if (available) { found++; if (t.IsTruck) trucks++; }
                     Ledger.Label(new Rect(x, y, 19, 36), (i + 1).ToString(), Ledger.Small, Ledger.Muted);
                     Ledger.Label(new Rect(x + 27, y, w - 65, 36), t != null ? TemplateCaption(t) + (available ? "" : " [unavailable]") : group.Templates[i] + " [missing]", null, available ? Ledger.Text : Color.gray);
                     if (Ledger.Icon(new Rect(x + w - 30, y + 3, 30, 30), "circle-minus")) Queue(() => group.Templates.RemoveAt(slot));
