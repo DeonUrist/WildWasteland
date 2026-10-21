@@ -1,5 +1,13 @@
 # Harmony patch inventory (0.1.0)
 
+BloodFX optional lifecycle compatibility (2026-10-21): Guns prefixes `BloodFX.BloodRelay.OnParticleCollision(GameObject)`. Early-out while the native plugin component is alive or relay Owner differs from the retained managed instance. After native destruction only, forward to its closed `Plugin.OnSprayCollision` delegate, bypassing BloodFX's Unity-null owner guard. A WW scheduler callback invokes its original managed Update only after native destruction and during gameplay; the native component remains the sole updater while alive. No native Update/health/damage patch. Signature checks and teardown are in Guns/BloodFxCompat.cs.
+
+## Weapons Pack optional integration (2026-10-21, Testing)
+
+PlayerBody additionally prefixes/postfixes `ChainsawPrototype.Plugin.UpdateThirdPerson(object,object[])`: restore any owned native-carrier suppression first, then in FP only use cached shadow-only copies of the actual held model after the pack's pose/hide logic. Closed signature-checked source/camera delegates, no new tick/scene scan. TP remains pack-owned. Renderer capture occurs only when carrier changes; copies rebuild only when model/body changes. Removed on PlayerBody shutdown. See the first-person shadow follow-up in notes/weapons-pack-compatibility.md.
+
+Signature-checked reflection, module-owned patches; no pack assembly reference. NPC patches `ChainsawPrototype.Plugin.ProcessHit(RaycastHit,float,bool,float,bool)` prefix/postfix to capture exact killing contacts and native Health corpse actions; existing shared CreateObject.OnEnter postfix additionally invokes `WeaponsPackCompat.AfterCorpse` (early-out: no watched actions). NPC patches `FlamethrowerIgniteStatus.Touch(float,float)` postfix for first successful debuff activation and `BeginEnding(float)`/`OnDestroy()` postfixes for fear release; repeat contacts only query the active-status dictionary. NPC patches `Plugin.StartPreview()`/`StopPreview()` postfixes to cache draw state for the existing footstep-radius check. No Update/Advance polling patches. CleanHUD prefixes the pack's `Plugin.PackHudIcon(GameObject,ref Texture2D)` to return control to WW silhouette rendering while CleanHUD runs. Guns prefixes `Plugin.PlayStandardMeleeHitSound` for cached WW machete slash audio, with native pack fallback when unavailable. Removed with each owning module. Details/tests/limits: notes/weapons-pack-compatibility.md.
+
 Every patched method appears here exactly once. Rules (AGENTS.md 5.6): a target shared by two modules is patched **once** by a Core dispatcher in `src/Core/Hooks.cs` (Harmony id = the plugin GUID) and the modules subscribe handlers; a target only one module uses is a **module patch** applied through `Core.Patches` with the module's own Harmony id `com.denis.apocalypter.wildwasteland.<Id>` (unpatched when the module is switched off). `Core.Patches` logs `CONFLICT` when two modules patch the same target+kind directly. The live inventory is on the F7 page **Debug & performance -> Harmony patches** and in the startup summary (`core hooks: <target>[prefixes/postfixes] ...`; `(NOT PATCHED)` marks a dispatcher that failed to apply).
 
 Dispatcher semantics = HarmonyX with separate plugins: every prefix handler runs (in module init order PlayerBody, NPC, Guns, HUD, Patrols), the original is skipped when any returned false, postfix and finalizer handlers always run. A dispatcher is only patched when at least one running module subscribed (`Hooks.ApplyUsed`), so a disabled feature costs nothing. All 50 string-named targets were checked against the game's IL (review 2026-10-13).
@@ -176,7 +184,7 @@ FS4 is an exception to the Off fast path: once installed, its prefix always runs
 | EN7 | `AzureTimeController.FixedUpdate`, `AzureWeatherController.FixedUpdate` | prefix |
 | EN2 | `PostProcessEffectSettings.IsEnabledAndSupported` (postfix), `SharpenRenderer.Render` (prefix) | resolved by reflection (WW does not reference Unity.Postprocessing.Runtime) |
 | EN3/RC2/RC8 | `GraphicSettingHelperMethods.ChangeQualitySettings` | postfix (re-apply caps after the graphics menu) |
-| RC6 | `FastIKFabric.LateUpdate` | prefix (skip invisible/far rigs; never the player) |
+| RC6 | Native IK | No patch: distance/visibility IK skipping removed at Denis's request (2026-10-21). |
 
 ## 4. Known shared targets without a WW subscriber
 

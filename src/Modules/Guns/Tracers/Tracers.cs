@@ -913,7 +913,7 @@ namespace WildWasteland.Modules.Guns
         }
 
         // Sounds/knifestab.wav next to the DLL (hidden [Tracers] StabSound), loaded once
-        private static AudioClip StabClip()
+        internal static AudioClip StabClip()
         {
             if (_stab != null || _stabTried) return _stab;
             _stabTried = true;

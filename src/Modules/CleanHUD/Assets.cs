@@ -52,6 +52,8 @@ namespace WildWasteland.Modules.CleanHUD
         internal static string KeyOf(GameObject go)
         {
             if (go == null) return null;
+            string packKey; WeaponsPackIcons.Model(go, out packKey);
+            if (packKey != null) return packKey;
             var n = go.name;
             for (int i = 0; i < 3; i++) n = CloneSuffix.Replace(n, "");
             return n.Trim();
@@ -263,8 +265,10 @@ namespace WildWasteland.Modules.CleanHUD
 
         internal static IEnumerator Render(GameObject item, string key, Action<Texture2D> complete)
         {
-            var src = Prefab(key) ?? item;
-            bool fromPrefab = src != item;
+            string packKey;
+            var packModel = WeaponsPackIcons.Model(item, out packKey);
+            var src = packModel ?? Prefab(key) ?? item;
+            bool fromPrefab = packModel == null && src != item;
             var shader = Shader.Find("Hidden/Internal-Colored");
             if (shader == null) { complete(null); yield break; }
             var mat = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };

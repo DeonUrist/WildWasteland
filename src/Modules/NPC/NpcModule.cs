@@ -83,6 +83,7 @@ namespace WildWasteland.Modules.NPC
             Scheduler.EveryFrame(this, "Senses", Senses.Tick);
             Scheduler.EveryFrame(this, "Nav", Nav.Tick);
             Scheduler.EveryFrame(this, "Brain", Brain.Tick);
+            Scheduler.Interval(this, "Weapons Pack compatibility", 2f, WeaponsPackCompat.Tick, Phase.Update, true);
             Scheduler.Sliced(this, "NPC.Rigs", 1000, Brain.BuildRig, Phase.LateUpdate);
             Scheduler.EveryFrame(this, "Idle", Idle.Tick);
             Scheduler.Interval(this, "Passthrough", 0.25f, Passthrough.Tick, Phase.Update, true);
@@ -144,6 +145,7 @@ namespace WildWasteland.Modules.NPC
             Step("Passthrough", Passthrough.Shutdown);
             Step("Idle", Idle.Shutdown);
             Step("Brain", Brain.Shutdown);
+            Step("Weapons Pack", WeaponsPackCompat.Shutdown);
             Step("Aim", Aim.Shutdown);
             Step("VanillaEvents", VanillaEvents.Shutdown);
             Step("Senses", Senses.Shutdown);
@@ -162,6 +164,7 @@ namespace WildWasteland.Modules.NPC
         /// <summary>Clears every registry / cache (the old Plugin.SceneLoaded chain). Init and Shutdown call it too.</summary>
         static void ResetAll()
         {
+            WeaponsPackCompat.Reset();
             Aim.OnSceneLoaded(); WeaponRanges.OnSceneLoaded(); VanillaEvents.OnSceneLoaded(); Brain.OnSceneLoaded(); Senses.OnSceneLoaded(); Nav.OnSceneLoaded(); Idle.OnSceneLoaded();
             Passthrough.OnSceneLoaded(); Burrow.OnSceneLoaded(); Pounce.OnSceneLoaded(); Webs.OnSceneLoaded(); Nests.OnSceneLoaded(); Ambush.OnSceneLoaded(); DogBite.OnSceneLoaded();
             PoiNavEditor.Close(true); PoiNavSetup.Reset(); PoiNav.Reset();
@@ -169,6 +172,9 @@ namespace WildWasteland.Modules.NPC
 
         public override void OnSceneLoaded(Scene scene, LoadSceneMode mode) { ResetAll(); Gungirl.OnSceneLoaded(); }
         public override void OnWorldReady() { Gungirl.BeginScan(); }
+        // public override void OnSaveBegin(string slot) { ChainsawLimbs.Saving(true); } // Dismemberment disabled.
+        // public override void OnSaveEnd(string slot) { ChainsawLimbs.Saving(false); }
+        public override void OnLoadBegin(string slot) { WeaponsPackCompat.Reset(); }
 
         // ------------------------------------------------------------------ floating origin
         // The game's FloatingOrigin moves the root objects of every loaded scene by delta (not DontDestroyOnLoad). NPCAI kept scene-space
@@ -203,6 +209,7 @@ namespace WildWasteland.Modules.NPC
             Hooks.CreateObjectEnter.Postfix(this, Senses.AfterCreateObject);
             Hooks.CreateObjectEnter.Postfix(this, Idle.AfterCreateObject);
             Hooks.CreateObjectEnter.Postfix(this, Pounce.AfterCreateObject);
+            Hooks.CreateObjectEnter.Postfix(this, WeaponsPackCompat.AfterCorpse);
             // SetFsmFloat.OnEnter postfixes: vanilla hits -> Senses.Hurt, then a real dog bite -> DogBite's lunge
             Hooks.SetFsmFloatEnter.Postfix(this, VanillaEvents.AfterDamage);
             Hooks.SetFsmFloatEnter.Postfix(this, DogBite.AfterSetFsmFloat);

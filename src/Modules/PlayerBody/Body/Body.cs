@@ -1352,6 +1352,7 @@ namespace WildWasteland.Modules.PlayerBody
 
         // ---------------------------------------------------------------- weapon in hand (third person)
         private bool _propShown, _propShadow;
+        internal bool WeaponPropVisible { get { return _propShown || _propShadow; } }
         private Transform _propBolt;
         private Transform _propMuzzle; private Vector3 _propMuzzleLocal;
         private bool _propIsGun;

@@ -230,6 +230,7 @@ namespace WildWasteland.Modules.NPC
             foreach (var a in Senses.AllAgents)
             {
                 if (a.Owner == null) continue;
+                if (Brain.Retreating(a.Owner)) continue;
                 int id = a.Owner.GetInstanceID();
                 Order ord = null;
                 if (_travel.Count > 0 && _travel.TryGetValue(id, out ord) && !ReferenceEquals(ord.Npc, a.Owner)) ord = null;

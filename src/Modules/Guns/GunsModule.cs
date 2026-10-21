@@ -257,6 +257,8 @@ namespace WildWasteland.Modules.Guns
         public override void Shutdown()
         {
             _running = false;
+            WeaponsPackSound.Shutdown();
+            BloodFxCompat.Shutdown();
             Ironsights.Shutdown();
             WeaponTransition.Shutdown();
             try { AmmoRunner.Unloader.CompleteForSwitch(); } catch (Exception e) { Core.Log.Error("[Guns] shutdown: unload", e); }
@@ -299,6 +301,8 @@ namespace WildWasteland.Modules.Guns
 
         static void BossesTick()
         {
+            WeaponsPackSound.Ensure();
+            BloodFxCompat.Ensure();
             try { Bosses.Tick(); } catch (Exception e) { Core.Log.Error("[Guns] Bosses", e); }
         }
 

@@ -185,6 +185,7 @@ namespace WildWasteland.Modules.CleanHUD
         private void SimpleIconsChanged(object sender, EventArgs args) { if (Running) LocationMarkers.RefreshIcons(); }
         private void AttachHud()
         {
+            WeaponsPackIcons.Ensure(this);
             ChaseCameraHud.Install(this);
             if (!KeyCatalog.ScanStarted) KeyCatalog.StartScan();
             if (!Enabled.Value || Time.unscaledTime < _retry) return;
@@ -243,6 +244,7 @@ namespace WildWasteland.Modules.CleanHUD
         public override void OnWorldReady() { LocationMarkers.WorldReady(SaveBus.Slot); MapFog.WorldReady(SaveBus.Slot); SceneCache.Reset(); SceneCache.BeginKeys(); _attach.RunNow(); }
         public override void Shutdown()
         {
+            WeaponsPackIcons.Shutdown();
             _weatherMap.Clear();
             Binoculars.Shutdown();
             VantageDiscovery.Reset(); VistasBanners.Shutdown();

@@ -311,6 +311,7 @@ namespace WildWasteland.Modules.PlayerBody
             Core.Patches.Patch(this, Core.Patches.Method(typeof(HutongGames.PlayMaker.Actions.MouseLook), "OnUpdate"),
                 prefix: Core.Patches.Method(typeof(ThirdPerson), "BeforeMouseLook"));
             Car.Patch(this);
+            WeaponsPackShadows.Install(this);
             WheelArms.Patch(this);
             PickAssist.Patch(this);
             AimTransition.Patch(this);
@@ -351,6 +352,7 @@ namespace WildWasteland.Modules.PlayerBody
 
         public override void Shutdown()
         {
+            WeaponsPackShadows.Shutdown();
             ChaseCameraCompat.Clear();
             Services.Animation = null;
             if (_eof != null && _eofHost != null && _eofHost == Core.Runner.Instance) Scheduler.StopCoroutine(_eof);

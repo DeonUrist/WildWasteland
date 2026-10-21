@@ -89,6 +89,7 @@ namespace WildWasteland.Modules.NPC
             // (1.1.0) cover: the spot, when the stay ends, arrived there, started by the game's own "hide" (a fast target) or by low health
             public Vector3 CoverPos; public float CoverUntil, CoverSince, NextCoverCheck, CoverCooldownUntil; public bool CoverArrived, CoverFromHide;
             public GameObject DogCoverThreat; public float NextDogCoverCheck, DogCoverRetry;
+            public float FrightUntil, NextFrightCover, SawFrightUntil; public bool BurningFear; public Vector3 FrightFrom;
             public FsmGameObject HideVar;            // the Attack FSM's "Hide" variable (its FindClosest result)
             public GameObject VehicleHide; public float NextVehicleHideCheck;
             public FsmFloat HpVar; public float HpMax;   // the Health FSM's Health, and the most it was seen at
@@ -153,7 +154,7 @@ namespace WildWasteland.Modules.NPC
             foreach (var kv in _npcs)
             {
                 var n = kv.Value;
-                n.Waypoint += d; n.BlkPos += d; n.CoverPos += d; n.TraceGoal += d;
+                n.Waypoint += d; n.BlkPos += d; n.CoverPos += d; n.TraceGoal += d; n.FrightFrom += d;
                 for (int i = 0; i < n.Trail.Count; i++) n.Trail[i] += d;
             }
         }
@@ -222,6 +223,7 @@ namespace WildWasteland.Modules.NPC
                 }
                 string state;
                 bool engaged = Engaged(n, out state);
+                if (now < n.FrightUntil && n.T.parent == null && (n.HpVar == null || n.HpVar.Value >= 1f)) engaged = true;
                 if (n.Ranged && n.Body == null && now < n.MadeAt + 60f) TryRig(n);
                 if (n.Body != null) Drive(n, state ?? AttackState(n), now, dt);                     // (1.2.0) Apocaplayer's ModAPI: this frame's situation, engaged or not
                 if (n.Reloading) ReloadSounds.Tick(n, now);                                           // (1.1.2) the reload's sounds, rig or not
@@ -251,11 +253,11 @@ namespace WildWasteland.Modules.NPC
                 if (n.Mode == Mode.Off || n.Mode == Mode.BackUp || n.Mode == Mode.Walk) continue;     // Walk: Idle turns the body
                 bool cover = n.Mode == Mode.Cover, coverHold = cover && n.CoverArrived;
                 if (n.Body == null && n.Frozen && !ChaseState(state) && !(cover && state == "hide")) Unfreeze(n);      // the burst (or a melee swing, a hide run): let the animation play
-                bool steering = (n.Mode == Mode.Chase || n.Mode == Mode.Advance || (cover && !coverHold)) && n.HasHeading && state != "attack_melee" && (state != "hide" || cover);
+                bool steering = (n.Mode == Mode.Chase || n.Mode == Mode.Advance || (cover && !coverHold)) && n.HasHeading && (state != "attack_melee" || now < n.FrightUntil) && (state != "hide" || cover);
                 if (!ChaseState(state) && state != "attack_ranged" && !steering && !coverHold) continue;   // melee swing, hide run ...: the game's own facing
                 // (1.4.6) a moving NPC is turned to its steered heading in every Attack state but the swing / hide: the run velocity is ours in all
                 // of them, and an unturned body used to run on along its old facing (an idle raider: toward home, away from the way out)
-                var target = n.Target.Value;
+                var target = n.Target.Value ?? (now < n.FrightUntil ? Core.GameRefs.Player : null);
                 if (target == null) continue;
                 Vector3 to;
                 n.StrafeDev = 0f;
@@ -347,6 +349,7 @@ namespace WildWasteland.Modules.NPC
 
         private static void Think(Npc n, float now)
         {
+            if (FrightThink(n, now)) return;
             if(SimpleBandits.Has(n.Owner)&&!Senses.IsGhostTarget(n.Owner)){SimpleThink(n,now);return;}
             var target = n.Target.Value;
             if (target == null) { if (n.Mode != Mode.Off) SetMode(n, Mode.Off, "no target"); return; }
@@ -1189,7 +1192,7 @@ namespace WildWasteland.Modules.NPC
         {
             if (n.Movement == null || n.Attack == null || n.Attack.Fsm == null) return;
             string s = n.Attack.Fsm.ActiveStateName;
-            if (!ChaseState(s) && s != "hide") return;
+            if (!ChaseState(s) && s != "hide" && Time.time >= n.FrightUntil) return;
             n.Movement.SendEvent(run ? "Animal_Run" : "Animal_Idle");
         }
 
@@ -1902,6 +1905,7 @@ namespace WildWasteland.Modules.NPC
                 var n = NpcOf(fsm, "Attack");
                 if (n == null) return true;
                 string st = fsm.ActiveStateName;
+                if (Time.time < n.FrightUntil && n.Mode == Mode.Cover) return false;
                 if (st == "hide") return false;     // the brain owns facing in cover, chase and ghost walks; the game's shelter turn must not compete
                 return !ChaseState(st);
             }
@@ -1923,6 +1927,12 @@ namespace WildWasteland.Modules.NPC
             {
                 if (__instance.sendEvent == null) return true;
                 string ev = __instance.sendEvent.Name;
+                if (ev == "Animal_Attack" || ev == "Animal_Attack_Ranged")
+                {
+                    var frightened = NpcOf(__instance.Fsm, "Attack");
+                    if (frightened != null && frightened.Mode == Mode.Cover && Time.time < frightened.FrightUntil)
+                    { __instance.Finish(); return false; }
+                }
                 if (ev == "Animal_Run")
                 {
                     var n = NpcOf(__instance.Fsm, "Attack");
