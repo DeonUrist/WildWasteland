@@ -18,6 +18,7 @@ namespace WildWasteland.Modules.CleanHUD
         internal static ConfigEntry<bool> Enabled, ShowNeeds, ShowHealthNumbers, ShowInsanity, MenuEnabled, CleanFont, EnableCheats;
         internal static ConfigEntry<float> Scale;
         internal static ConfigEntry<bool> ShowConvoys, ShowLocations;
+        internal static ConfigEntry<bool> DamageDirection;
         internal static ConfigEntry<bool> AmbiguousPatrols, AmbiguousLocations;
         internal static ConfigEntry<bool> ShowCompass, MapEnabled, DrivingHudOnlyThirdPerson;
         internal static ConfigEntry<MapDetail> MapMarkers, MapRoutes, MapTrafficMarkers;
@@ -44,6 +45,7 @@ namespace WildWasteland.Modules.CleanHUD
             ShowNeeds = Bind(cfg, "HUD", "ShowNeeds", true, "Show water, food and sleep beneath HP and armor.");
             ShowHealthNumbers = Bind(cfg, "HUD", "ShowHealthNumbers", true, "Show HP and armor values inside their bars.");
             ShowInsanity = Bind(cfg, "HUD", "ShowInsanity", true, "Show insanity in the top right while above zero.");
+            DamageDirection = cfg.Player("HUD", "DamageDirection", true, "Show an opaque red arrow toward each attacker for two seconds after a hit. Repeated hits refresh one arrow. Requires NPC AI and Clean HUD.");
             ShowConvoys = cfg.Player("HUD", "ShowConvoys", true, "Compass icons and distances for vehicle groups: merchants yellow, Coyotes green, patrols red and convoys orange.");
             ShowLocations = cfg.Player("HUD", "ShowLocations", true, "Compass icons and distances for native locations within 1 km.");
             AmbiguousPatrols = cfg.Player("HUD", "AmbiguousPatrols", true, "Show all compass vehicle groups with white vehicle icons, keeping their distances.");

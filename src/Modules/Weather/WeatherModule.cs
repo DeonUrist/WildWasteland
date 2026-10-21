@@ -28,6 +28,7 @@ namespace WildWasteland.Modules.Weather
         private readonly WeatherNative.Storm[] _anchors = new WeatherNative.Storm[4];
         private Job _draw;
         private bool _running;
+        private bool _nativeAssetsReady;
         public override string Id { get { return "Weather"; } }
         public override string DisplayName { get { return "Weather"; } }
         public int Count { get { return _count; } }
@@ -49,11 +50,13 @@ namespace WildWasteland.Modules.Weather
         public override void Init()
         {
             WeatherDiagnostics.Reset();
-            _running = true; _count = 0; _clock = 0;
+            _running = true; _count = 0; _clock = 0; _nativeAssetsReady=false;
             if (!Core.Patches.Patch(this,Core.Patches.Method(typeof(UnityEngine.AzureSky.AzureFogScattering),"OnRenderImage"),
                 prefix: Core.Patches.Method(typeof(WeatherSky),"NativeFogBefore"), finalizer: Core.Patches.Method(typeof(WeatherSky),"NativeFogAfter")))
                 throw new System.InvalidOperationException("Weather requires the native Azure fog scope.");
             _audio = new WeatherAudio(System.IO.Path.Combine(Dir,"sound","sandstorm.wav"));
+            PrepareAssets();
+            Scheduler.Interval(this,"Weather.PrepareNativeAssets",1,PrepareNativeAssets);
             Services.Weather = this;
             _draw = Scheduler.EveryFrame(this, "Moving storm visuals", Tick, Phase.LateUpdateLast);
             _draw.Enabled = false;
@@ -80,7 +83,7 @@ namespace WildWasteland.Modules.Weather
             forward.y = 0; forward.Normalize();
             Vector3 center = GameRefs.Player.transform.position; center.y -= 1.5f;
             UpdateLayout();
-            if (!here) center += forward * (_depth.Value * 500 + (hurricane ? 2000f : 700f));
+            if (!here) center += forward * (_depth.Value * 550 + 5000f);
             var anchor = _native.Preview(center,Quaternion.LookRotation(-forward));
             if (anchor == null) return;
             _regions[_count] = new WeatherRegion
@@ -103,6 +106,7 @@ namespace WildWasteland.Modules.Weather
             {
                 var storm=_native.Storms[n];
                 if (storm.Root==null || !storm.Ready || storm.Owned || storm.Selected || !storm.Root.activeInHierarchy) continue;
+                if (!_native.PrepareEncounter(storm)) continue;
                 float distance=(storm.Root.transform.position-player).sqrMagnitude;
                 if (distance>Mathf.Pow(_width.Value*500+8000,2)) continue;
                 if (_count==_regions.Length)
@@ -120,7 +124,8 @@ namespace WildWasteland.Modules.Weather
                 if (_visuals==null) _visuals=new WeatherVisuals(_audio);
                 if (!_visuals.Ready) return;
                 _audio.Load(); UpdateLayout();
-                Vector3 forward=-storm.Root.transform.forward; forward.y=0; forward.Normalize();
+                Vector3 forward=storm.Body!=null && storm.Body.velocity.sqrMagnitude>1 ? -storm.Body.velocity : -storm.Root.transform.forward;
+                forward.y=0; forward.Normalize();
                 _regions[_count]=new WeatherRegion { WorldCenter=Origin.World(storm.Root.transform.position),
                     Radii=new Vector2(_width.Value*500,_depth.Value*500), Heading=Mathf.Atan2(forward.x,forward.z)*Mathf.Rad2Deg,
                     Velocity=storm.Body!=null ? storm.Body.velocity : -forward*25, Hurricane=true };
@@ -318,8 +323,21 @@ namespace WildWasteland.Modules.Weather
             yield return new ActionPage(this, ToolGroups.Debug, "Weather visual preview", DrawTools) { IsTool = true };
         }
         public override void OnSceneLoaded(Scene scene, LoadSceneMode mode) { Clear(); if (_native!=null) _native.Reset(); }
-        public override void OnLoadBegin(string slot) { Clear(); if (_native!=null) _native.Reset(); }
-        public override void OnWorldReady() { if (_native!=null) { _native.Scan(); _native.Save(false); } }
+        private void PrepareAssets()
+        {
+            if (_visuals==null) _visuals=new WeatherVisuals(_audio);
+            _audio.Load(); UpdateLayout();
+            var policy=Services.WeatherVisualPolicy;
+            _visuals.Prepare(new Vector2(_width.Value*500,_depth.Value*500),_columnCount,policy!=null ? policy.WeatherDetail : WeatherVisualDetail.Balanced);
+            PrepareNativeAssets();
+        }
+        private void PrepareNativeAssets()
+        {
+            if (!_nativeAssetsReady && _visuals!=null && _visuals.PrepareNative())
+            { _nativeAssetsReady=true; Log.Always("[Weather] Native dust/debris pools ready before encounters; retained across loads."); }
+        }
+        public override void OnLoadBegin(string slot) { Clear(); if (_native!=null) _native.Reset(); PrepareAssets(); }
+        public override void OnWorldReady() { PrepareAssets(); if (_native!=null) { _native.Scan(); _native.Save(false); } }
         public override void OnSaveBegin(string slot) { if (_native!=null) _native.Save(true); }
         public override void OnSaveEnd(string slot) { if (_native!=null) _native.Save(false); }
         public override void Shutdown()

@@ -59,7 +59,7 @@ namespace WildWasteland.Modules.NPC
                 if (PoiNav.Display != null && PoiNav.Display.Value)
                     foreach (var i in PoiNav.Instances)
                     {
-                        if (i.Root == null || i.Root == EditRoot || (i.Box.center - eye).sqrMagnitude > 250f * 250f) continue;
+                        if (!i.Ready || i.Root == null || i.Root == EditRoot || (i.Box.center - eye).sqrMagnitude > 250f * 250f) continue;
                         DrawData(i.Root, i.Data, i.World, -1);
                     }
                 GL.End(); GL.PopMatrix();

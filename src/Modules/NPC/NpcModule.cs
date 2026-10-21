@@ -105,6 +105,7 @@ namespace WildWasteland.Modules.NPC
 
             // (WW) POI navigation: setup mode + bake queue, link traversals, the data view and its editor
             Scheduler.EveryFrame(this, "PoiNav.Setup", PoiNavSetup.Tick);
+            Scheduler.Sliced(this, "PoiNav.Build", 500, PoiNav.BuildStep);
             Scheduler.EveryFrame(this, "PoiNav.Traverse", PoiNavTraverse.Tick, Phase.EarlyFixedUpdate);
             Scheduler.EveryFrame(this, "PoiNav.View", PoiNavView.Tick);
             Scheduler.EveryFrame(this, "PoiNav.Editor", PoiNavEditor.Tick);

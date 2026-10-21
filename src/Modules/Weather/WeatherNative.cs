@@ -16,7 +16,7 @@ namespace WildWasteland.Modules.Weather
         {
             internal GameObject Root;
             internal Rigidbody Body;
-            internal bool Owned, Ready, Gravity, Selected;
+            internal bool Owned, Ready, Gravity, Selected, AwaitMotion;
             internal readonly List<Transform> Pending = new List<Transform>(64);
             internal readonly List<Visual> Visuals = new List<Visual>(64);
             internal readonly List<Switch> Switches = new List<Switch>(8);
@@ -65,6 +65,7 @@ namespace WildWasteland.Modules.Weather
             Hooks.FsmEnable.Postfix(owner,Enabled);
             Hooks.ProcessEvent.Prefix(owner,EventBefore);
             Hooks.SetVelocityDo.Prefix(owner,VelocityBefore);
+            Hooks.CreateObjectEnter.Postfix(owner,Created);
             Scheduler.Sliced(owner,"Weather.NativeDiscovery",500,Step);
             Scheduler.Interval(owner,"Weather.NativeEncounters",.5f,Reconcile);
             Scan();
@@ -89,7 +90,7 @@ namespace WildWasteland.Modules.Weather
             {
                 storm=Storms[i]; if (storm.Root!=null || storm.Selected) continue;
                 if (storm.Id!=0) _roots.Remove(storm.Id);
-                storm.Root=root; storm.Ready=false; storm.Owned=false; storm.Selected=false; storm.Age=40;
+                storm.Root=root; storm.Ready=false; storm.Owned=false; storm.Selected=false; storm.AwaitMotion=false; storm.Age=40;
                 storm.Id=root.GetInstanceID();
                 storm.Pending.Clear(); storm.Visuals.Clear(); storm.Switches.Clear(); storm.Contacts();
                 Array.Clear(storm.Force,0,3); Array.Clear(storm.Damage,0,3); Array.Clear(storm.Explosions,0,3); Array.Clear(storm.Collided,0,3);
@@ -147,6 +148,41 @@ namespace WildWasteland.Modules.Weather
             if (storm.Owned || WeatherDiagnostics.Frozen || !GameRefs.InGame)
             { if (storm.Body!=null && !storm.Body.isKinematic) storm.Body.velocity=Vector3.zero; return false; }
             return true;
+        }
+        private void Created(CreateObject action)
+        {
+            if (_restoring || _saving || action.Fsm.Name!="ItemSpawner" || action.Owner.name!="EnemySpawn_Sandstorm") return;
+            var root=action.storeObject!=null ? action.storeObject.Value : null;
+            if (root==null || Root(root.transform)!=root) return;
+            var storm=Track(root); if (storm==null) return;
+            storm.AwaitMotion=true;
+            if (GameRefs.Player!=null)
+            {
+                Vector3 away=root.transform.position-GameRefs.Player.transform.position; away.y=0;
+                if (away.sqrMagnitude<1) { away=GameRefs.Player.transform.forward; away.y=0; }
+                if (away.sqrMagnitude<1) away=Vector3.forward;
+                PositionEncounter(storm,away.normalized);
+            }
+        }
+        internal bool PrepareEncounter(Storm storm)
+        {
+            if (!storm.AwaitMotion) return true;
+            var velocity=storm.Body!=null ? storm.Body.velocity : Vector3.zero; velocity.y=0;
+            if (velocity.sqrMagnitude<1 || GameRefs.Player==null) return false;
+            // Native Move has chosen its heading. Reserve 2 km for cloud overhang beyond the footprint.
+            PositionEncounter(storm,-velocity.normalized);
+            storm.AwaitMotion=false;
+            Log.Always("[Weather] New storm positioned before reveal: front clearance >=3000 m; world="+Origin.World(storm.Root.transform.position).ToString("F1"));
+            return true;
+        }
+        private void PositionEncounter(Storm storm,Vector3 away)
+        {
+            Vector3 player=GameRefs.Player.transform.position, position=storm.Root.transform.position;
+            float distance=Vector3.Dot(position-player,away);
+            float minimum=_owner.DepthKm*550+5000;
+            if (distance<minimum) position+=away*(minimum-distance);
+            storm.Root.transform.position=position;
+            if (storm.Body!=null) storm.Body.position=position;
         }
         private bool Step()
         {

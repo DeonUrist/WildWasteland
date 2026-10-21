@@ -37,6 +37,7 @@ namespace WildWasteland.Modules.Weather
             {
                 bank = new Bank(); _banks[slot] = bank;
                 bank.Owner = new GameObject((_vortex ? "WW.Weather.VortexCloud." : "WW.Weather.Smoke.")+slot) { hideFlags = HideFlags.HideAndDontSave, layer = 2 };
+                bank.Owner.transform.SetParent(Runner.Host.transform,false);
                 bank.System = bank.Owner.AddComponent<ParticleSystem>();
                 bank.System.Stop(true,ParticleSystemStopBehavior.StopEmittingAndClear);
                 var main = bank.System.main; main.playOnAwake = false; main.loop = false; main.maxParticles = _particles.Length;

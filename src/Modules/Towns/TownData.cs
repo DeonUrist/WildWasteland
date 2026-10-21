@@ -117,6 +117,8 @@ namespace WildWasteland.Modules.Towns
         public TownPlan Plan { get; internal set; }
         internal Transform Anchor;
         internal Terrain GroundTerrain;
+        internal TownGroundPad GroundPad;
+        internal TownApproach Approach;
         internal GameObject Streets;
         internal GameObject[] Buildings;
         internal PlayMakerFSM[][] Spawners;

@@ -42,6 +42,7 @@ namespace WildWasteland.Modules.Patrols
             }
             var r = _active;
             if (r.Waiting || Time.frameCount < r.Frame) return false;
+            if (!Core.WorldWork.Try(Core.WorldWork.Vehicles)) return false;
             try
             {
                 var iterator = r.Stack.Peek();

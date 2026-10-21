@@ -23,6 +23,7 @@ namespace WildWasteland.Modules.Weather
         private float _reportAt;
         private bool _reported;
 
+        internal bool Prepare() { return _system!=null || Create(); }
         private bool Create()
         {
             var manager = ES3ReferenceMgrBase.Current;

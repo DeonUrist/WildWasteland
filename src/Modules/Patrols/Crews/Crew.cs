@@ -166,6 +166,7 @@ namespace WildWasteland.Modules.Patrols
             _tank = tank != null ? tank.GetComponents<PlayMakerFSM>().FirstOrDefault(f => f.FsmName == "LiquidAmount") : null;
             var dt = Patrol.FindChild(car.transform, "DriveTrigger");
             if (dt != null) _enterTrigger = dt.GetComponents<Collider>().FirstOrDefault(c => c is SphereCollider);
+            if (_ctl != null && _ctl.Taken) _ctl.Release();
             _ctl = new InputControl(car);
             _partDetach = fsms.Where(f => f.FsmName == "de_Attach").ToArray();
 
@@ -581,6 +582,7 @@ namespace WildWasteland.Modules.Patrols
         private bool ExitCrew(bool stuck)
         {
             var marker = Marker;
+            _poiApproach = false;
             CombatExit=!stuck;
             _frontExitIndex=0;
             if(stuck){PatrolsModule.Verbose("Crew: stuck for good, the crew bails out (" + PatrolsModule.StuckBailChance.Value + " % roll)");if(marker!=null)marker.StuckBails++;}
@@ -685,6 +687,7 @@ namespace WildWasteland.Modules.Patrols
 
         private void OnDestroy()
         {
+            if (_ctl != null && _ctl.Taken) _ctl.Release();
             if (Regroup != null) { var g = Regroup; Regroup = null; CrewReturn.CarLost(g); }
             if (_pilot != null) { _pilot.Detach(); _pilot = null; }
         }

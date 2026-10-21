@@ -23,7 +23,7 @@ namespace WildWasteland.Modules.Performance
     //                  data/hierarchy/scene1_game/PlayerCameraHolder.txt:L7-9, data/hierarchy/prefabs/R/Rustallion.txt:L55-63).
 
     [Flags]
-    public enum ScanTypes { None = 0, Lights = 1, Renderers = 2, Particles = 4, Animators = 8, Roots = 16 }
+    public enum ScanTypes { None = 0, Lights = 1, Renderers = 2, Particles = 4, Animators = 8, Roots = 16, Skinned = 32 }
 
     /// <summary>Where a scanned component lives.</summary>
     public struct ScanCtx
@@ -48,6 +48,8 @@ namespace WildWasteland.Modules.Performance
         void OnPassDone();
     }
 
+    internal interface ISkinnedScanClient { void OnSkinned(SkinnedMeshRenderer r, ref ScanCtx c); }
+
     internal static class RenderScan
     {
         static readonly List<IScanClient> _clients = new List<IScanClient>();
@@ -70,6 +72,7 @@ namespace WildWasteland.Modules.Performance
         static readonly List<MeshRenderer> _rBuf = new List<MeshRenderer>();
         static readonly List<ParticleSystem> _pBuf = new List<ParticleSystem>();
         static readonly List<Animator> _aBuf = new List<Animator>();
+        static readonly List<SkinnedMeshRenderer> _sBuf = new List<SkinnedMeshRenderer>();
 
         struct Info { public bool Saved, Vehicle, Player; public Transform Root; }
         static readonly Dictionary<int, Info> _info = new Dictionary<int, Info>();
@@ -147,7 +150,7 @@ namespace WildWasteland.Modules.Performance
 
         static void StepFull()
         {
-            if (_stage == 4)
+            if (_stage == 5)
             {
                 // roots collected during the renderer stage, 32 per step
                 int stop = Math.Min(_idx + 32, _roots.Count);
@@ -164,7 +167,8 @@ namespace WildWasteland.Modules.Performance
                     case 1: if (Wants(ScanTypes.Renderers) || Wants(ScanTypes.Roots)) _arr = Resources.FindObjectsOfTypeAll<MeshRenderer>(); break;
                     case 2: if (Wants(ScanTypes.Particles)) _arr = Resources.FindObjectsOfTypeAll<ParticleSystem>(); break;
                     case 3: if (Wants(ScanTypes.Animators)) _arr = Resources.FindObjectsOfTypeAll<Animator>(); break;
-                    case 4: if (!Wants(ScanTypes.Roots)) Finish(); break;
+                    case 4: if (Wants(ScanTypes.Skinned)) _arr = Resources.FindObjectsOfTypeAll<SkinnedMeshRenderer>(); break;
+                    case 5: if (!Wants(ScanTypes.Roots)) Finish(); break;
                     default: Finish(); break;
                 }
                 return;   // the FindObjectsOfTypeAll call is this step's work
@@ -176,7 +180,7 @@ namespace WildWasteland.Modules.Performance
 
         static void Finish()
         {
-            _fullRunning = false; _arr = null; _stage = 5; _info.Clear(); _roots.Clear(); _rootIds.Clear(); Passes++;
+            _fullRunning = false; _arr = null; _stage = 6; _info.Clear(); _roots.Clear(); _rootIds.Clear(); Passes++;
             for (int i = 0; i < _clients.Count; i++) { try { _clients[i].OnPassDone(); } catch (Exception e) { Log.Error("[Performance] scan pass done", e); } }
         }
 
@@ -199,6 +203,7 @@ namespace WildWasteland.Modules.Performance
             if (Wants(ScanTypes.Renderers) || Wants(ScanTypes.Roots)) { go.GetComponentsInChildren(true, _rBuf); for (int i = 0; i < _rBuf.Count; i++) Deliver(_rBuf[i]); _rBuf.Clear(); }
             if (Wants(ScanTypes.Particles)) { go.GetComponentsInChildren(true, _pBuf); for (int i = 0; i < _pBuf.Count; i++) Deliver(_pBuf[i]); _pBuf.Clear(); }
             if (Wants(ScanTypes.Animators)) { go.GetComponentsInChildren(true, _aBuf); for (int i = 0; i < _aBuf.Count; i++) Deliver(_aBuf[i]); _aBuf.Clear(); }
+            if (Wants(ScanTypes.Skinned)) { go.GetComponentsInChildren(true, _sBuf); for (int i = 0; i < _sBuf.Count; i++) Deliver(_sBuf[i]); _sBuf.Clear(); }
             if (Wants(ScanTypes.Roots))
             {
                 for (int i = 0; i < _roots.Count; i++) DeliverRoot(_roots[i]);
@@ -225,6 +230,14 @@ namespace WildWasteland.Modules.Performance
             if (p != null) { for (int k = 0; k < _clients.Count; k++) if ((_clients[k].Types & ScanTypes.Particles) != 0) Safe(_clients[k], p, ref c); return; }
             var a = comp as Animator;
             if (a != null) { for (int k = 0; k < _clients.Count; k++) if ((_clients[k].Types & ScanTypes.Animators) != 0) Safe(_clients[k], a, ref c); }
+            var s = comp as SkinnedMeshRenderer;
+            if (s != null)
+                for (int k = 0; k < _clients.Count; k++)
+                {
+                    var client = _clients[k] as ISkinnedScanClient;
+                    if (client != null && (_clients[k].Types & ScanTypes.Skinned) != 0)
+                        try { client.OnSkinned(s, ref c); } catch (Exception e) { Log.Error("[Performance] scan skin", e); }
+                }
         }
 
         static void Safe(IScanClient cl, Light x, ref ScanCtx c) { try { cl.OnLight(x, ref c); } catch (Exception e) { Log.Error("[Performance] scan light", e); } }

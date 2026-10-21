@@ -93,7 +93,8 @@ namespace WildWasteland.Modules.Towns
             _settings.LootMinPercent.SettingChanged += PopulationChanged; _settings.LootMaxPercent.SettingChanged += PopulationChanged;
             TerrainTile.OnBeforeTilePrepare += Prepare;
             TerrainTile.OnTileFinalized += Finalized; TerrainTile.OnTileApplied += Applied; TerrainTile.OnTileMoved += Moved;
-            if (VistasWorldGen.Present) Log.Always("[Towns] Vistas natural-terrain mode: no terrain writes, pad grading or access roads; buildings follow existing ground.");
+            VistasWorldGen.TerrainEdited += TownTerrainEdited;
+            if (VistasWorldGen.Present) Log.Always("[Towns] Vistas compatibility: planned town foundations flattened before buildings; no access roads.");
             Scheduler.Sliced(this, "Build and connect", 700, BuildStep);
             // Behind a loading/generating screen this tick runs construction far beyond the shared frame budget; the predicate is one field read.
             Scheduler.EveryFrame(this, "Load construction", LoadBurst).Wants = LoadWanted;
@@ -259,24 +260,27 @@ namespace WildWasteland.Modules.Towns
         { return "v1/" + seed.ToString(CultureInfo.InvariantCulture) + "/" + x.ToString(CultureInfo.InvariantCulture) + "/" + z.ToString(CultureInfo.InvariantCulture); }
         private static TownSite NewSite(TownPlan plan, Transform anchor, Terrain terrain, BuildingSpec[] specs)
         {
-            var site = new TownSite { Plan = plan, Anchor = anchor, GroundTerrain = VistasWorldGen.Present ? terrain : null, Buildings = new GameObject[plan.LotCount], Spawners = new PlayMakerFSM[plan.LotCount][] };
+            var site = new TownSite { Plan = plan, Anchor = anchor, GroundTerrain = null, Buildings = new GameObject[plan.LotCount], Spawners = new PlayMakerFSM[plan.LotCount][] };
             if (VistasWorldGen.Present)
             {
-                site.Plan = plan = plan.CopyPaths(); plan.Overlay = null; plan.DressingOnly = null; plan.AccessPath = new Vector3[0]; plan.GradeAccess = false; plan.Feather = 0; plan.MaximumEarthwork = 0;
+                if (terrain == null) throw new InvalidOperationException("Town foundation terrain is missing.");
+                site.Plan = plan = plan.CopyPaths(); plan.Overlay = null; plan.DressingOnly = null; plan.AccessPath = new Vector3[0]; plan.GradeAccess = false;
+                var center = site.Scene(Vector3.zero); center.y = terrain.SampleHeight(center) + terrain.transform.position.y;
+                plan.WorldCenter = anchor.InverseTransformPoint(center);
                 foreach (var lot in plan.Lots)
                 {
-                    var entry = site.Scene(TownPlanner.Entrance(lot));
-                    var local = anchor.InverseTransformPoint(site.Ground(entry));
-                    var p = lot.LocalPosition; p.y = local.y - plan.WorldCenter.y - lot.Entry.y; lot.LocalPosition = p;
+                    var p = lot.LocalPosition; p.y = -lot.Entry.y; lot.LocalPosition = p;
                 }
                 TownWalkGraph.Build(plan, specs, null);
-                for (int i = 0; i < plan.StreetNodes.Length; i++)
-                {
-                    var world = anchor.InverseTransformPoint(site.Ground(site.Scene(plan.StreetNodes[i])));
-                    plan.StreetNodes[i] = Quaternion.Euler(0, -plan.Yaw, 0) * (world - plan.WorldCenter);
-                }
+                site.GroundPad = TownGroundPad.Prepare(site, terrain);
             }
+            site.Approach = new TownApproach(plan);
             TownMarkers.Add(site); return site;
+        }
+        private void TownTerrainEdited(TerrainTile tile)
+        {
+            if (!_running || tile == null) return;
+            foreach (var live in _sites) if (live.Tile == tile && live.Site.GroundPad != null) live.Site.GroundPad.Apply();
         }
         private bool Loading { get { return _waitingForTowns || (SaveBus.Busy && !SaveBus.Saving && !SaveSystem.Busy); } }
         private bool LoadWanted() { return _loading; }
@@ -313,6 +317,7 @@ namespace WildWasteland.Modules.Towns
             {
                 var live = _sites[_next++ % _sites.Count]; var site = live.Site;
                 if (live.Finished && !NeedsWalls(live) || live.Tile == null || site.Anchor == null) continue;
+                if (!WorldWork.Try(WorldWork.Towns)) return false;
                 if (site.NextLot < site.Plan.LotCount)
                 {
                     _builtFrame = Time.frameCount; _buildAfter = Time.unscaledTime + spacing;
@@ -576,13 +581,34 @@ namespace WildWasteland.Modules.Towns
             record.Plan.Condition = condition;
             Log.Always("[Towns] condition " + key + " = " + condition + " (persists with next world save)"); return true;
         }
-        internal bool Waypoint(GameObject owner, Vector3 position, Vector3 goal, out Vector3 waypoint)
+        internal bool Waypoint(GameObject owner, Vector3 position, Vector3 goal, out Vector3 waypoint, out bool approach)
         {
-            waypoint = goal;
+            waypoint = goal; approach = false;
             for (int i = 0; i < _sites.Count; i++)
             {
                 var site = _sites[i].Site;
-                if (site.Anchor == null) continue;
+                if (site.Anchor == null || site.Approach == null) continue;
+                var center = site.Anchor.TransformPoint(site.Plan.WorldCenter);
+                float radius = site.Plan.Radius + site.Plan.Feather + 30f;
+                float px = position.x - center.x, pz = position.z - center.z, gx = goal.x - center.x, gz = goal.z - center.z;
+                if (px * px + pz * pz > radius * radius && gx * gx + gz * gz > radius * radius)
+                {
+                    float dx = gx - px, dz = gz - pz, t = Mathf.Clamp01(-(px * dx + pz * dz) / Mathf.Max(.0001f, dx * dx + dz * dz));
+                    float x = px + dx * t, z = pz + dz * t; if (x * x + z * z > radius * radius) continue;
+                }
+                var local = site.Anchor.InverseTransformPoint(position) - site.Plan.WorldCenter;
+                if (!site.Approach.Inside(local))
+                {
+                    var target = site.Anchor.InverseTransformPoint(goal) - site.Plan.WorldCenter;
+                    if (!site.Approach.Inside(target))
+                    {
+                        Vector3 detour; if (site.Walls == null || !site.Approach.Around(owner, local, target, out detour)) continue;
+                        waypoint = site.Ground(site.Anchor.TransformPoint(site.Plan.WorldCenter + detour));
+                        approach = true; return true;
+                    }
+                    waypoint = site.Ground(site.Anchor.TransformPoint(site.Plan.WorldCenter + site.Approach.Entrance(local)));
+                    approach = true; return true;
+                }
                 if (site.Navigation != null && site.Navigation.Ready && site.Navigation.Waypoint(position, goal, out waypoint)) return true;
                 bool hold; Vector3 next;
                 if (site.Walls != null && TownBakeBridge.Root(position) == null && site.Walls.Walkers.Waypoint(site.Anchor.InverseTransformPoint(position) - site.Plan.WorldCenter,
@@ -648,6 +674,7 @@ namespace WildWasteland.Modules.Towns
         {
             if (!_running) return;
             _running = false; _epoch++;
+            InteriorPopulation.ReleaseDeferred();
             LoadingProgress.Remove(this);
             Patrols.WorldTraffic.TownsStopped();
             SaveBus.StateChanged -= StateChanged;
@@ -655,6 +682,7 @@ namespace WildWasteland.Modules.Towns
             _settings.LootMinPercent.SettingChanged -= PopulationChanged; _settings.LootMaxPercent.SettingChanged -= PopulationChanged;
             TerrainTile.OnBeforeTilePrepare -= Prepare; TerrainTile.OnTileFinalized -= Finalized;
             TerrainTile.OnTileApplied -= Applied; TerrainTile.OnTileMoved -= Moved;
+            VistasWorldGen.TerrainEdited -= TownTerrainEdited;
             _resume.Clear();
             foreach (var live in _sites)
             {

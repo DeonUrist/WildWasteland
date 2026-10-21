@@ -1151,6 +1151,7 @@ namespace WildWasteland.Modules.NPC
         {
             Mode was = n.Mode;
             n.Mode = m;
+            if (m != was && m != Mode.Chase && m != Mode.Advance && m != Mode.Cover) PoiNav.StopGuiding(n.Owner);
             if (m != Mode.Cover) n.DogCoverThreat = null;
             if (m == Mode.Cover && was != Mode.Cover) Senses.SetHiding(n.Owner, true);          // the senses: keep the target, take no ghosts
             else if (was == Mode.Cover && m != Mode.Cover) Senses.SetHiding(n.Owner, false);
@@ -1832,7 +1833,7 @@ namespace WildWasteland.Modules.NPC
                 if (n.BoostUntil > 0f && speed > 0f) { if (Time.time < n.BoostUntil) speed *= n.Boost; else n.BoostUntil = 0f; }   // (1.7.0) a nest alarm
                 n.CmdSpeed = Mathf.Max(0f, speed);
                 // (1.1.1) strafing round a small detour: the legs go along the heading while the body faces the target
-                if (poi) { if (!PoiNav.Walk(n.Owner, n.CmdSpeed)) { Vector3 pv = poiDir * speed; pv.y = n.Rb.velocity.y; n.Rb.velocity = pv; } return false; }   // (WW) carried along the POI route
+                if (poi) { if (!PoiNav.Walk(n.Owner, n.CmdSpeed, poiDir)) { Vector3 pv = poiDir * speed; pv.y = n.Rb.velocity.y; n.Rb.velocity = pv; } return false; }   // (WW) carried along the POI route
                 Vector3 fwd = poi ? poiDir : n.StrafeDev != 0f && n.HasHeading ? Quaternion.Euler(0f, n.Heading, 0f) * Vector3.forward : n.T.forward;
                 Vector3 v = fwd * speed;
                 v.y = n.Rb.velocity.y;

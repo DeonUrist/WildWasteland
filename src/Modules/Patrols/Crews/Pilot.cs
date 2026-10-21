@@ -166,6 +166,13 @@ namespace WildWasteland.Modules.Patrols
                 tpos = routeGoal;
                 if (_travelling || _traffic.Detection == "last known") { tvel = Vector3.zero; tcar = null; }
             }
+            Vector3 poiGoal = Vector3.zero; bool poiStop = false; float poiCruise = 0f;
+            bool poiParking = _crew != null && _crew.PoiGoal(out poiGoal, out poiStop, out poiCruise);
+            if (poiParking)
+            {
+                _hasTarget = true; _travelling = true; traffic = true; tpos = routeGoal = poiGoal;
+                tvel = Vector3.zero; tcar = null; cruise = poiCruise; stop = poiStop;
+            }
             _ramsTarget = tcar != null ? _rams >= RamTargets.Cars : _rams >= RamTargets.Pedestrians;
             if (_travelling || (traffic && _traffic.Detection == "last known")) _ramsTarget = false;
             Vector3 fwd = Flat(_tf.forward);
@@ -226,7 +233,7 @@ namespace WildWasteland.Modules.Patrols
             if (_travelling)
             {
                 if (_state != PilotState.Recover && _state != PilotState.Wait && _state != PilotState.Travel) Enter(PilotState.Travel, "destination route");
-                if (_state == PilotState.Travel) { StepTravel(routeGoal, cruise, stop, speed, forwardSpeed, dt); return; }
+                if (_state == PilotState.Travel) { StepTravel(routeGoal, cruise, stop, speed, forwardSpeed, dt, poiParking); return; }
             }
             else if (_state == PilotState.Travel) Enter(PilotState.Charge, "traffic engagement");
 
@@ -844,13 +851,14 @@ namespace WildWasteland.Modules.Patrols
         private static Vector3 _lastPos, _vel;
         private static float _lastStamp = -1f;
 
-        internal static void Reset() { _player = null; _playerCar = null; _playerCarRb = null; _playerCarDrive = null; _inCar = null; _inCarVar = null; _inCarOwner = null; _nextFind = 0f; _lastStamp = -1f; _targetStamp = -1f; }
+        internal static void Reset() { _player = null; _playerCar = null; _playerCarRb = null; _playerCarDrive = null; _inCar = null; _inCarVar = null; _inCarOwner = null; _nextFind = 0f; _lastStamp = -1f; _targetStamp = -1f; PatrolPoi.Reset(); }
 
         internal static void OriginShift(Vector3 shift)
         {
             _lastPos += shift;
             _targetPos += shift;
             _targetStamp = -1f; // never treat a coordinate jump as on-foot velocity
+            PatrolPoi.Reset();
         }
 
         internal static Transform Player

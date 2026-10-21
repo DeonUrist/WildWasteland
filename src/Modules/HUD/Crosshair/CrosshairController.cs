@@ -18,6 +18,33 @@ namespace WildWasteland.Modules.HUD
         private static Transform _dot, _cross;
         private static Vector3 _dotScale, _crossScale;
         private static Image _image;
+        private static Color _originalColor;
+        private static Transform _weapons;
+        private static PlayMakerFSM[] _weaponFsms;
+        private static float _nextWeapons;
+
+        private static bool NeedsCocking()
+        {
+            if (_weapons == null)
+            {
+                if (Time.unscaledTime < _nextWeapons) return false;
+                _nextWeapons = Time.unscaledTime + 2f;
+                var holder = GameRefs.PlayerCameraHolder;
+                _weapons = holder != null ? holder.transform.Find("PlayerCamera/WeaponsArm/Parent") : null;
+                _weaponFsms = _weapons != null ? _weapons.GetComponentsInChildren<PlayMakerFSM>(true) : null;
+            }
+            if (_weapons == null || _weaponFsms == null) return false;
+            for (int i = 0; i < _weaponFsms.Length; i++)
+            {
+                var fsm = _weaponFsms[i];
+                if (fsm == null || fsm.FsmName != "Attack" || !fsm.gameObject.activeInHierarchy) continue;
+                if (fsm.Fsm.GetState("pump") == null && fsm.Fsm.GetState("bolt action") == null && fsm.Fsm.GetState("hammer") == null) continue;
+                // Native firing tests hammer before pumping / working the bolt; false means the next click cocks it.
+                var hammer = fsm.FsmVariables.FindFsmBool("hammer");
+                if (hammer != null && !hammer.Value) return true;
+            }
+            return false;
+        }
         private static RawImage _raw;
         private static Sprite _originalSprite, _originalOverride, _linesSprite, _dotSprite;
         private static Texture _originalTexture;
@@ -124,6 +151,9 @@ namespace WildWasteland.Modules.HUD
             int mode = HudModule.Crosshair.Value;
             Vector3 wantCross = mode == 0 ? Vector3.zero : mode == 3 ? _crossScale * HudModule.DotScale.Value : _crossScale;
             if (_cross.localScale != wantCross) _cross.localScale = wantCross;
+            Color color = NeedsCocking() ? new Color(224f / 255f, 95f / 255f, 81f / 255f, _originalColor.a) : _originalColor;
+            if (_image != null && _image.color != color) _image.color = color;
+            if (_raw != null && _raw.color != color) _raw.color = color;
             if (_appliedMode == mode) return;
             if (mode >= 2) { LoadAssets(); LoadLines(); }
             if (_image != null)
@@ -154,6 +184,7 @@ namespace WildWasteland.Modules.HUD
             RestoreCross(); _cross = cross; _appliedMode = -1; _unsupportedWarned = false;
             _image = cross != null ? cross.GetComponent<Image>() : null;
             _raw = cross != null ? cross.GetComponent<RawImage>() : null;
+            _originalColor = _image != null ? _image.color : _raw != null ? _raw.color : Color.white;
             if (cross != null) _crossScale = cross.localScale == Vector3.zero ? Vector3.one : cross.localScale;
             if (_image != null) { _originalSprite = _image.sprite; _originalOverride = _image.overrideSprite; _originalAspect = _image.preserveAspect; }
             if (_raw != null) { _originalTexture = _raw.texture; _originalUv = _raw.uvRect; }
@@ -161,6 +192,8 @@ namespace WildWasteland.Modules.HUD
         }
         private static void RestoreCross()
         {
+            if (_image != null) _image.color = _originalColor;
+            if (_raw != null) _raw.color = _originalColor;
             if (_cross != null) _cross.localScale = _crossScale;
             if (_image != null) { _image.sprite = _originalSprite; _image.overrideSprite = _originalOverride; _image.preserveAspect = _originalAspect; }
             if (_raw != null) { _raw.texture = _originalTexture; _raw.uvRect = _originalUv; }
@@ -168,6 +201,7 @@ namespace WildWasteland.Modules.HUD
         /// <summary>Restore the vanilla dot/crosshair and forget the cached UI objects (they belong to the old scene).</summary>
         internal static void OnSceneLoaded()
         {
+            _weapons = null; _weaponFsms = null; _nextWeapons = 0f;
             if (_dot != null) _dot.localScale = _dotScale;
             RestoreCross(); _dot = null; _cross = null; _image = null; _raw = null; _nextLook = 0f; _appliedMode = -1;
             _originalSprite = null; _originalOverride = null; _originalTexture = null;

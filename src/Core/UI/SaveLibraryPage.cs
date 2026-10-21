@@ -206,6 +206,7 @@ namespace WildWasteland.Core.UI
             if (SaveSystem.Autosave == null) { l.Text("The save manager is unavailable."); return; }
             l.Heading("Autosave");
             l.Toggle(SaveSystem.Autosave, "Autosave"); l.Entry(SaveSystem.Interval); l.Entry(SaveSystem.Warning); l.Toggle(SaveSystem.WhileDriving, "Autosave while driving");
+            l.Toggle(SaveSystem.ExitSave, "Exit save");
             l.Entry(SaveSystem.AutoKeep); l.Entry(SaveSystem.BackupKeep); l.Toggle(SaveSystem.Screenshots, "Save screenshots");
             if (l.Button("MANAGE SAVES")) ToolWindow.OpenSaves(SaveSystem.LocalWorld);
             if (l.Button("OPEN BACKUPS FOLDER")) OpenBackups();

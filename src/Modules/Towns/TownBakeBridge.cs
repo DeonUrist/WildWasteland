@@ -49,20 +49,20 @@ namespace WildWasteland.Modules.Towns
         internal static Transform Root(Vector3 position) { return _root == null ? null : _root(position); }
         internal struct Redirect
         {
-            internal bool Active;
+            internal bool Active, Approach;
             internal Vector3 ActualGoal, Waypoint;
         }
         private static void Before(GameObject owner, Vector3 pos, ref Vector3 goal, out Redirect __state)
         {
-            __state = new Redirect(); Vector3 next;
-            if (_owner == null || Services.Npc == null || !_owner.Waypoint(owner, pos, goal, out next)) return;
-            __state.Active = true; __state.ActualGoal = goal; __state.Waypoint = next; goal = next;
+            __state = new Redirect(); Vector3 next; bool approach;
+            if (_owner == null || Services.Npc == null || !_owner.Waypoint(owner, pos, goal, out next, out approach)) return;
+            __state.Active = true; __state.Approach = approach; __state.ActualGoal = goal; __state.Waypoint = next; goal = next;
         }
         private static void After(Vector3 pos, ref Vector3 goal, ref Vector3 next, ref float pathLeft, ref bool __result, Redirect __state)
         {
             if (!__state.Active) return;
             goal = __state.ActualGoal;
-            if (!__result && TownNavigation.Clear(pos, __state.Waypoint))
+            if (!__result && (__state.Approach || TownNavigation.Clear(pos, __state.Waypoint)))
             { next = __state.Waypoint; pathLeft = Vector3.Distance(pos, next); __result = true; }
             if (__result) pathLeft += Vector3.Distance(__state.Waypoint, __state.ActualGoal);
         }

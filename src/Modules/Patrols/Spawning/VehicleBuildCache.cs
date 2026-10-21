@@ -132,6 +132,7 @@ namespace WildWasteland.Modules.Patrols
         private static bool StepCore()
         {
             if (!PatrolsModule.Running) return false;
+            if (!Warming || !Core.WorldWork.Try(Core.WorldWork.Vehicles)) return false;
             if (_warmRequested)
             {
                 if (Core.GameRefs.NewGOArrayList == null) return false;

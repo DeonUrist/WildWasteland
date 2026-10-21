@@ -732,6 +732,7 @@ namespace WildWasteland.Modules.NPC
         {
             if (c.Moving)
             {
+                PoiNav.StopGuiding(c.A.Owner);
                 if (c.Anim != null) { c.Anim.speed = 1f; if (playIdle) c.Anim.Play("idle", 0, 0f); }
                 if (c.Rb != null) { var v = c.Rb.velocity; c.Rb.velocity = new Vector3(0f, v.y, 0f); }
             }
@@ -771,7 +772,8 @@ namespace WildWasteland.Modules.NPC
             float yaw = Mathf.MoveTowardsAngle(t.eulerAngles.y, chosen, Mathf.Max(10f, NpcModule.TurnRate.Value) * dt);
             t.rotation = Quaternion.Euler(0f, yaw, 0f);
             Vector3 v = t.forward * (c.Speed * Brain.TurnSpeedFactor(Mathf.Abs(Mathf.DeltaAngle(yaw, chosen))));   // slows down while turning: no arcs
-            if (PoiNav.Walk(c.A.Owner, c.Speed)) return;                  // (WW) a POI route: carried along it (no body physics), the turn only shown
+            Vector3 poiDir; PoiNav.SteerDir(c.A.Owner, t.position, out poiDir);
+            if (PoiNav.Walk(c.A.Owner, c.Speed, poiDir)) return;          // (WW) a POI route: carried along it (no body physics), the turn only shown
             v.y = c.Rb.velocity.y;
             c.Rb.velocity = v;
         }

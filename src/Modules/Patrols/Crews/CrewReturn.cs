@@ -37,7 +37,7 @@ namespace WildWasteland.Modules.Patrols
             internal Crew Crew;
             internal readonly List<Member> Members = new List<Member>(4);
             internal Member DriverMember;
-            internal bool Boarding, SeatedDriver, Ejected, CombatExit;
+            internal bool Boarding, SeatedDriver, Ejected, CombatExit, PoiExit;
             internal float Created, BoardStart, CalmSince = -1f, LastTick = -1f;   // CalmSince: every member idle since (-1 = not calm)
             internal string TrafficId, Faction, Name;
             internal int TrafficSlot;
@@ -134,6 +134,7 @@ namespace WildWasteland.Modules.Patrols
             var g = new Group { Car = car, Marker = marker, Crew = car.GetComponent<Crew>(), Created = Time.time,
                 TrafficId = marker.TrafficId, TrafficSlot = marker.TrafficSlot, Faction = marker.Faction, Name = NameOf(marker) };
             g.CombatExit=g.Crew.CombatExit||g.Crew.CombatEnemy!=null;
+            g.PoiExit=g.Crew.PoiExit;
             if (Unusable(g) != null) return null;
             Groups.Add(g); g.Crew.Regroup = g;
             return g;
@@ -184,7 +185,7 @@ namespace WildWasteland.Modules.Patrols
             var api = Core.Services.Npc;
             float now = Time.time;
             var enemy=g.Crew.CombatEnemy;
-            bool returnNow=g.CombatExit&&(enemy==null||(enemy.transform.position-g.Car.transform.position).sqrMagnitude>2500f);
+            bool returnNow=g.PoiExit?!g.Crew.PoiEngaged:g.CombatExit&&(enemy==null||(enemy.transform.position-g.Car.transform.position).sqrMagnitude>2500f);
             if(g.CombatExit&&g.Boarding&&!returnNow)
             {
                 g.Boarding=false;g.CalmSince=-1f;g.Crew.Regrouping=true;
@@ -382,7 +383,8 @@ namespace WildWasteland.Modules.Patrols
                 if (m.State == OnFoot || m.State == Walking) Leave(g, m, why);
             }
             bool driver = crew != null && crew.DriverSeatedAlive;
-            if(crew!=null&&g.CombatExit&&finished&&driver)crew.ResumePursuit();
+            if(crew!=null&&g.PoiExit)crew.EndPoi();
+            else if(crew!=null&&g.CombatExit&&finished&&driver)crew.ResumePursuit();
             if (crew != null && (crew.Regrouping || g.SeatedDriver)) crew.FinishReboard(g.SeatedDriver && driver);
             // the self-destruct was skipped while the car was held (Explode.Eligible): an empty car that keeps nobody gets its roll now
             if (crew != null && !driver && g.Car != null && g.Marker != null && !g.Marker.Exploded && !Explode.IsWreck(g.Car)) Explode.Schedule(crew, g.Car, g.Marker, "its crew did not come back");

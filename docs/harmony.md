@@ -227,6 +227,7 @@ Optional Talk fields/calls use Cecil-generated delegates through Core.OptionalAc
 | Weather | Shared Hooks.FsmEnable | WeatherNative.Enabled postfix tracks SandPlayer roots; disables native DisableSandstorm deletion FSM while replacement owns encounters, restores its original enabled state on shutdown | Enable plus 500 us sliced existing-FSM discovery; name filter before native identity lookup |
 | Weather | Shared Hooks.ProcessEvent | WeatherNative.EventBefore observes SaveGame and restores borrowed native component state before native serialization; event always continues; OnSaveEnd suppresses again | Event name filter; no ES3 target patched, no new save key/component |
 | Weather | Shared Hooks.SetVelocityDo | WeatherNative.VelocityBefore prevents native motion for owned manual previews and stops natural anchors during diagnostic freeze/non-gameplay; original natural movement otherwise runs | Move name then cached root ID; unrelated SetVelocity calls unchanged |
+| Weather | Shared Hooks.CreateObjectEnter | WeatherNative.Created postfix places newly spawned natural storms beyond the player before presentation; waits for native movement heading before reveal | ItemSpawner + EnemySpawn_Sandstorm name, then native prefab identity; saved storms and manual previews unchanged |
 
 ## VistasWorldGen 1.0.7 (Core-owned optional private targets, 2026-10-18, Testing)
 

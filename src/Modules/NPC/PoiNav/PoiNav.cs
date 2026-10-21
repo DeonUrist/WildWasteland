@@ -38,28 +38,61 @@ namespace WildWasteland.Modules.NPC
             internal readonly PoiNavData Data;
             internal readonly List<Arc>[] Out;
             internal readonly int[] LinkFrom, LinkTo;
+            internal readonly Dictionary<long, List<int>> Buckets = new Dictionary<long, List<int>>();
+            private int _node, _edge, _link;
+            internal bool Ready;
             internal Graph(PoiNavData d)
             {
                 Data = d; int n = d.Nodes.Count;
-                Out = new List<Arc>[n]; for (int i = 0; i < n; i++) Out[i] = new List<Arc>(6);
-                for (int i = 0; i + 1 < d.Edges.Count; i += 2)
+                Out = new List<Arc>[n]; LinkFrom = new int[d.Links.Count]; LinkTo = new int[d.Links.Count];
+            }
+            internal void Step()
+            {
+                var d = Data;
+                if (_node < d.Nodes.Count)
                 {
-                    int a = d.Edges[i], b = d.Edges[i + 1]; float c = Vector3.Distance(d.Nodes[a].Pos, d.Nodes[b].Pos);
-                    Out[a].Add(new Arc { To = b, Cost = c, Link = -1 }); Out[b].Add(new Arc { To = a, Cost = c, Link = -1 });
+                    int i = _node++;
+                    var p = d.Nodes[i].Pos; long key = Bucket(Mathf.FloorToInt(p.x / 2f), Mathf.FloorToInt(p.z / 2f));
+                    List<int> nodes; if (!Buckets.TryGetValue(key, out nodes)) Buckets[key] = nodes = new List<int>();
+                    nodes.Add(i); Out[i] = new List<Arc>(6); return;
                 }
-                LinkFrom = new int[d.Links.Count]; LinkTo = new int[d.Links.Count];
-                for (int i = 0; i < d.Links.Count; i++)
+                if (_edge + 1 < d.Edges.Count)
                 {
+                    int i = _edge; _edge += 2;
+                    int a = d.Edges[i], b = d.Edges[i + 1]; float c = Vector3.Distance(d.Nodes[a].Pos, d.Nodes[b].Pos);
+                    Out[a].Add(new Arc { To = b, Cost = c, Link = -1 }); Out[b].Add(new Arc { To = a, Cost = c, Link = -1 }); return;
+                }
+                if (_link < d.Links.Count)
+                {
+                    int i = _link++;
                     var l = d.Links[i];
-                    int a = NearestNode(d, l.From, 2.5f, l.FromSurface), b = NearestNode(d, l.To, 2.5f, l.ToSurface);
+                    int a = Nearest(l.From, l.FromSurface), b = Nearest(l.To, l.ToSurface);
                     LinkFrom[i] = a; LinkTo[i] = b;
-                    if (l.Off || a < 0 || b < 0 || a == b) continue;
+                    if (l.Off || a < 0 || b < 0 || a == b) return;
                     float extra = l.Kind == PoiLinkKind.Ladder ? Mathf.Abs(l.LineTop.y - l.LineBottom.y) * 2f + 3f : l.Kind == PoiLinkKind.Climb ? 8f : 4f;   // walking round is preferred over hopping onto things
                     Out[a].Add(new Arc { To = b, Cost = Vector3.Distance(d.Nodes[a].Pos, l.From) + extra + Vector3.Distance(l.To, d.Nodes[b].Pos), Link = i * 2 });
                     // ladders work both ways (climbs come with their own drop link)
                     if (l.Kind == PoiLinkKind.Ladder)
                         Out[b].Add(new Arc { To = a, Cost = Vector3.Distance(d.Nodes[b].Pos, l.To) + extra + Vector3.Distance(l.From, d.Nodes[a].Pos), Link = i * 2 + 1 });
+                    return;
                 }
+                Ready = true;
+            }
+            private int Nearest(Vector3 p, int surface)
+            {
+                int best = -1; float distance = 6.25f;
+                for (int x = Mathf.FloorToInt((p.x - 2.5f) / 2f); x <= Mathf.FloorToInt((p.x + 2.5f) / 2f); x++)
+                for (int z = Mathf.FloorToInt((p.z - 2.5f) / 2f); z <= Mathf.FloorToInt((p.z + 2.5f) / 2f); z++)
+                {
+                    List<int> nodes; if (!Buckets.TryGetValue(Bucket(x, z), out nodes)) continue;
+                    foreach (int i in nodes)
+                    {
+                        if (surface >= 0 && Data.Nodes[i].Surface != surface) continue;
+                        Vector3 v = Data.Nodes[i].Pos - p; v.y *= 2f; float s = v.sqrMagnitude;
+                        if (s < distance || s == distance && best >= 0 && i < best) { distance = s; best = i; }
+                    }
+                }
+                return best;
             }
         }
         internal static int NearestNode(PoiNavData d, Vector3 local, float within, int surface)
@@ -85,11 +118,14 @@ namespace WildWasteland.Modules.NPC
         {
             internal Transform Root; internal string Poi; internal PoiNavData Data; internal Graph G;
             internal Vector3[] World; internal Bounds Box; internal Vector3 RootPos; internal int Id;
+            internal int BuildIndex; internal bool Ready, Queued;
             internal Vector3 W(Vector3 local) { return Root.TransformPoint(local); }
         }
         private static readonly Dictionary<int, Inst> _inst = new Dictionary<int, Inst>();
         private static readonly List<Transform> _roots = new List<Transform>();
         private static readonly List<int> _dead = new List<int>();
+        private static readonly Queue<Inst> _builds = new Queue<Inst>();
+        private static int _buildFrame = -1, _buildNodes, _buildRays;
         private static float _nextScan;
         internal static Dictionary<int, Inst>.ValueCollection Instances { get { return _inst.Values; } }
 
@@ -103,16 +139,18 @@ namespace WildWasteland.Modules.NPC
             _dead.Clear();
             foreach (var kv in _inst) if (kv.Value.Root == null || !kv.Value.Root.gameObject.activeInHierarchy) _dead.Add(kv.Key);
             foreach (int k in _dead) _inst.Remove(k);
+            _dead.Clear(); foreach (var kv in _routes) if (kv.Value.Owner == null) _dead.Add(kv.Key);
+            foreach (int k in _dead) _routes.Remove(k);
             foreach (var r in _roots)
             {
                 if (r == null || !r.gameObject.activeInHierarchy) continue;
                 int id = r.GetInstanceID(); string poi = PoiNavStore.TypeOf(r.name);
-                var data = PoiNavStore.Get(poi);
+                var data = PoiNavStore.GetAsync(poi);
                 Inst inst;
                 if (_inst.TryGetValue(id, out inst))
                 {
                     if (data == null) { _inst.Remove(id); continue; }
-                    if (inst.Data != data || (inst.RootPos - r.position).sqrMagnitude > .01f) Build(inst, data);
+                    if (inst.Data != data || (inst.RootPos - r.position).sqrMagnitude > .01f || !inst.Ready && !inst.Queued) Build(inst, data);
                     continue;
                 }
                 if (data == null) continue;
@@ -124,19 +162,9 @@ namespace WildWasteland.Modules.NPC
 
         internal static void Build(Inst inst, PoiNavData data)
         {
+            inst.Ready = false; inst.BuildIndex = 0;
             inst.Data = data; inst.G = GraphOf(data); inst.RootPos = inst.Root.position;
-            var w = new Vector3[data.Nodes.Count];
-            for (int i = 0; i < w.Length; i++)
-            {
-                var n = data.Nodes[i]; w[i] = inst.Root.TransformPoint(n.Pos);
-                if (n.Terrain)
-                {
-                    // ground nodes follow this instance's real terrain
-                    RaycastHit h;
-                    if (Physics.Raycast(w[i] + Vector3.up * 3f, Vector3.down, out h, 7f, 1 << 14, QueryTriggerInteraction.Ignore)) w[i].y = h.point.y;
-                }
-            }
-            inst.World = w;
+            inst.World = new Vector3[data.Nodes.Count];
             var b = data.Box; bool first = true; Bounds wb = new Bounds();
             for (int k = 0; k < 8; k++)
             {
@@ -144,6 +172,31 @@ namespace WildWasteland.Modules.NPC
                 if (first) { wb = new Bounds(c, Vector3.zero); first = false; } else wb.Encapsulate(c);
             }
             inst.Box = wb;
+            if (!inst.Queued) { inst.Queued = true; _builds.Enqueue(inst); }
+        }
+
+        // One node per scheduler step; the ray allowance is shared by every POI in the frame.
+        internal static bool BuildStep()
+        {
+            if (_builds.Count == 0 || Enabled == null || !Enabled.Value) return false;
+            if (_buildFrame != Time.frameCount) { _buildFrame = Time.frameCount; _buildNodes = _buildRays = 0; }
+            if (_buildNodes >= 256 || _buildRays >= 64) return false;
+            var inst = _builds.Peek(); Inst live;
+            if (inst.Root == null || !inst.Root.gameObject.activeInHierarchy || !_inst.TryGetValue(inst.Id, out live) || live != inst)
+            { _builds.Dequeue(); inst.Queued = false; return _builds.Count > 0; }
+            if (!inst.G.Ready) { inst.G.Step(); _buildNodes++; return true; }
+            if (inst.BuildIndex < inst.World.Length)
+            {
+                int k = inst.BuildIndex++; _buildNodes++;
+                inst.World[k] = inst.Root.TransformPoint(inst.Data.Nodes[k].Pos);
+                if (inst.Data.Nodes[k].Terrain)
+                {
+                    RaycastHit h; _buildRays++;
+                    if (Physics.Raycast(inst.World[k] + Vector3.up * 3f, Vector3.down, out h, 7f, 1 << 14, QueryTriggerInteraction.Ignore)) inst.World[k].y = h.point.y;
+                }
+            }
+            if (inst.BuildIndex >= inst.World.Length) { inst.Ready = true; inst.Queued = false; _builds.Dequeue(); }
+            return _builds.Count > 0;
         }
 
         // (WW) ladders are learned from the developer: the side the player climbs a POI ladder on (developer mode) becomes the side
@@ -187,11 +240,9 @@ namespace WildWasteland.Modules.NPC
         internal static bool SteerDir(GameObject owner, Vector3 pos, out Vector3 dir)
         {
             dir = Vector3.zero;
-            if (owner == null || PoiNavTraverse.Busy(owner)) return false;
-            Route r; if (!_routes.TryGetValue(owner.GetInstanceID(), out r) || Time.time - r.Guided > .75f) return false;
-            Vector3 next; float left; bool res;
-            if (!TryNext(owner, pos, r.Goal, out next, out left, out res) || !res) return false;
-            Vector3 d = next - pos; d.y = 0f;
+            if (owner == null || Enabled == null || !Enabled.Value || PoiNavTraverse.Busy(owner)) return false;
+            Route r; if (!_routes.TryGetValue(owner.GetInstanceID(), out r) || !r.HasNext || !r.Inst.Ready || r.Inst.Root == null || !r.Inst.Root.gameObject.activeInHierarchy) return false;
+            Vector3 d = r.Next - pos; d.y = 0f;
             if (d.sqrMagnitude > .0025f) dir = d.normalized;
             return true;
         }
@@ -206,15 +257,16 @@ namespace WildWasteland.Modules.NPC
         }
         private static readonly Dictionary<int, Walker> _walkers = new Dictionary<int, Walker>();
         private static readonly List<int> _walkDone = new List<int>();
+        private static readonly RaycastHit[] _walkHits = new RaycastHit[64];
 
         /// <summary>Moves the NPC one frame along its POI route at `speed` (m/s). False = not on a route: drive it as usual.</summary>
-        internal static bool Walk(GameObject owner, float speed)
+        internal static bool Walk(GameObject owner, float speed, Vector3 dir)
         {
             if (owner == null) return false;
             if (PoiNavTraverse.Busy(owner)) return true;                 // a ladder / climb has the body
             int id = owner.GetInstanceID();
-            Vector3 pos = owner.transform.position, dir;
-            if (!SteerDir(owner, pos, out dir)) { Release(id); return false; }
+            Vector3 pos = owner.transform.position;
+            Route route; if (Enabled == null || !Enabled.Value || !_routes.TryGetValue(id, out route) || !route.HasNext || !route.Inst.Ready || route.Inst.Root == null || !route.Inst.Root.gameObject.activeInHierarchy) { Release(id); return false; }
             Walker w;
             if (!_walkers.TryGetValue(id, out w))
             {
@@ -231,11 +283,13 @@ namespace WildWasteland.Modules.NPC
             if (w.Reignore) { w.Reignore = false; foreach (var pc in w.Player) if (pc != null) foreach (var c in w.Mine) if (c != null) Physics.IgnoreCollision(c, pc, true); }   // the traversal gave them back
             if (dir == Vector3.zero || speed <= 0f) return true;
             float dt = Time.deltaTime;
-            Vector3 p = pos + dir * speed * dt;
+            Vector3 to = route.Next - pos; to.y = 0f;
+            Vector3 p = pos + dir * Mathf.Min(speed * dt, to.magnitude);
             // the floor under the new spot: the highest surface from half a step above the feet down to 1.5 m below them
             float feet = pos.y - w.FeetOff, best = float.MinValue;
-            var hits = Physics.RaycastAll(new Vector3(p.x, feet + .55f, p.z), Vector3.down, 2.05f, PoiNavBake.Mask, QueryTriggerInteraction.Ignore);
-            foreach (var h in hits) { if (h.collider == null || w.Mine.Contains(h.collider) || h.normal.y < .5f) continue; if (h.point.y > best) best = h.point.y; }
+            int count = Physics.RaycastNonAlloc(new Vector3(p.x, feet + .55f, p.z), Vector3.down, _walkHits, 2.05f, PoiNavBake.Mask, QueryTriggerInteraction.Ignore);
+            if (count == _walkHits.Length) { Release(id); return false; }   // truncated, unordered hits: let normal movement handle it
+            for (int k = 0; k < count; k++) { var h = _walkHits[k]; if (h.collider == null || h.collider.attachedRigidbody == w.Rb || h.normal.y < .5f) continue; if (h.point.y > best) best = h.point.y; }
             if (best == float.MinValue) { Release(id); return false; }   // no floor: let it fall
             p.y = Mathf.MoveTowards(pos.y, best + w.FeetOff, Mathf.Max(1.5f, speed * 1.5f) * dt * 4f);
             w.Rb.MovePosition(p);
@@ -271,29 +325,64 @@ namespace WildWasteland.Modules.NPC
         {
             if (owner == null) return false;
             if (PoiNavTraverse.Busy(owner)) return true;
-            Route r; return _routes.TryGetValue(owner.GetInstanceID(), out r) && Time.time - r.Guided < .75f;
+            Route r; return Enabled != null && Enabled.Value && _routes.TryGetValue(owner.GetInstanceID(), out r) && r.HasNext && r.Inst.Ready && r.Inst.Root != null && r.Inst.Root.gameObject.activeInHierarchy;
         }
-        internal static void DropRoute(GameObject owner) { if (owner != null) _routes.Remove(owner.GetInstanceID()); }
-        internal static bool Inside(Vector3 p) { return Enabled != null && Enabled.Value && _inst.Count > 0 && At(p) != null; }
+        internal static void StopGuiding(GameObject owner)
+        {
+            Route r; if (owner == null) return; int id = owner.GetInstanceID();
+            if (_routes.TryGetValue(id, out r)) r.HasNext = false;
+            if (!PoiNavTraverse.Busy(owner)) Release(id);
+        }
+        internal static void DropRoute(GameObject owner)
+        {
+            Route r; if (owner == null || !_routes.TryGetValue(owner.GetInstanceID(), out r)) return;
+            r.Steps.Clear(); r.Index = 0; r.HasNext = false; r.Pending = true; r.DirectSurface = -1;
+        }
+        internal static bool Inside(Vector3 p) { return Enabled != null && Enabled.Value && _inst.Count > 0 && At(p, false) != null; }
 
-        static Inst At(Vector3 p)
+        static Inst At(Vector3 p, bool readyOnly = true)
         {
             Inst best = null; float bd = float.MaxValue;
             foreach (var i in _inst.Values)
             {
-                if (i.Root == null || !i.Box.Contains(p)) continue;
+                if (i.Root == null || readyOnly && !i.Ready || !i.Box.Contains(p)) continue;
                 float d = (i.Box.center - p).sqrMagnitude; if (d < bd) { bd = d; best = i; }
             }
             return best;
         }
 
         // the node under these feet: within 4 m flat, from 1.2 m below to 0.6 m above them; level and in plain sight first
+        static long Bucket(int x, int z) { return ((long)x << 32) | (long)(uint)z; }
+        private static readonly List<int> _nearNodes = new List<int>();
+        // World terrain projection changes Y only. Tilted roots retain the exact full-search fallback.
+        static bool Planar(Inst inst) { Vector3 up = inst.Root.up; return Mathf.Abs(up.x) < .000001f && Mathf.Abs(up.z) < .000001f && up.y > 0f; }
+        static void Nearby(Inst inst, Vector3 p, float radius)
+        {
+            _nearNodes.Clear();
+            if (!Planar(inst)) { for (int i = 0; i < inst.World.Length; i++) _nearNodes.Add(i); return; }
+            Vector3 local = inst.Root.InverseTransformPoint(p), scale = inst.Root.lossyScale;
+            float rx = radius / Mathf.Max(.0001f, Mathf.Abs(scale.x)), rz = radius / Mathf.Max(.0001f, Mathf.Abs(scale.z));
+            int x0 = Mathf.FloorToInt((local.x - rx) / 2f), x1 = Mathf.FloorToInt((local.x + rx) / 2f);
+            int z0 = Mathf.FloorToInt((local.z - rz) / 2f), z1 = Mathf.FloorToInt((local.z + rz) / 2f);
+            if (((long)x1 - x0 + 1) * ((long)z1 - z0 + 1) > inst.G.Buckets.Count)
+            {
+                foreach (var kv in inst.G.Buckets)
+                {
+                    int x = (int)(kv.Key >> 32), z = unchecked((int)kv.Key);
+                    if (x >= x0 && x <= x1 && z >= z0 && z <= z1) _nearNodes.AddRange(kv.Value);
+                }
+            }
+            else for (int x = x0; x <= x1; x++) for (int z = z0; z <= z1; z++)
+            { List<int> nodes; if (inst.G.Buckets.TryGetValue(Bucket(x, z), out nodes)) _nearNodes.AddRange(nodes); }
+            _nearNodes.Sort();   // preserve node order, including the existing line-of-sight preference
+        }
         static int NearestStart(Inst inst, Vector3 feet)
         {
             int best = -1; float bd = float.MaxValue;
             var w = inst.World;
+            Nearby(inst, feet, 4f);
             for (int pass = 0; pass < 2 && best < 0; pass++)
-                for (int i = 0; i < w.Length; i++)
+                foreach (int i in _nearNodes)
                 {
                     float dy = w[i].y - feet.y; if (dy > .6f || dy < -1.2f) continue;
                     float fx = w[i].x - feet.x, fz = w[i].z - feet.z, flat = fx * fx + fz * fz; if (flat > 16f) continue;
@@ -308,7 +397,25 @@ namespace WildWasteland.Modules.NPC
         {
             int best = -1; float bd = within * within;
             var w = inst.World;
-            for (int i = 0; i < w.Length; i++)
+            if (groundOnly && Planar(inst))
+            {
+                Vector3 local = inst.Root.InverseTransformPoint(p), scale = inst.Root.lossyScale;
+                foreach (var kv in inst.G.Buckets)
+                {
+                    float x = (int)(kv.Key >> 32) * 2f, z = unchecked((int)kv.Key) * 2f;
+                    float dx = (local.x - Mathf.Clamp(local.x, x, x + 2f)) * scale.x, dz = (local.z - Mathf.Clamp(local.z, z, z + 2f)) * scale.z;
+                    if (dx * dx + dz * dz > bd) continue;
+                    foreach (int i in kv.Value)
+                    {
+                        if (!inst.Data.Nodes[i].Terrain) continue;
+                        Vector3 v = w[i] - p; v.y = 0f; float s = v.sqrMagnitude;
+                        if (s < bd || (s == bd && best >= 0 && i < best)) { bd = s; best = i; }
+                    }
+                }
+                return best;
+            }
+            Nearby(inst, p, within);
+            foreach (int i in _nearNodes)
             {
                 if (groundOnly && !inst.Data.Nodes[i].Terrain) continue;
                 Vector3 v = w[i] - p; v.y *= groundOnly ? 0f : 2.5f;
@@ -385,13 +492,17 @@ namespace WildWasteland.Modules.NPC
         // ------------------------------------------------------------------ per NPC routes
         sealed class Route
         {
+            public GameObject Owner;
             public Inst Inst; public readonly List<int> Steps = new List<int>(); public int Index;
-            public Vector3 Goal; public float Planned; public bool GoalInside;
+            public Vector3 Goal; public float Planned = -9f; public bool GoalInside, Pending; public int GoalNode = -1; public Graph Graph;
+            public Vector3 Next; public bool HasNext; public readonly List<float> Suffix = new List<float>();
+            public int DirectSurface = -1;
             public float Guided = -9f, LastCall = -9f, WatchSince; public Vector3 WatchPos;   // the stuck watchdog
             public Vector3 GlideAt; public float GlideTime = -9f; public int Glides;
             public float FeetOff = float.NaN;                                                     // pivot height above the feet
         }
         private static readonly Dictionary<int, Route> _routes = new Dictionary<int, Route>();
+        private static int _planFrame = -1, _plansNow;
 
         static bool Human(GameObject owner)
         {
@@ -405,48 +516,77 @@ namespace WildWasteland.Modules.NPC
             next = goal; pathLeft = 0f; result = false;
             if (owner == null || Enabled == null || !Enabled.Value) return false;
             int id = owner.GetInstanceID();
+            Route r; _routes.TryGetValue(id, out r); if (r != null) r.HasNext = false;
             if (PoiNavTraverse.Busy(owner)) { next = pos; result = true; return true; }
             if (!Human(owner)) return false;
             Rescan();
             if (_inst.Count == 0) return false;
-            Route r; _routes.TryGetValue(id, out r);
             var inst = At(pos) ?? At(goal);
-            if (inst == null) { if (r != null) _routes.Remove(id); return false; }
+            if (inst == null) { DropRoute(owner); return false; }
             float now = Time.time;
-            bool replan = r == null || r.Inst != inst || (r.Goal - goal).sqrMagnitude > 2.25f || now - r.Planned > 4f || r.Index >= r.Steps.Count;
-            if (!replan)
+            if (r == null) { r = new Route { Owner = owner }; _routes[id] = r; }
+            bool usable = r.Inst == inst && r.Graph == inst.G && r.Index < r.Steps.Count;
+            bool replan = !usable;
+            int end = r.GoalNode; bool goalInside = r.GoalInside;
+            if (now - r.Planned >= .5f)
             {
-                int s = r.Steps[r.Index];
-                Vector3 tp = s >= 0 ? inst.World[s] : StartOf(inst, s);
-                if ((tp - pos).sqrMagnitude > 36f) replan = true;
-            }
-            if (replan)
-            {
-                if (r == null) { r = new Route(); _routes[id] = r; }
-                if (float.IsNaN(r.FeetOff)) { var rb = owner.GetComponent<Rigidbody>(); r.FeetOff = rb != null ? PoiNavTraverse.FeetOffset(owner, rb) : 0f; }
-                r.Inst = inst; r.Goal = goal; r.Planned = now; r.Index = 0;
-                // (WW) the node it STANDS on: its own level (never a roof or ledge above its head, which made it snap up onto a car
-                // and take that car's drop back down, over and over), preferring one in plain sight
-                int start = NearestStart(inst, pos - Vector3.up * r.FeetOff);
-                if (start < 0) start = NearestWorld(inst, pos, 4f, false);
-                if (start < 0) { r.Steps.Clear(); return false; }
-                r.GoalInside = inst.Box.Contains(goal);
-                int end = r.GoalInside ? NearestWorld(inst, goal, 4f, false) : -1;
-                if (end < 0) end = NearestWorld(inst, goal, 1000f, true);    // leaving: the ground node nearest the goal
-                // the player is on a ladder here: melee NPCs go for the far end of it (so they climb it after him and wait short of
-                // him), ranged ones for the end on their side (the foot or the top) and shoot from there
+                goalInside = inst.Box.Contains(goal);
+                end = goalInside ? NearestWorld(inst, goal, 4f, false) : -1;
+                if (end < 0) end = NearestWorld(inst, goal, 1000f, true);
+                // Preserve melee/ranged destinations while the player is on a ladder.
                 int lad = PlayerLadderLink(inst, goal);
                 if (lad >= 0 && inst.G.LinkFrom[lad] >= 0 && inst.G.LinkTo[lad] >= 0)
                 {
                     int lf = inst.G.LinkFrom[lad], lt = inst.G.LinkTo[lad];
                     if (Brain.IsRanged(owner)) end = Mathf.Abs(pos.y - inst.World[lf].y) <= Mathf.Abs(pos.y - inst.World[lt].y) ? lf : lt;
                     else end = pos.y < goal.y ? lt : lf;
-                    r.GoalInside = true;
+                    goalInside = true;
                 }
-                if (end < 0 || !Path(inst, start, end, r.Steps)) { r.Steps.Clear(); return false; }
+                replan |= end != r.GoalNode;
+                if (usable)
+                {
+                    int s = r.Steps[r.Index]; Vector3 tp = s >= 0 ? inst.World[s] : StartOf(inst, s);
+                    if ((tp - pos).sqrMagnitude > 36f) { replan = true; usable = false; }
+                }
+            }
+            if (_planFrame != Time.frameCount) { _planFrame = Time.frameCount; _plansNow = 0; }
+            if (r.DirectSurface >= 0 && r.Inst == inst && r.Graph == inst.G && end == r.GoalNode && Services.PlayerLadder == null)
+            {
+                var feet = pos - Vector3.up * r.FeetOff; int near = NearestWorld(inst, feet, 4f, false);
+                if (near >= 0 && inst.Data.Nodes[near].Surface == r.DirectSurface && Mathf.Abs(inst.World[near].y - feet.y) < .8f && Clear(pos, goal)) return false;
+                r.DirectSurface = -1;
+            }
+            if (replan && (now - r.Planned < .5f || _plansNow >= 2))
+            {
+                if (!usable)
+                {
+                    if (!r.Pending && r.Inst == inst && r.Graph == inst.G && r.Steps.Count == 0 && now - r.Planned < .5f) return false;
+                    r.Inst = inst; r.Graph = inst.G; r.Steps.Clear(); r.Index = 0; r.Pending = true;
+                    r.Next = next = pos; r.HasNext = true; r.Guided = now; pathLeft = Vector3.Distance(pos, goal); result = true; return true;
+                }
+                replan = false;   // follow the old route until a search slot is available
+            }
+            if (replan)
+            {
+                if (float.IsNaN(r.FeetOff)) { var rb = owner.GetComponent<Rigidbody>(); r.FeetOff = rb != null ? PoiNavTraverse.FeetOffset(owner, rb) : 0f; }
+                r.Inst = inst; r.Graph = inst.G; r.Goal = goal; r.GoalNode = end; r.GoalInside = goalInside; r.Planned = now; r.Index = 0; r.Pending = false; r.DirectSurface = -1;
+                // (WW) the node it STANDS on: its own level (never a roof or ledge above its head, which made it snap up onto a car
+                // and take that car's drop back down, over and over), preferring one in plain sight
+                int start = NearestStart(inst, pos - Vector3.up * r.FeetOff);
+                if (start < 0) start = NearestWorld(inst, pos, 4f, false);
+                if (start < 0) { r.Steps.Clear(); return false; }
+                if (end < 0) { r.Steps.Clear(); return false; }
+                _plansNow++;
+                if (!Path(inst, start, end, r.Steps)) { r.Steps.Clear(); return false; }
                 // no traversal on the way and the goal in plain sight: the feelers do this best
                 bool links = false; foreach (int s in r.Steps) if (s < 0) { links = true; break; }
-                if (!links && inst.Data.Nodes[start].Surface == inst.Data.Nodes[end].Surface && Clear(pos, goal)) { r.Steps.Clear(); return false; }
+                if (!links && inst.Data.Nodes[start].Surface == inst.Data.Nodes[end].Surface && Clear(pos, goal)) { r.DirectSurface = inst.Data.Nodes[start].Surface; r.Steps.Clear(); return false; }
+                r.Suffix.Clear(); for (int k = 0; k < r.Steps.Count; k++) r.Suffix.Add(0f);
+                for (int k = r.Steps.Count - 2; k >= 0; k--)
+                {
+                    int a = r.Steps[k], b = r.Steps[k + 1];
+                    r.Suffix[k] = r.Suffix[k + 1] + Vector3.Distance(a >= 0 ? inst.World[a] : EndOf(inst, a), b >= 0 ? inst.World[b] : EndOf(inst, b));
+                }
                 for (int k = 1; k < r.Steps.Count && k <= 5; k++)
                 {
                     int s2 = r.Steps[k]; if (s2 < 0 || inst.Data.Nodes[s2].Surface != inst.Data.Nodes[start].Surface || !Clear(pos, inst.World[s2])) break;
@@ -480,20 +620,23 @@ namespace WildWasteland.Modules.NPC
                 {
                     if (PoiNavTraverse.Begin(owner, inst, (-s - 1) >> 1, ((-s - 1) & 1) == 1)) { r.Index++; next = pos; result = true; return true; }
                     r.Guided = now; r.WatchPos = pos; r.WatchSince = now;      // the ladder is taken: wait here (waiting is not being stuck)
+                    r.Next = pos; r.HasNext = true;
                     next = pos; result = true; return true;
                 }
                 next = from;
                 break;
             }
-            if (r.Index >= r.Steps.Count) { _routes.Remove(id); return false; }       // arrived: the feelers take it to the exact goal
+            if (r.Index >= r.Steps.Count) { r.Steps.Clear(); r.Index = 0; return false; }   // retain the replan cooldown after arrival
             pathLeft = Vector3.Distance(pos, next);
-            Vector3 prev = next;
-            for (int k = r.Index + 1; k < r.Steps.Count; k++)
+            pathLeft += r.Suffix[r.Index];
+            if (r.Steps[r.Index] < 0 && r.Index + 1 < r.Steps.Count)
             {
-                int s = r.Steps[k]; Vector3 p = s >= 0 ? inst.World[s] : EndOf(inst, s);
-                pathLeft += Vector3.Distance(prev, p); prev = p;
+                int s = r.Steps[r.Index + 1]; Vector3 p = s >= 0 ? inst.World[s] : EndOf(inst, s);
+                pathLeft = Vector3.Distance(pos, next) + Vector3.Distance(next, p) + r.Suffix[r.Index + 1];
             }
-            if (!r.GoalInside) pathLeft += Vector3.Distance(prev, goal);
+            int last = r.Steps[r.Steps.Count - 1];
+            if (!r.GoalInside) pathLeft += Vector3.Distance(last >= 0 ? inst.World[last] : EndOf(inst, last), goal);
+            r.Next = next; r.HasNext = true;
             r.Guided = now;
             result = true;
             return true;
@@ -561,10 +704,10 @@ namespace WildWasteland.Modules.NPC
         {
             foreach (var i in _inst.Values)
             {
-                if (i.World != null) for (int k = 0; k < i.World.Length; k++) i.World[k] += delta;
+                if (i.World != null) for (int k = 0; k < (i.Ready ? i.World.Length : i.BuildIndex); k++) i.World[k] += delta;
                 i.Box.center += delta; i.RootPos += delta;
             }
-            foreach (var r in _routes.Values) r.Goal += delta;
+            foreach (var r in _routes.Values) { r.Goal += delta; r.Next += delta; }
             PoiNavTraverse.Shift(delta);
         }
         internal static void Reset()
@@ -572,6 +715,8 @@ namespace WildWasteland.Modules.NPC
             foreach (int id in new List<int>(_walkers.Keys)) Release(id);
             PoiNavTraverse.Clear();
             _inst.Clear(); _routes.Clear(); _graphs.Clear(); PoiNavStore.Forget(); _nextScan = 0f;
+            _nearNodes.Clear(); _planFrame = -1; _plansNow = 0;
+            _builds.Clear(); _buildFrame = -1; _buildNodes = _buildRays = 0;
         }
     }
 }

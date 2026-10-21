@@ -22,6 +22,7 @@ namespace WildWasteland.Modules.Patrols
             var crew=victim.GetComponentInParent<Crew>()??CrewReturn.Owner(victim);
             if(crew==null||crew._car==null||attacker.transform.IsChildOf(crew.transform)||crew.Marker==null||crew.Marker.PlayerEntered)return;
             if(crew.Marker.SetupOnly&&crew.GetComponent<MerchantHost>()==null)return;
+            if(PlayerRef.Player!=null&&attacker==PlayerRef.Player.gameObject&&PatrolPoi.Ignored(crew._car))return;
             if(attacker.CompareTag(crew.Marker.Faction))return;
             crew._combatEnemy=attacker;crew._enemyHealth=CrewReturn.HealthVar(attacker);crew._attackedAt=Time.time;
             if(PlayerRef.Player!=null&&attacker==PlayerRef.Player.gameObject)crew.Marker.PlayerContactAt=Time.time;
@@ -34,7 +35,9 @@ namespace WildWasteland.Modules.Patrols
             if(Time.time<_nextCombat)return false;_nextCombat=Time.time+0.5f;
             bool slow=_rb==null||_rb.velocity.sqrMagnitude<1f;
             if(!slow){_slowSince=-1f;if(!CombatExit)_fullyStuck=false;}else if(_slowSince<0f)_slowSince=Time.time;
+            if(PoiTick(slow))return true;
             var enemy=CombatEnemy;
+            if(enemy!=null&&PlayerRef.Player!=null&&enemy==PlayerRef.Player.gameObject&&PatrolPoi.Ignored(_car)){_combatEnemy=null;_resumeChase=false;return false;}
             if(enemy==null){_resumeChase=false;return false;}
             if(Regroup!=null||!slow||Time.time-_slowSince<1f||Time.time-_attackedAt>4f||PlayerInside())return false;
             if((enemy.transform.position-transform.position).sqrMagnitude>2500f&&!FullyStuck)return false;
@@ -63,7 +66,7 @@ namespace WildWasteland.Modules.Patrols
         {
             position=velocity=Vector3.zero;car=null;
             var enemy=CombatEnemy;if(!CombatPursuit||enemy==null)return false;
-            if(PlayerRef.Player!=null&&enemy==PlayerRef.Player.gameObject)return PlayerRef.Target(out position,out velocity,out car);
+            if(PlayerRef.Player!=null&&enemy==PlayerRef.Player.gameObject)return !PatrolPoi.Ignored(_car)&&PlayerRef.Target(out position,out velocity,out car);
             position=enemy.transform.position;var marker=enemy.GetComponentInParent<PatrolMarker>();
             if(marker!=null)car=marker.gameObject;
             var body=car!=null?car.GetComponent<Rigidbody>():enemy.GetComponent<Rigidbody>();if(body!=null)velocity=body.velocity;

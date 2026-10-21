@@ -31,7 +31,8 @@ namespace WildWasteland.Modules.Patrols
             {goal=TrafficSpace.Scene(journey.arrived?journey.route[journey.route.Length-1]:RoadPath.Target(journey.route,journey.leg,TrafficSpace.World(transform.position),journey.speed));cruise=journey.speed;stop=journey.arrived||journey.waitSeconds>0f;return true;}
             Vector3 player, velocity; GameObject car;
             player=velocity=Vector3.zero;car=null;
-            bool hasPlayer = TrafficFactions.PlayerHostile(journey.faction)&&PlayerRef.Target(out player, out velocity, out car) && !PlayerRef.GodMode;
+            bool hasPlayer = TrafficFactions.PlayerHostile(journey.faction)&&PlayerRef.Target(out player, out velocity, out car) && !PlayerRef.GodMode
+                && Time.time >= _ignorePlayerUntil && !(journey.convoy && PatrolPoi.PlayerRoot != null);
             float distance = hasPlayer ? TrafficLocations.FlatDistance(journey.position, TrafficSpace.World(player)) : float.MaxValue;
             if (Time.time >= _nextSense)
             {
@@ -80,6 +81,8 @@ namespace WildWasteland.Modules.Patrols
             return true;
         }
         private bool _detected;
+        private float _ignorePlayerUntil;
+        internal void ForgetPlayer() { SeenUntil = 0f; _detected = false; Detection = "travelling"; _ignorePlayerUntil = Time.time + 10f; }
         private PatrolMarker _pm;
         private Rigidbody _rb; private bool _rbKnown;   // the car's root Rigidbody (fixed for the car's life)
 
@@ -121,7 +124,12 @@ namespace WildWasteland.Modules.Patrols
                 if(opposing!=null&&opposing.GetComponent<TrafficActor>()!=null)return true;
                 if(journey!=null&&!TrafficFactions.PlayerHostile(journey.faction))return false;
                 if (journey == null) return true;
-                if (!journey.convoy) return !PlayerRef.GodMode&&(_detected||Time.time<SeenUntil);
+                if (!journey.convoy)
+                {
+                    var crew = GetComponent<Crew>();
+                    return !PlayerRef.GodMode&&(_detected||Time.time<SeenUntil||crew!=null&&crew.PoiExit&&crew.PoiEngaged);
+                }
+                if (PatrolPoi.PlayerRoot != null) return false;
                 var player = PlayerRef.Player;
                 return player != null && !PlayerRef.GodMode
                     && TrafficLocations.FlatDistance(journey.position, TrafficSpace.World(player.position)) <= PatrolsModule.ConvoyGuardRange.Value;

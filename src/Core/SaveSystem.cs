@@ -23,7 +23,7 @@ namespace WildWasteland.Core
             internal bool Automatic { get { return Kind == "auto"; } }
             internal string Distance { get { return Kilometres.HasValue ? Kilometres.Value.ToString("0.0", CultureInfo.InvariantCulture) + " km" : "Distance not recorded"; } }
         }
-        internal static ConfigEntry<bool> Autosave, WhileDriving, Screenshots;
+        internal static ConfigEntry<bool> Autosave, ExitSave, WhileDriving, Screenshots;
         internal static ConfigEntry<int> Interval, Warning, AutoKeep, BackupKeep;
         internal static string Status = "", RecoveryError;
         internal static bool ReloadRequired;
@@ -56,6 +56,7 @@ namespace WildWasteland.Core
         {
             var cfg = Plugin.Settings;
             Autosave = TunedSettings.Bind(cfg, "System / Saving", "Autosave", true, "Create separate autosaves for singleplayer worlds. Manual saves are never replaced by autosaving.");
+            ExitSave = TunedSettings.Bind(cfg, "System / Saving", "Exit save", false, "Create a separate autosave when quitting to the main menu. Independent of timed autosaves; disabled by default.");
             Interval = TunedSettings.Bind(cfg, "System / Saving", "Autosave minutes", 10, new ConfigDescription("Real minutes between autosaves.", new AcceptableValueRange<int>(1, 120)));
             Warning = TunedSettings.Bind(cfg, "System / Saving", "Warning seconds", 30, new ConfigDescription("Visible autosave countdown. At least 30 seconds, with notices at 30 and 15 seconds and a final warning before saving.", new AcceptableValueRange<int>(30, 120)));
             WhileDriving = TunedSettings.Bind(cfg, "System / Saving", "Autosave while driving", false, "Allow autosaves while the player is driving or riding in any vehicle. Manual and exit saves are always available in vehicles.");
@@ -417,6 +418,7 @@ namespace WildWasteland.Core
             try
             {
                 while (Busy || _requested) yield return null;
+                if (!ExitSave.Value) { leave(); yield break; }
                 if (RecoveryError != null || ReloadRequired) { Notify("Save and exit cancelled: resolve the save failure or return to the menu without saving."); yield break; }
                 _quitting = false; bool requested = Request("Exit autosave " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), null, true); _quitting = true;
                 if (!requested) { Notify("Exit cancelled because a new save could not start."); yield break; }

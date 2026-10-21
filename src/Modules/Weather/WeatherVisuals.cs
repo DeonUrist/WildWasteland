@@ -86,6 +86,25 @@ namespace WildWasteland.Modules.Weather
             if (asset == null) throw new IOException("Weather asset missing: " + name);
             return asset;
         }
+        internal void Prepare(Vector2 radii, int columns, WeatherVisualDetail detail)
+        {
+            if (!Ready) return;
+            _perimeter.Update(new WeatherRegion { Radii=radii });
+            for (int region=0;region<4;region++) for (int section=0;section<_perimeter.Count;section++)
+            {
+                var rotation=_perimeter.Rotations[section];
+                bool leading=Vector3.Dot(-(rotation*Vector3.forward),Vector3.back)>.45f;
+                _smoke.Draw(region*48+section,Vector3.zero,rotation,_perimeter.Spans[section],0,detail,leading,_properties[0]);
+            }
+            _smoke.Suspend(); _vortexSmoke.Prepare(columns,detail);
+            Log.Always("[Weather] Storm assets and particle banks prepared at start/load; retained until Weather shutdown.");
+        }
+        internal bool PrepareNative()
+        {
+            if (!Ready) return false;
+            bool dust=_localDust.Prepare(), debris=_debris.Prepare();
+            return dust && debris;
+        }
 
         internal void Begin(float clock, Camera camera)
         {

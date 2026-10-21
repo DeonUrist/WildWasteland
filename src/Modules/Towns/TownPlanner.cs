@@ -42,7 +42,7 @@ namespace WildWasteland.Modules.Towns
                 var site = sites[0]; plan.WorldCenter = site.Center; plan.OriginalRelief = site.Relief; plan.MaximumEarthwork = Core.VistasWorldGen.Present ? 0 : site.Relief * .5f;
                 TownWalkGraph.Build(plan, input.Buildings, stop);
                 TownParking.Access(plan, heights, data.globals.height, avoid);
-                plan.HasTown = true; plan.Decision = "accepted compact site; attempt " + (attempt + 1) + (Core.VistasWorldGen.Present ? "; natural terrain, no access roads" : "; no internal road surfaces");
+                plan.HasTown = true; plan.Decision = "accepted compact site; attempt " + (attempt + 1) + (Core.VistasWorldGen.Present ? "; planned foundation, no access roads" : "; no internal road surfaces");
                 TownPopulation.Assign(plan, input, random); return plan;
             }
             plan.Lots = new TownLot[0]; plan.HasTown = false;

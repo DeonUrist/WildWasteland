@@ -33,6 +33,15 @@ namespace WildWasteland.Modules.Weather
             _bounds.RecalculateBounds(); _bounds.UploadMeshData(true);
         }
         internal void Begin(Camera camera) { _camera=camera; _clouds.Begin(camera); }
+        internal void Prepare(int columns, WeatherVisualDetail detail)
+        {
+            for (int region=0;region<4;region++) for (int i=0;i<columns;i++)
+            {
+                int slot=region*80+i;
+                _clouds.Draw(slot,Vector3.zero,Quaternion.identity,Width(slot),TopWidth(slot),detail,false,_cloudProperties);
+            }
+            _clouds.Suspend();
+        }
         internal void Draw(int slot, Vector3 position, Quaternion rotation, WeatherVisualDetail detail, MaterialPropertyBlock properties)
         {
             float width=Width(slot);

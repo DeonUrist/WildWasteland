@@ -94,6 +94,7 @@ namespace WildWasteland.Modules.CleanHUD
                 if (int.TryParse(label.Substring(5), out number)) color = number == 10 || number == 15 || number == 16 ? new Color(.31f, .86f, .39f) : new Color(1f, .31f, .31f);
             }
             var renderer = icon.GetComponent<Renderer>();
+            if (MapIcons.Get(label) != null) glyph = label;
             Locations.Add(root, new Location { Root = root, Icon = glyph, Color = color, Label = label, Caption = CaptionName(label), Native = renderer, ForceOff = renderer != null && renderer.forceRenderingOff });
         }
         private static string CaptionName(string label)
@@ -130,7 +131,7 @@ namespace WildWasteland.Modules.CleanHUD
                         location.Known = true; Discovered.Add(location.Key);
                         if (Core.Log.Verbose) Core.Log.Info("[CleanHUD] Location discovered: " + location.Key);
                     }
-                    if (!location.Cleared && location.Icon == "camp" && location.Color.g < .5f && Services.Camps != null && Services.Camps.At(world, 120f) == CampState.Cleared)
+                    if (!location.Cleared && location.Label.StartsWith("Camp_", StringComparison.OrdinalIgnoreCase) && location.Color.g < .5f && Services.Camps != null && Services.Camps.At(world, 120f) == CampState.Cleared)
                     {
                         location.Cleared = true;
                         if (location.Map != null) location.Map.Remove(location.MapMarker); location.MapMarker = 0;

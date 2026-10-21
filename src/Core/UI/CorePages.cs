@@ -129,6 +129,7 @@ namespace WildWasteland.Core.UI
             bool show = l.Choices("Floating damage", damage ? 1 : 0, "Off", "On") == 1;
             if (show != damage) { HudSettings.DamageNumbers.Value = show ? 2 : 0; if (show) HudSettings.HudEnabled.Value = true; }
             FeedbackSwitch(l, "Hit markers", HudSettings.HitMarker);
+            Switch(l, "Damage direction", CleanHudSettings.DamageDirection);
             FeedbackSwitch(l, "Headshot sound", HudSettings.HeadshotSound);
             Switch(l, "Toggle Ironsights", WildWasteland.Modules.Guns.GunsModule.ToggleIronsights);
             l.KeyPair("Shout", WildWasteland.Modules.NPC.NpcModule.ShoutKey, "Shout modifier", WildWasteland.Modules.NPC.NpcModule.ShoutModifier);
@@ -226,6 +227,7 @@ namespace WildWasteland.Core.UI
             if (MapFogSetting(e)) return false;
             if (VerboseSetting(e) || ReferenceEquals(e, Plugin.DeveloperMode)) return false;
             if (ReferenceEquals(e, CleanHudSettings.ShowNeeds) || ReferenceEquals(e, CleanHudSettings.ShowHealthNumbers)
+                || ReferenceEquals(e, CleanHudSettings.DamageDirection)
                 || ReferenceEquals(e, CleanHudSettings.ShowInsanity) || ReferenceEquals(e, CleanHudSettings.Scale)
                 || ReferenceEquals(e, CleanHudSettings.ShowConvoys) || ReferenceEquals(e, CleanHudSettings.ShowLocations)
                 || ReferenceEquals(e, CleanHudSettings.AmbiguousPatrols) || ReferenceEquals(e, CleanHudSettings.AmbiguousLocations)

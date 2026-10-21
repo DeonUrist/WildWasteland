@@ -91,6 +91,7 @@ namespace WildWasteland.Modules.CleanHUD
         // message log (top left) + event texts it takes over
         private MessageLog _log;
         private QuestTracker _quests;
+        private DamageDirection _damageDirection;
         private string _lastUiText = "";
         private string _lastUiSource;
         private bool _codexWas, _savingWas;
@@ -155,6 +156,7 @@ namespace WildWasteland.Modules.CleanHUD
                 BuildDriving();
                 _quests = new QuestTracker(_root.transform, _font, Gold, HudWhite);
                 Canvas.willRenderCanvases += BeforeRender;
+                _damageDirection = new DamageDirection(_root.transform);
             }
             catch { UnityEngine.Object.Destroy(_root); throw; }
         }
@@ -544,6 +546,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (_iconRevision != Assets.IconRevision) { _iconRevision = Assets.IconRevision; _lastSel = -2; _weaponDirty = true; }
             if (Time.unscaledTime >= _nextScan) { _nextScan = Time.unscaledTime + 1f; _src.Refresh(); RefreshSlotKeys(); }
             bool visible = _src.Visible;
+            _damageDirection.Tick(visible);
             if (_root.activeSelf != visible) _root.SetActive(visible);
             MessageHook.Active = visible;
             if (!visible) { ChaseCameraHud.TraceState(_rpm, false); if (_wasVisible) _src.Restore(); _wasVisible = false; return; }
@@ -922,6 +925,7 @@ namespace WildWasteland.Modules.CleanHUD
             if (_disposed) return; _disposed = true;
             MessageHook.Active = false;
             if (_quests != null) _quests.Dispose();
+            if (_damageDirection != null) _damageDirection.Dispose();
             Canvas.willRenderCanvases -= BeforeRender;
             _src.Restore();
             MarkerIcons.Clear(); ApiCompass.IconRevision++;

@@ -63,6 +63,7 @@ namespace WildWasteland.Modules.NPC
             public PlayMakerFSM Detection, Attack; public FsmGameObject DetectedVar;
             public string Tag; public HashSet<string> Hostile; public bool Human;
             public bool Travel;           // (1.4.0) a hunter travelling underground (Burrow): its senses pause, nobody can see it
+            public bool Deaf, Interior;   // Towns' interior population policy; cleared when Towns stops
             public bool Spider, Lit, CaveWeb; public float CaveLight = 1f, NextCaveLight; public GameObject LightSource;
             public float AmbushDist; public int Cone; public bool Burrowed;      // (1.3.0) vision group (0 human, 1 insect, 2 beast, 3 brute, 4 boss, 5 burrower); a burrowed creature sees all around
             public HashSet<string> BaseHostile; public PlayMakerFSM PlayerIsEnemy;   // the prefab's own enemies, and its faction-relation FSM (Coyotes)
@@ -224,6 +225,7 @@ namespace WildWasteland.Modules.NPC
         // ---------- sight ----------
         private static void Look(Agent a, float interval, float now)
         {
+            if (a.Interior) a.AmbushDist = 0f;
             if(a.CrewBoarding)return;
             if(!ReferenceEquals(a.CrewEnemy,null))
             {
@@ -661,7 +663,7 @@ namespace WildWasteland.Modules.NPC
             foreach (var kv in _agents)
             {
                 var a = kv.Value;
-                if (a.Owner == null || a.T.parent != null || a.Blown || (a.T.position - pos).sqrMagnitude > r2) continue;
+                if (a.Owner == null || a.T.parent != null || a.Blown || a.Deaf || (a.T.position - pos).sqrMagnitude > r2) continue;
                 if ((a.State == State.Combat || a.State == State.Hide) && a.Target == _player) { FoughtFor(a, _player, now, "hears his shots while fighting him"); continue; }
             }
         }
@@ -810,6 +812,7 @@ namespace WildWasteland.Modules.NPC
         // check a shout about the player; the player now shoots elsewhere: that is where the player is). Never while it sees its target.
         private static bool Assign(Agent a, Ghost g, Src prio, float now)
         {
+            if (a.Deaf && prio >= Src.Engine && prio <= Src.Shout) return false;
             if(a.CrewBoarding||a.Tag=="MutantSanity"||(SimpleBandits.Has(a.Owner)&&!SimpleBandits.Fighting(a.Owner)))return false;
             if (g == null || a.State == State.Combat || a.State == State.Hide || g.Retired || a.AmbushDist > 0f) return false;      // (1.3.2) an ambusher in wait ignores sounds
             float doneAt;
@@ -879,6 +882,11 @@ namespace WildWasteland.Modules.NPC
             return false;
         }
 
+        internal static void ClearDeafInvestigation(Agent a)
+        {
+            if (!a.Deaf || a.Ghost == null || a.GhostPrio < Src.Engine || a.GhostPrio > Src.Shout || a.State != State.Investigate && a.State != State.Search) return;
+            Release(a); a.State = State.Idle;
+        }
         private static void Release(Agent a)
         {
             a.Flanking = false;

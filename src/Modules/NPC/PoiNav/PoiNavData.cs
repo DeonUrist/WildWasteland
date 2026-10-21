@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
 using WildWasteland.Core;
 
@@ -128,8 +130,44 @@ namespace WildWasteland.Modules.NPC
         internal static string ConfigPath(string poi) { return Path.Combine(ConfigDir, FileName(poi)); }
 
         private static readonly Dictionary<string, PoiNavData> _cache = new Dictionary<string, PoiNavData>(StringComparer.Ordinal);
-        internal static void Forget() { _cache.Clear(); }
-        internal static void Forget(string poi) { _cache.Remove(poi); }
+        private sealed class Loading
+        {
+            internal Task<PoiNavData> Work;
+            internal readonly CancellationTokenSource Cancel = new CancellationTokenSource();
+            internal readonly List<string> Errors = new List<string>();
+        }
+        private static readonly Dictionary<string, Loading> _loading = new Dictionary<string, Loading>(StringComparer.Ordinal);
+        private static readonly object _readLock = new object();
+        internal static void Forget() { foreach (var job in _loading.Values) job.Cancel.Cancel(); _loading.Clear(); _cache.Clear(); }
+        internal static void Forget(string poi) { Loading job; if (_loading.TryGetValue(poi, out job)) { job.Cancel.Cancel(); _loading.Remove(poi); } _cache.Remove(poi); }
+
+        internal static PoiNavData GetAsync(string poi)
+        {
+            if (string.IsNullOrEmpty(poi)) return null;
+            PoiNavData data; if (_cache.TryGetValue(poi, out data)) return data;
+            Loading job;
+            if (!_loading.TryGetValue(poi, out job))
+            {
+                var paths = new[] { ConfigPath(poi), Path.Combine(ShippedDir, FileName(poi)) };
+                job = new Loading(); var load = job;
+                job.Work = Task.Run(() =>
+                {
+                    lock (_readLock) foreach (var path in paths)
+                    {
+                        if (load.Cancel.IsCancellationRequested) return null;
+                        try { if (File.Exists(path)) { var parsed = PoiNavData.Read(File.ReadAllText(path)); parsed.Poi = poi; return parsed; } }
+                        catch (Exception e) { load.Errors.Add("[NPC] POI navigation file " + path + " ignored: " + e.Message); }
+                    }
+                    return (PoiNavData)null;
+                });
+                _loading.Add(poi, job); return null;
+            }
+            if (!job.Work.IsCompleted) return null;
+            _loading.Remove(poi);
+            if (job.Work.IsFaulted) { Log.Warn("[NPC] POI navigation load failed: " + poi + ": " + job.Work.Exception.GetBaseException().Message); _cache[poi] = null; return null; }
+            foreach (var error in job.Errors) Log.Warn(error);
+            data = job.Work.Result; _cache[poi] = data; return data;
+        }
 
         /// <summary>The data for a POI type, or null (cached, also the miss).</summary>
         internal static PoiNavData Get(string poi)
@@ -144,6 +182,7 @@ namespace WildWasteland.Modules.NPC
                 catch (Exception e) { Log.Warn("[NPC] POI navigation file " + path + " ignored: " + e.Message); }
             }
             _cache[poi] = d;
+            Loading pending; if (_loading.TryGetValue(poi, out pending)) { pending.Cancel.Cancel(); _loading.Remove(poi); }
             return d;
         }
 
@@ -158,6 +197,7 @@ namespace WildWasteland.Modules.NPC
             File.Move(tmp, path);
             d.Recompute();
             _cache[d.Poi] = d;
+            Loading pending; if (_loading.TryGetValue(d.Poi, out pending)) { pending.Cancel.Cancel(); _loading.Remove(d.Poi); }
         }
 
         /// <summary>"Camp_7(Clone)", "Building_3 (Towns 1A2B/4)", "Camp_7 (WW POI nav setup)" -> the POI type.</summary>

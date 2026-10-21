@@ -20,6 +20,11 @@ namespace WildWasteland.Modules.Weather
         private int _limit;
         private float _retry;
         internal WeatherDebris() { Camera.onPreCull += Before; }
+        internal bool Prepare()
+        {
+            bool ready=true; for (int slot=0;slot<3;slot++) ready &= Ensure(slot);
+            Suspend(); return ready;
+        }
         internal void Begin(Camera camera, WeatherVisualDetail detail)
         {
             _camera = camera; _limit = detail == WeatherVisualDetail.Low ? 1 : detail == WeatherVisualDetail.Max ? 3 : 2;
@@ -32,16 +37,37 @@ namespace WildWasteland.Modules.Weather
             for (int i=0;i<_limit;i++) if (_keys[i] == key) { slot=i; break; }
             if (slot < 0) for (int i=0;i<_limit;i++) if (!_used[i]) { slot=i; break; }
             if (slot < 0) return;
+            if (!Ensure(slot)) return;
+            var system = _systems[slot];
+            if (_keys[slot] != key) { system.Stop(true,ParticleSystemStopBehavior.StopEmittingAndClear); _keys[slot] = key; }
+            _used[slot] = true; system.transform.SetPositionAndRotation(position,rotation);
+            var settings = system.main; settings.maxParticles = detail == WeatherVisualDetail.Low ? 32 : detail == WeatherVisualDetail.Max ? 96 : 64;
+            settings.startColor = Color.white; // Independent dark material, not the bright hurricane palette.
+            var emission = system.emission; emission.rateOverTimeMultiplier = settings.maxParticles*.5f; emission.enabled = true;
+            if (!GameRefs.InGame || WeatherDiagnostics.Frozen) { if (system.isPlaying) system.Pause(); }
+            else if (!system.isPlaying) system.Play();
+            if (!_reported[slot] && GameRefs.InGame && !WeatherDiagnostics.Frozen)
+            {
+                if (_checkAt[slot] == 0) _checkAt[slot] = Time.time+3;
+                if (system.particleCount > 0 || Time.time >= _checkAt[slot])
+                {
+                    _reported[slot] = true;
+                    Log.Always("[Weather] Dark stones live: slot="+slot+"; particles="+system.particleCount+"; size=3-9m; lifetime=2-4s; orbital=0.25-0.55rad/s; playing="+system.isPlaying+"; time="+system.time);
+                }
+            }
+        }
+        private bool Ensure(int slot)
+        {
             if (_systems[slot] == null)
             {
                 if (_source == null)
                 {
-                    if (Time.unscaledTime < _retry) return;
+                    if (Time.unscaledTime < _retry) return false;
                     _retry = Time.unscaledTime+1;
                     var manager = ES3ReferenceMgrBase.Current;
                     var prefab = manager != null ? manager.GetPrefab(5697600806714206537L,true) : null;
                     _source = prefab != null ? prefab.transform.Find("Sand tornado loop/Stones") : null;
-                    if (_source == null) return;
+                    if (_source == null) return false;
                 }
                 var copy = UnityEngine.Object.Instantiate(_source.gameObject,Runner.Host.transform,false);
                 copy.name = "WW.Weather.Debris."+slot; copy.hideFlags = HideFlags.HideAndDontSave;
@@ -64,23 +90,7 @@ namespace WildWasteland.Modules.Weather
                 copy.SetActive(true);
                 Log.Always("[Weather] Visual stone pool ready: slot="+slot+"; native Stones sprite/orbit, no damage or physics.");
             }
-            var system = _systems[slot];
-            if (_keys[slot] != key) { system.Stop(true,ParticleSystemStopBehavior.StopEmittingAndClear); _keys[slot] = key; }
-            _used[slot] = true; system.transform.SetPositionAndRotation(position,rotation);
-            var settings = system.main; settings.maxParticles = detail == WeatherVisualDetail.Low ? 32 : detail == WeatherVisualDetail.Max ? 96 : 64;
-            settings.startColor = Color.white; // Independent dark material, not the bright hurricane palette.
-            var emission = system.emission; emission.rateOverTimeMultiplier = settings.maxParticles*.5f; emission.enabled = true;
-            if (!GameRefs.InGame || WeatherDiagnostics.Frozen) { if (system.isPlaying) system.Pause(); }
-            else if (!system.isPlaying) system.Play();
-            if (!_reported[slot] && GameRefs.InGame && !WeatherDiagnostics.Frozen)
-            {
-                if (_checkAt[slot] == 0) _checkAt[slot] = Time.time+3;
-                if (system.particleCount > 0 || Time.time >= _checkAt[slot])
-                {
-                    _reported[slot] = true;
-                    Log.Always("[Weather] Dark stones live: slot="+slot+"; particles="+system.particleCount+"; size=3-9m; lifetime=2-4s; orbital=0.25-0.55rad/s; playing="+system.isPlaying+"; time="+system.time);
-                }
-            }
+            return true;
         }
         internal void End()
         {
